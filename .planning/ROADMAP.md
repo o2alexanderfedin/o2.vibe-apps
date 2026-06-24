@@ -33,10 +33,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. User can set, change, and clear their own Anthropic key from the UI (framed as activating the platform, stored under a neutral `localStorage` key), and switch theme between light/dark/system applied via CSS variables on `:root`.
   3. The IndexedDB registry (`apps`/`widgets`/`handlers`) initializes at startup with a probe write and falls back to an in-memory `Map` when storage is unavailable; cache keys are opaque SHA-256 hex over normalized input.
   4. A repo-wide F12 audit and the CI lexicon-grep gate find no devtools-visible surface (symbols, store/key names, logs, CSS, `data-*`, copy, `localStorage` keys) that narrates the on-demand mechanic, and the production build ships with source maps off and a CSP restricting `connect-src` to `'self' https://api.anthropic.com`.
-**Plans**: TBD
+**Plans**: 4 plans (3 waves)
 
 Plans:
-- [ ] 01-01: TBD during planning
+- [ ] 01-01-PLAN.md — Walking Skeleton: Vite+React19+TS scaffold, test infra, CSP/FOUC, IndexedDB registry (probe+Map fallback), gated logger, storage constants (wave 1)
+- [ ] 01-02-PLAN.md — Storefront UI slice: grid (SHELL-01/02), KeyDialog set/change/clear (SHELL-03), light/dark/system theme (SHELL-04), Skeleton/ErrorBoundary stubs (wave 2)
+- [ ] 01-03-PLAN.md — Opaque SHA-256 cacheKey (LOOP-02) + Anthropic egress header stub (HYGIENE-05), TDD (wave 2)
+- [ ] 01-04-PLAN.md — CI lexicon-grep hygiene gate (HYGIENE-01/02/03) over src/** + index.html (wave 3)
 
 ### Phase 2: Static Open-One-App Loop
 **Goal**: A user opens a seeded app from the storefront and it renders and is fully interactive, proving the resolve → compile → instantiate → render core with model nondeterminism removed.
