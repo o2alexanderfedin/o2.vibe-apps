@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Cloud,
   Calculator,
@@ -43,6 +43,15 @@ export function Marketplace() {
       setOpeningId(null);
       timeoutRef.current = null;
     }, OPENING_RESET_MS);
+  }, []);
+
+  // Clear any pending reset timer on unmount so the callback can't fire a
+  // state update against an unmounted component (stale-closure write / leaked
+  // timer). Matters once mount/unmount becomes the core loop (Phase 2/3).
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, []);
 
   return (
