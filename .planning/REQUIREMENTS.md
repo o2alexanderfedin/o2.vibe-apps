@@ -109,25 +109,62 @@ Explicitly excluded. Documented to prevent scope creep. Anti-features carry a wa
 
 ## Traceability
 
-Populated during roadmap creation. Each requirement maps to exactly one phase.
+Each v1 requirement maps to exactly one owning phase. Cross-cutting HYGIENE/SEC requirements are *owned* by their foundation phase for traceability even though they are *enforced* on every phase from Phase 1 forward.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHELL-01 → SHELL-05 | (pending roadmap) | Pending |
-| LOOP-01 → LOOP-08 | (pending roadmap) | Pending |
-| GEN-01 → GEN-05 | (pending roadmap) | Pending |
-| WIDGET-01 → WIDGET-05 | (pending roadmap) | Pending |
-| MOD-01 → MOD-04 | (pending roadmap) | Pending |
-| RESIL-01 → RESIL-06 | (pending roadmap) | Pending |
-| HANDLER-01 → HANDLER-03 | (pending roadmap) | Pending |
-| HYGIENE-01 → HYGIENE-05 | (pending roadmap) | Pending |
-| SEC-01 → SEC-04 | (pending roadmap) | Pending |
+| SHELL-01 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| SHELL-02 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| SHELL-03 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| SHELL-04 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| LOOP-02 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| LOOP-03 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| HYGIENE-01 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| HYGIENE-02 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| HYGIENE-03 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| HYGIENE-04 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| HYGIENE-05 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| SEC-04 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
+| LOOP-01 | Phase 2 — Static Open-One-App Loop | Pending |
+| LOOP-04 | Phase 2 — Static Open-One-App Loop | Pending |
+| LOOP-05 | Phase 2 — Static Open-One-App Loop | Pending |
+| LOOP-06 | Phase 2 — Static Open-One-App Loop | Pending |
+| LOOP-07 | Phase 2 — Static Open-One-App Loop | Pending |
+| LOOP-08 | Phase 2 — Static Open-One-App Loop | Pending |
+| SHELL-05 | Phase 2 — Static Open-One-App Loop | Pending |
+| SEC-01 | Phase 2 — Static Open-One-App Loop | Pending |
+| SEC-02 | Phase 2 — Static Open-One-App Loop | Pending |
+| SEC-03 | Phase 2 — Static Open-One-App Loop | Pending |
+| GEN-01 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
+| GEN-02 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
+| GEN-03 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
+| GEN-04 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
+| GEN-05 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
+| WIDGET-01 | Phase 4 — Widget Composition | Pending |
+| WIDGET-02 | Phase 4 — Widget Composition | Pending |
+| WIDGET-03 | Phase 4 — Widget Composition | Pending |
+| WIDGET-04 | Phase 4 — Widget Composition | Pending |
+| WIDGET-05 | Phase 4 — Widget Composition | Pending |
+| MOD-01 | Phase 5 — Contextual Modification | Pending |
+| MOD-02 | Phase 5 — Contextual Modification | Pending |
+| MOD-03 | Phase 5 — Contextual Modification | Pending |
+| MOD-04 | Phase 5 — Contextual Modification | Pending |
+| RESIL-01 | Phase 6 — API Error Degradation | Pending |
+| RESIL-02 | Phase 6 — API Error Degradation | Pending |
+| RESIL-03 | Phase 6 — API Error Degradation | Pending |
+| RESIL-04 | Phase 6 — API Error Degradation | Pending |
+| RESIL-05 | Phase 7 — Storage & Cost Guardrails | Pending |
+| RESIL-06 | Phase 7 — Storage & Cost Guardrails | Pending |
+| HANDLER-01 | Phase 8 — Backend-Style Handlers | Pending |
+| HANDLER-02 | Phase 8 — Backend-Style Handlers | Pending |
+| HANDLER-03 | Phase 8 — Backend-Style Handlers | Pending |
 
 **Coverage:**
 - v1 requirements: 45 total — SHELL 5, LOOP 8, GEN 5, WIDGET 5, MOD 4, RESIL 6, HANDLER 3, HYGIENE 5, SEC 4
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 45 ⚠️ (resolved when roadmap is created)
+- Mapped to phases: 45 ✓ (no orphans, no duplicates)
+- Unmapped: 0 ✓
+- Per-phase counts: Phase 1 = 12, Phase 2 = 10, Phase 3 = 5, Phase 4 = 5, Phase 5 = 4, Phase 6 = 4, Phase 7 = 2, Phase 8 = 3 (total 45)
 
 ---
 *Requirements defined: 2026-06-24*
-*Last updated: 2026-06-24 after initial definition*
+*Last updated: 2026-06-24 after roadmap creation (traceability populated, 45/45 mapped)*
