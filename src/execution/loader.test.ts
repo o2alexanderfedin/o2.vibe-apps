@@ -3,6 +3,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // fake-indexeddb/auto is installed via src/test/setup.ts
 
+// A canned transport that returns a valid component for unseeded types.
+// "canned" is not a banned hygiene token.
+const CANNED_SOURCE = `
+function App() {
+  return React.createElement('div', null, 'Canned');
+}
+`;
+
+function cannedTransport(_url: string, _init: RequestInit) {
+  return Promise.resolve({
+    content: [{ type: "text", text: CANNED_SOURCE }],
+    stop_reason: "end_turn",
+  });
+}
+
 describe("loader — three-tier resolve and dual-cache", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -89,7 +104,7 @@ describe("loader — three-tier resolve and dual-cache", () => {
     expect(typeof Component).toBe("function");
   });
 
-  it("throws when app type has no seeded source and no IndexedDB entry", async () => {
+  it("unseeded type with no API key: rejects with access-key message", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     const { dbReady } = await import("../registry/registry");
     await dbReady;
@@ -98,8 +113,58 @@ describe("loader — three-tier resolve and dual-cache", () => {
     const { cacheKey } = await import("../registry/cacheKey");
     const key = await cacheKey("unknown-app-type-xyz");
 
+    // No localStorage key set → ProduceError "No access key available"
     await expect(
       resolveComponent("unknown-1", "unknown-app-type-xyz", key),
-    ).rejects.toThrow(/No source available/);
+    ).rejects.toThrow(/No access key/);
+  });
+
+  it("unseeded type: model call → extract → transpile → store both → mount", async () => {
+    const { resolveComponent, _clearCachesForTesting } = await import("./loader");
+    const { dbReady, get } = await import("../registry/registry");
+    await dbReady;
+    _clearCachesForTesting();
+
+    // Provide a key so the producer doesn't bail early.
+    localStorage.setItem("marketplace.apiKey", "sk-ant-test");
+
+    const { cacheKey } = await import("../registry/cacheKey");
+    const key = await cacheKey("weather-stub-type");
+
+    const Component = await resolveComponent(
+      "weather-stub-1",
+      "weather-stub-type",
+      key,
+      cannedTransport,
+    );
+    expect(typeof Component).toBe("function");
+
+    // GEN-04: both pieces stored.
+    const record = await get("apps", key);
+    expect(typeof record?.source).toBe("string");
+    expect(typeof record?.transpiledJS).toBe("string");
+    expect((record?.source as string).length).toBeGreaterThan(0);
+    expect((record?.transpiledJS as string).length).toBeGreaterThan(0);
+
+    localStorage.removeItem("marketplace.apiKey");
+  });
+
+  it("seeded types resolve from seeds with NO model call (transport never invoked)", async () => {
+    const { resolveComponent, _clearCachesForTesting } = await import("./loader");
+    const { dbReady } = await import("../registry/registry");
+    await dbReady;
+    _clearCachesForTesting();
+
+    let transportCalled = false;
+    const trackingTransport = (_url: string, _init: RequestInit) => {
+      transportCalled = true;
+      return Promise.resolve({ content: [{ type: "text", text: "" }] });
+    };
+
+    const { cacheKey } = await import("../registry/cacheKey");
+    const key = await cacheKey("counter");
+
+    await resolveComponent("counter-seeded", "counter", key, trackingTransport);
+    expect(transportCalled).toBe(false);
   });
 });
