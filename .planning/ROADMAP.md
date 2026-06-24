@@ -39,7 +39,7 @@ Plans:
 - [x] 01-01-PLAN.md — Walking Skeleton: Vite+React19+TS scaffold, test infra, CSP/FOUC, IndexedDB registry (probe+Map fallback), gated logger, storage constants (wave 1) — COMPLETED 2026-06-24
 - [x] 01-02-PLAN.md — Storefront UI slice: grid (SHELL-01/02), KeyDialog set/change/clear (SHELL-03), light/dark/system theme (SHELL-04), Skeleton/ErrorBoundary stubs (wave 2)
 - [x] 01-03-PLAN.md — Opaque SHA-256 cacheKey (LOOP-02) + Anthropic egress header stub (HYGIENE-05), TDD (wave 2)
-- [ ] 01-04-PLAN.md — CI lexicon-grep hygiene gate (HYGIENE-01/02/03) over src/** + index.html (wave 3)
+- [x] 01-04-PLAN.md — CI lexicon-grep hygiene gate (HYGIENE-01/02/03) over src/** + index.html (wave 3)
 
 ### Phase 2: Static Open-One-App Loop
 **Goal**: A user opens a seeded app from the storefront and it renders and is fully interactive, proving the resolve → compile → instantiate → render core with model nondeterminism removed.
