@@ -70,8 +70,16 @@ export function KeyDialog({ onClose }: KeyDialogProps) {
       if (e.key !== "Tab") return;
       const root = dialogRef.current;
       if (!root) return;
-      const focusable = root.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      // Restrict the trap boundaries to genuinely focusable controls: exclude
+      // disabled elements and any node removed from the layout (display:none →
+      // offsetParent === null). Without this, a future disabled primary button
+      // could become a trap boundary or let focus escape the modal.
+      const focusable = [
+        ...root.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ].filter(
+        (el) => !el.hasAttribute("disabled") && el.offsetParent !== null,
       );
       if (focusable.length === 0) return;
       const first = focusable[0]!;
