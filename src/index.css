@@ -104,3 +104,358 @@ body {
 .app-bar__icon-btn--active:hover {
   color: var(--color-accent-primary);
 }
+
+/* ─────────────────────── Storefront grid (UI-SPEC §1) ─────────────────── */
+.storefront-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 200px));
+  justify-content: center;
+  gap: 24px; /* lg, both axes */
+  padding: 48px 32px; /* xl horizontal, 2xl-ish vertical breathing room */
+}
+
+@media (max-width: 480px) {
+  .storefront-grid {
+    padding: 48px 16px;
+  }
+}
+
+.app-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  width: 200px;
+  padding: 20px; /* card internal one-off */
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.app-card:hover {
+  border-color: var(--color-accent-primary);
+}
+
+:root[data-theme="light"] .app-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="dark"] .app-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.32);
+}
+
+.app-card:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+.app-card__icon {
+  display: inline-flex;
+  margin-bottom: 12px;
+  color: var(--color-text-secondary);
+}
+
+.app-card__name {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+
+.app-card__description {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.app-card__opening {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--color-text-tertiary);
+}
+
+/* ───────────────────────── KeyDialog (UI-SPEC §3) ─────────────────────── */
+.key-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+}
+
+.key-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  padding: 24px;
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 16px;
+}
+
+.key-dialog__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.key-dialog__header {
+  margin-bottom: 16px;
+  padding-right: 44px; /* clear the close button */
+}
+
+.key-dialog__title {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+}
+
+.key-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.key-dialog__text {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.key-dialog__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.key-dialog__status-icon {
+  color: var(--color-accent-primary);
+}
+
+.key-dialog__input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.key-dialog__label {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.key-dialog__input {
+  width: 100%;
+  height: 40px;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 8px;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.key-dialog__input:focus {
+  outline: none;
+  border-color: var(--color-accent-primary);
+}
+
+:root[data-theme="light"] .key-dialog__input:focus {
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.15);
+}
+
+:root[data-theme="dark"] .key-dialog__input:focus {
+  box-shadow: 0 0 0 3px rgba(107, 135, 255, 0.2);
+}
+
+.key-dialog__error {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-destructive);
+}
+
+.key-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+}
+
+.key-dialog__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.key-dialog__btn {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.key-dialog__btn--primary {
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--color-accent-primary);
+}
+
+.key-dialog__btn--primary:hover {
+  filter: brightness(0.92);
+}
+
+.key-dialog__btn--text {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.key-dialog__btn--text:hover {
+  color: var(--color-text-primary);
+}
+
+.key-dialog__btn--danger-text {
+  font-weight: 600;
+  color: var(--color-destructive);
+}
+
+.key-dialog__btn--danger-text:hover {
+  filter: brightness(0.92);
+}
+
+.key-dialog__btn:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+/* ───────────────────── SkeletonCard stub (UI-SPEC §4) ─────────────────── */
+.skeleton-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 200px;
+  padding: 20px;
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 12px;
+}
+
+.skeleton-block {
+  background: linear-gradient(
+    90deg,
+    var(--color-background-tertiary) 25%,
+    var(--color-border-tertiary) 50%,
+    var(--color-background-tertiary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 6px;
+}
+
+.skeleton-block--icon {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 12px;
+}
+
+.skeleton-block--name {
+  width: 60%;
+  height: 20px;
+  margin-bottom: 4px;
+}
+
+.skeleton-block--desc {
+  width: 100%;
+  height: 32px;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-card__hidden-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ─────────────────── ErrorBoundary fallback (UI-SPEC §5) ──────────────── */
+.error-boundary-fallback {
+  max-width: 320px;
+  margin: 48px auto;
+  padding: 32px;
+  text-align: center;
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 12px;
+}
+
+.error-boundary-fallback__heading {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+  margin-bottom: 8px;
+}
+
+.error-boundary-fallback__body {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  margin-bottom: 24px;
+}
+
+.error-boundary-fallback__retry {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  background: var(--color-background-tertiary);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.error-boundary-fallback__retry:hover {
+  filter: brightness(0.96);
+}
+
+.error-boundary-fallback__retry:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
