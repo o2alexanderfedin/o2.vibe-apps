@@ -1,6 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AppRecord } from "./db";
 
 // fake-indexeddb/auto is already installed via src/test/setup.ts
+
+// Helper to build minimal valid AppRecord objects for tests.
+function appRecord(overrides?: Partial<AppRecord>): AppRecord {
+  return {
+    cacheKey: "test-key",
+    type: "test-app",
+    source: "function App() { return null; }",
+    transpiledJS: "function App() { return null; }",
+    ...overrides,
+  };
+}
 
 describe("registry — happy path (IndexedDB available via fake-indexeddb)", () => {
   beforeEach(() => {
@@ -15,10 +27,10 @@ describe("registry — happy path (IndexedDB available via fake-indexeddb)", () 
     await expect(dbReady).resolves.toBeUndefined();
   });
 
-  it("put then get round-trips a value through the apps store", async () => {
+  it("put then get round-trips an AppRecord through the apps store", async () => {
     const { dbReady, put, get } = await import("./registry");
     await dbReady;
-    const value = { name: "test-app", version: 1 };
+    const value = appRecord({ cacheKey: "test-key", type: "test-app" });
     await put("apps", value, "test-key");
     const result = await get("apps", "test-key");
     expect(result).toEqual(value);
@@ -27,7 +39,7 @@ describe("registry — happy path (IndexedDB available via fake-indexeddb)", () 
   it("del removes a value from the apps store", async () => {
     const { dbReady, put, get, del } = await import("./registry");
     await dbReady;
-    await put("apps", { name: "temp" }, "temp-key");
+    await put("apps", appRecord({ cacheKey: "temp-key", type: "temp" }), "temp-key");
     await del("apps", "temp-key");
     const result = await get("apps", "temp-key");
     expect(result).toBeUndefined();
@@ -38,6 +50,21 @@ describe("registry — happy path (IndexedDB available via fake-indexeddb)", () 
     await dbReady;
     const probe = await get("apps", "__probe__");
     expect(probe).toBeUndefined();
+  });
+
+  it("AppRecord stores both source and transpiledJS (dual-cache)", async () => {
+    const { dbReady, put, get } = await import("./registry");
+    await dbReady;
+    const rec = appRecord({
+      cacheKey: "dual-key",
+      type: "counter",
+      source: "function App() { return null; }",
+      transpiledJS: "'use strict';\nfunction App() { return null; }",
+    });
+    await put("apps", rec, "dual-key");
+    const result = await get("apps", "dual-key");
+    expect(result?.source).toBe(rec.source);
+    expect(result?.transpiledJS).toBe(rec.transpiledJS);
   });
 
   it("put and get work for widgets store", async () => {
@@ -73,7 +100,7 @@ describe("registry — fallback path (storage unavailable)", () => {
     const { dbReady, put, get, del } = await import("./registry");
     await dbReady; // must resolve even when storage fails
 
-    const value = { name: "fallback-app" };
+    const value = appRecord({ cacheKey: "fb-key", type: "fallback-app" });
     await put("apps", value, "fb-key");
     const result = await get("apps", "fb-key");
     expect(result).toEqual(value);

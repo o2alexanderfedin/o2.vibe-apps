@@ -2,8 +2,16 @@
 // DB name: "MarketplaceRegistry", version 1, three neutral object stores.
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
-// Phase 1 defines the schema; full record shapes arrive in Phase 2.
-export type AppRecord = Record<string, unknown>;
+// Phase 2: AppRecord now carries both the original source and the transpiled JS.
+// `source` is the TSX string; `transpiledJS` is the Babel-compiled JS string.
+// Phase 1 used Record<string, unknown>; Phase 2 narrows it to the dual-cache shape.
+export interface AppRecord {
+  cacheKey: string;
+  type: string;
+  source: string;
+  transpiledJS: string;
+  [key: string]: unknown; // allow forward-compat extra fields
+}
 export type WidgetRecord = Record<string, unknown>;
 export type HandlerRecord = Record<string, unknown>;
 

@@ -30,7 +30,8 @@ export const dbReady: Promise<void> = (async () => {
   try {
     const db = await openRegistry();
     // Probe write + delete to verify storage is functional in this browsing context (D-22).
-    await db.put("apps", { __probe: true }, "__probe__");
+    // Cast required: the probe is not a real AppRecord but the field values are irrelevant.
+    await db.put("apps", { __probe: true } as unknown as import("./db").AppRecord, "__probe__");
     await db.delete("apps", "__probe__");
     _db = db;
   } catch {
