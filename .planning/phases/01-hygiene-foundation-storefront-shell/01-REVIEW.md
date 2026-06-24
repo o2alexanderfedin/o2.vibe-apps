@@ -37,7 +37,17 @@ findings:
   warning: 5
   info: 4
   total: 10
-status: issues_found
+status: resolved
+fixed: 2026-06-24T23:20:00Z
+fixes_applied:
+  - "CR-01: CSP sha256 hash authorizes inline FOUC script + guard test (src/csp.test.ts) — commit 21a16f6"
+  - "WR-01: distinct save-error message for localStorage write failure — commit 270d106"
+  - "WR-02: Marketplace clears pending timeout on unmount — commit 7dd4c44"
+  - "WR-03: registry get/put parameterized on store name for per-store typing — commit 8834662"
+  - "WR-04: KeyDialog focus trap filters to genuinely focusable elements — commit 1b934e8"
+  - "WR-05: ThemeProvider split effects to avoid matchMedia resubscribe thrash — commit 21de03d"
+fixes_deferred:
+  - "IN-01..IN-04 (info-only): left for a future pass per --fix --auto scope (Critical+Warning only)"
 ---
 
 # Phase 1: Code Review Report
