@@ -12,6 +12,12 @@ import { STORAGE_KEY_API } from "../lib/storage";
 // is NEVER interpolated into this string (Pitfall 7 / T-01-07).
 const FORMAT_ERROR = "Invalid access key format. Please check and try again.";
 
+// Distinct neutral error for the persistence path: the key was well-formed but
+// localStorage.setItem failed (quota / strict privacy). Reporting FORMAT_ERROR
+// here would misdirect the user into re-editing a valid key forever. Like
+// FORMAT_ERROR, this never interpolates the entered value (D-13/T-01-08).
+const SAVE_ERROR = "Couldn't save your access key. Please try again.";
+
 // Basic format validation (D-14): must start with sk-ant- and be non-empty.
 function isValidKeyFormat(value: string): boolean {
   return /^sk-ant-/.test(value.trim());
@@ -90,8 +96,9 @@ export function KeyDialog({ onClose }: KeyDialogProps) {
     try {
       localStorage.setItem(STORAGE_KEY_API, keyInput.trim());
     } catch {
-      // Persisting can fail under strict privacy; surface the neutral error.
-      setError(FORMAT_ERROR);
+      // Persisting can fail under strict privacy / quota; the key itself was
+      // valid, so surface the save-specific error rather than the format one.
+      setError(SAVE_ERROR);
       return;
     }
     onClose();
