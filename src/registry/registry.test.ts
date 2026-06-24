@@ -20,7 +20,7 @@ describe("registry — happy path (IndexedDB available via fake-indexeddb)", () 
     await dbReady;
     const value = { name: "test-app", version: 1 };
     await put("apps", value, "test-key");
-    const result = await get<typeof value>("apps", "test-key");
+    const result = await get("apps", "test-key");
     expect(result).toEqual(value);
   });
 
@@ -75,7 +75,7 @@ describe("registry — fallback path (storage unavailable)", () => {
 
     const value = { name: "fallback-app" };
     await put("apps", value, "fb-key");
-    const result = await get<typeof value>("apps", "fb-key");
+    const result = await get("apps", "fb-key");
     expect(result).toEqual(value);
 
     await del("apps", "fb-key");

@@ -48,26 +48,29 @@ export const dbReady: Promise<void> = (async () => {
 
 // Unified async interface — callers never branch on storageAvailable (D-23).
 
-export async function get<T>(store: StoreName, key: string): Promise<T | undefined> {
+// Parameterize on the store NAME (S), so the value type covaries with the
+// store via StoreValue<S>. This correlates store and value (and return type),
+// giving per-store type checking once the record shapes diverge in Phase 2 —
+// and removes the Parameters<...> casts the value-keyed generic forced (WR-03).
+export async function get<S extends StoreName>(
+  store: S,
+  key: string,
+): Promise<StoreValue<S> | undefined> {
   await dbReady;
   if (storageAvailable && _db !== null) {
-    return _db.get(store, key) as Promise<T | undefined>;
+    return _db.get(store, key) as Promise<StoreValue<S> | undefined>;
   }
-  return mapFor(store).get(key) as T | undefined;
+  return mapFor(store).get(key) as StoreValue<S> | undefined;
 }
 
-export async function put<T extends StoreValue<StoreName>>(
-  store: StoreName,
-  value: T,
+export async function put<S extends StoreName>(
+  store: S,
+  value: StoreValue<S>,
   key: string,
 ): Promise<void> {
   await dbReady;
   if (storageAvailable && _db !== null) {
-    await (_db as Awaited<ReturnType<typeof openRegistry>>).put(
-      store as Parameters<Awaited<ReturnType<typeof openRegistry>>["put"]>[0],
-      value as Parameters<Awaited<ReturnType<typeof openRegistry>>["put"]>[1],
-      key,
-    );
+    await _db.put(store, value, key);
   } else {
     mapFor(store).set(key, value);
   }
