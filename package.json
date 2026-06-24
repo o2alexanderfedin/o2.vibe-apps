@@ -19,17 +19,18 @@
     "react-dom": "^19.2"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6",
     "@testing-library/react": "^16",
     "@testing-library/user-event": "^14",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6",
+    "@vitest/ui": "^4",
     "fake-indexeddb": "^6",
     "jsdom": "^29",
     "typescript": "^6",
     "vite": "^8",
-    "vitest": "^4",
-    "@vitest/ui": "^4"
+    "vitest": "^4"
   }
 }
