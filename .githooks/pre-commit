@@ -1,0 +1,8 @@
+#!/bin/sh
+# git-flow enforcement: no direct commits to long-lived branches.
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$branch" = "main" ] || [ "$branch" = "develop" ]; then
+  echo "✖ Direct commits to '$branch' are blocked. Work on a feature branch (e.g. git flow feature start <name>) and merge."
+  exit 1
+fi
+exit 0
