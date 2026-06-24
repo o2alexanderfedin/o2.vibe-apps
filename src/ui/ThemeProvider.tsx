@@ -64,16 +64,24 @@ function nextMode(mode: ThemeMode): ThemeMode {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>(readStoredMode);
 
-  // Apply on mount + whenever mode changes; in "system" mode, subscribe to OS
-  // changes via addEventListener('change') (NOT the deprecated addListener).
+  // Apply the resolved theme on mount and on every mode change.
   useEffect(() => {
     applyTheme(mode);
-    if (mode !== "system") return;
+  }, [mode]);
+
+  // Subscribe to OS scheme changes ONLY while in "system" mode, and key this
+  // effect on whether we are in system mode so toggling light <-> dark does not
+  // churn add/removeEventListener pairs. Re-subscription happens only when
+  // entering or leaving "system" (WR-05). Uses addEventListener('change') —
+  // NOT the deprecated addListener.
+  const isSystem = mode === "system";
+  useEffect(() => {
+    if (!isSystem) return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => applyTheme("system");
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, [mode]);
+  }, [isSystem]);
 
   const cycleTheme = useCallback(() => {
     setMode((prev) => {
