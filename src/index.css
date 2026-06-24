@@ -45,3 +45,62 @@ body {
   color: var(--color-text-primary);
   min-height: 100vh;
 }
+
+/* ───────────────────────── AppBar (UI-SPEC §2) ───────────────────────── */
+.app-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 24px; /* lg */
+  background: var(--color-background-secondary);
+  border-bottom: 1px solid var(--color-border-secondary);
+}
+
+.app-bar__wordmark {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--color-text-primary);
+}
+
+.app-bar__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* sm */
+}
+
+.app-bar__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.app-bar__icon-btn:hover {
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
+}
+
+.app-bar__icon-btn:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+/* Active theme icon signals the current selection. */
+.app-bar__icon-btn--active {
+  color: var(--color-accent-primary);
+}
+
+.app-bar__icon-btn--active:hover {
+  color: var(--color-accent-primary);
+}
