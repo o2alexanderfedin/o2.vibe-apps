@@ -1,0 +1,47 @@
+/* CSS variable contract — locked names per D-17. Values per UI-SPEC §CSS Variable Contract. */
+:root[data-theme="light"] {
+  --color-background-primary:   #FFFFFF;
+  --color-background-secondary: #F5F6F8;
+  --color-background-tertiary:  #ECEEF2;
+  --color-text-primary:         #111318;
+  --color-text-secondary:       #4B5160;
+  --color-text-tertiary:        #8891A8;
+  --color-border-secondary:     #D6DAE4;
+  --color-border-tertiary:      #EDF0F5;
+  --color-accent-primary:       #4F6EF7;
+  --color-destructive:          #D93025;
+}
+
+:root[data-theme="dark"] {
+  --color-background-primary:   #0F1117;
+  --color-background-secondary: #1A1D27;
+  --color-background-tertiary:  #242736;
+  --color-text-primary:         #E8EAF0;
+  --color-text-secondary:       #9BA3B8;
+  --color-text-tertiary:        #5C6480;
+  --color-border-secondary:     #2E3248;
+  --color-border-tertiary:      #1E2133;
+  --color-accent-primary:       #6B87FF;
+  --color-destructive:          #FF6B6B;
+}
+
+/* Base styles — font stack and body defaults */
+:root {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+  min-height: 100vh;
+}
