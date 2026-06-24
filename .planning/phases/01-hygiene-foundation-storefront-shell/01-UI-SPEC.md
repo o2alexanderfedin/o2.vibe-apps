@@ -1,10 +1,11 @@
 ---
 phase: 1
 slug: hygiene-foundation-storefront-shell
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-24
+reviewed_at: 2026-06-24
 ---
 
 # Phase 1 — UI Design Contract
