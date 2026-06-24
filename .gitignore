@@ -25,3 +25,7 @@ yarn-error.log*
 
 # Vitest cache
 .vitest-cache/
+
+# Browser automation artifacts
+.playwright-mcp/
+*.jpeg
