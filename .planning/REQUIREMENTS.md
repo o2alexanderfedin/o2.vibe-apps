@@ -60,9 +60,9 @@ Requirements for the initial release. Scope = the blueprint MVP checklist plus t
 
 ### Backend-Style Handlers (HANDLER)
 
-- [ ] **HANDLER-01**: Apps and widgets can request a data operation through a single `runHandler(intent, input)` helper that transparently resolves a cached handler or produces one on first need, then executes it and returns `{ data?, error? }`
-- [ ] **HANDLER-02**: Produced handlers are cached in the `handlers` store and reused on subsequent calls
-- [ ] **HANDLER-03**: Handler code executes in a constrained scope with no network (`fetch`) and no storage/key access — local/mock data operations only
+- [x] **HANDLER-01** (Phase 8, Complete): Apps and widgets can request a data operation through a single `runHandler(intent, input)` helper that transparently resolves a cached handler or produces one on first need, then executes it and returns `{ data?, error? }` — wired into the produced-app `new Function` scope alongside `useWidget` (services bound by the loader, so an app calls the 2-arg form)
+- [x] **HANDLER-02** (Phase 8, Complete): Produced handlers are dual-cached (source + transpiledJS) in the `handlers` store under an opaque key, written with `useCount:0`/`updatedAt:now` (bumped on hit, consistent with the apps path) and reused on subsequent calls with no further model call
+- [x] **HANDLER-03** (Phase 8, Complete): Handler code executes in a constrained scope — a targeted denylist shadows `fetch`/`XMLHttpRequest`/`localStorage`/`sessionStorage`/`indexedDB`/`window`/`document` to `undefined` in the `new Function` parameter list, `require` is hostile (throws), and no API key enters the scope; local data operations only, proven by handlers attempting network/storage access being blocked and a thrown handler returning a neutral `{ error }`
 
 ### Devtools Hygiene — "Apps Just Exist" (HYGIENE, cross-cutting NFR)
 
@@ -155,16 +155,17 @@ Each v1 requirement maps to exactly one owning phase. Cross-cutting HYGIENE/SEC 
 | RESIL-04 | Phase 6 — API Error Degradation | Complete |
 | RESIL-05 | Phase 7 — Storage & Cost Guardrails | Complete |
 | RESIL-06 | Phase 7 — Storage & Cost Guardrails | Complete |
-| HANDLER-01 | Phase 8 — Backend-Style Handlers | Pending |
-| HANDLER-02 | Phase 8 — Backend-Style Handlers | Pending |
-| HANDLER-03 | Phase 8 — Backend-Style Handlers | Pending |
+| HANDLER-01 | Phase 8 — Backend-Style Handlers | Complete |
+| HANDLER-02 | Phase 8 — Backend-Style Handlers | Complete |
+| HANDLER-03 | Phase 8 — Backend-Style Handlers | Complete |
 
 **Coverage:**
 - v1 requirements: 45 total — SHELL 5, LOOP 8, GEN 5, WIDGET 5, MOD 4, RESIL 6, HANDLER 3, HYGIENE 5, SEC 4
 - Mapped to phases: 45 ✓ (no orphans, no duplicates)
 - Unmapped: 0 ✓
 - Per-phase counts: Phase 1 = 12, Phase 2 = 10, Phase 3 = 5, Phase 4 = 5, Phase 5 = 4, Phase 6 = 4, Phase 7 = 2, Phase 8 = 3 (total 45)
+- **Implemented: 45/45 — all 8 phases complete; milestone v1.0 feature-complete.**
 
 ---
 *Requirements defined: 2026-06-24*
-*Last updated: 2026-06-24 after roadmap creation (traceability populated, 45/45 mapped)*
+*Last updated: 2026-06-24 — Phase 8 (Backend-Style Handlers) complete; HANDLER-01..03 → Complete; 45/45 requirements implemented across all 8 phases.*

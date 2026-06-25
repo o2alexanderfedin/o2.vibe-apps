@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Contextual Modification** - The shared `⋮` prompt lets users remove, clone, and tweak apps and widgets in place
 - [x] **Phase 6: API Error Degradation** - Missing/invalid key, rate limiting, and uncaught async errors degrade gracefully with neutral copy
 - [x] **Phase 7: Storage & Cost Guardrails** - Storage pressure, eviction, and runaway produce-cost are bounded with neutral messaging
-- [ ] **Phase 8: Backend-Style Handlers** - Apps and widgets transparently resolve or produce cached data handlers on first need
+- [x] **Phase 8: Backend-Style Handlers** - Apps and widgets transparently resolve or produce cached data handlers on first need
 
 ## Phase Details
 
@@ -137,10 +137,10 @@ Plans:
   1. An app or widget calls a single `runHandler(intent, input)` helper that transparently resolves a cached handler or produces one on first need, executes it, and returns `{ data?, error? }`.
   2. A produced handler is cached in the `handlers` store and reused on subsequent calls with no further model call.
   3. Handler code executes in a constrained scope with no `fetch` and no storage/key access — local/mock data operations only — verified by a handler attempting network or storage access being blocked.
-**Plans**: TBD
+**Plans**: 1 plan (executed in worktree feature/phase-8-backend-handlers)
 
 Plans:
-- [ ] 08-01: TBD during planning
+- [x] 08-01 — Backend-Style Handlers: `runHandler(intent, input, services)` resolve-or-produce-then-exec (HANDLER-01); dual-cache (source + transpiledJS) in the `handlers` store with `useCount:0`/`updatedAt` on write and a bump on hit, reuse with no model call (HANDLER-02); constrained-scope execution via `new Function` with a targeted denylist (`fetch`/`XMLHttpRequest`/`localStorage`/`sessionStorage`/`indexedDB`/`window`/`document` shadowed to `undefined`, hostile `require`, no key in scope), neutral `{ error }` on any throw (HANDLER-03); handler produce reuses `produceComponent` via a `kind:"handler"` path (handler prompt + `transpileHandler` TS-strip, no react preset) and `produceGate.tryAcquire()` cost cap; `runHandler` wired into the produced-app `new Function` scope alongside `useWidget` — COMPLETED 2026-06-24
 
 ## Progress
 
@@ -156,4 +156,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Contextual Modification | 1/1 | Complete | 2026-06-24 |
 | 6. API Error Degradation | 1/1 | Complete | 2026-06-24 |
 | 7. Storage & Cost Guardrails | 1/1 | Complete | 2026-06-24 |
-| 8. Backend-Style Handlers | 0/TBD | Not started | - |
+| 8. Backend-Style Handlers | 1/1 | Complete | 2026-06-24 |
+
+**All 8 phases complete — milestone v1.0 feature-complete (45/45 requirements).**

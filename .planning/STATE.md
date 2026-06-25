@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 7 (Storage & Cost Guardrails) completed
+status: feature-complete
+stopped_at: Phase 8 (Backend-Style Handlers) completed — milestone v1.0 feature-complete
 last_updated: "2026-06-24T00:00:00.000Z"
-last_activity: 2026-06-24 -- Phase 7 (Storage & Cost Guardrails) completed
+last_activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed; milestone v1.0 feature-complete (45/45 requirements, all 8 phases)
 progress:
   total_phases: 8
-  completed_phases: 7
-  total_plans: 5
-  completed_plans: 4
-  percent: 88
+  completed_phases: 8
+  total_plans: 6
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -21,13 +21,64 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-24)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 08 — Backend-Style Handlers (next)
+**Current focus:** Milestone v1.0 — FEATURE-COMPLETE. All 8 phases done; 45/45 requirements implemented.
 
 ## Current Position
 
+Phase: 08 (Backend-Style Handlers) — COMPLETE
+Status: Phases 1–8 complete — milestone v1.0 feature-complete. Phase 8 layered
+transparent backend-style data handlers (HANDLER-01..03) as a fully additive
+capability that never reaches the network or the API key.
+
+HANDLER-01..03 — Backend-Style Handlers: `runHandler(intent, input, services)`
+(`src/execution/handler.ts`) is resolve-or-produce-then-exec. It hashes the intent
+into an opaque key (`cacheKey("handler\n" + intent)`), reads the `handlers` store;
+a HIT reuses the stored transpiledJS (no model call) and bumps `useCount`/refreshes
+`updatedAt` (consistent with the loader's apps path, RESIL-06). A MISS calls
+`services.produceGate.tryAcquire()` (the SAME sliding-window cost cap as apps,
+RESIL-05) BEFORE producing via the SHARED `produceComponent` machinery on a new
+`kind:"handler"` path — handler prompt (hygiene-safe, asks for a plain
+`handler(input)` returning `{data}`/`{error}`) + `transpileHandler` (TS-strip only,
+NO react preset / NO JSX) — then dual-caches source + transpiledJS with
+`useCount:0`/`updatedAt:now`. So produced handlers participate in LRU eviction
+for free (`evictUnderPressure` already sweeps `handlers`).
+
+HANDLER-03 constrained scope: the handler runs via `new Function(<denied…>, "input",
+body)` with the denylist `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage,
+sessionStorage, indexedDB, window, document]` SHADOWED TO `undefined` in the
+parameter list (each reference binds the undefined parameter, never the real
+global), a HOSTILE `require` (throws on any specifier), and NO key parameter in
+scope. Pure language built-ins (Math/JSON/Date/…) stay reachable for local compute.
+Any throw (produce/compile/throttle/exec) maps to a neutral `{ error: "This
+operation could not be completed." }` — the mechanic is never revealed.
+
+Wiring: `runHandler` is injected into the produced-app `new Function` scope
+alongside `useWidget` (`instantiate.ts` adds a `runHandler` param; the loader's
+`instantiateWithWidgets` binds it to the app's services as a 2-arg
+`runHandler(intent, input)`). Apps never see registry/transport/key. Apps that
+never call it pay nothing.
+
+DI: every dep injected via `Services` (transport, registry, getApiKey,
+produceGate). Tests substitute a canned transport (handler source, no network), an
+in-memory registry (no IndexedDB), a fixed key getter (no localStorage), and a real
+produce gate + stub clock for the cost cap (no real waits). Real captured Haiku
+handler fixtures (`src/test/fixtures/handler-{filter-tasks,summarize-list}.{raw,code}.txt`)
+prove the path against real output: filter-tasks → `{data}`; summarize-list (which
+reached for an external module) → blocked → `{error}`.
+
+tsc 0 errors, build OK (no .map in dist), 333/333 tests pass (295 baseline + 38 new:
+handler DI/unit + constrained-scope denylist + cost-gate + real-fixture, transpileHandler,
+producer handler-kind, and the produced-app wiring integration), hygiene gate green.
+Last activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed on branch
+feature/phase-8-backend-handlers; milestone v1.0 feature-complete.
+
+Progress: [██████████] 100% (8 of 8 phases)
+
+## Prior Position (Phase 7)
+
 Phase: 07 (Storage & Cost Guardrails) — COMPLETE
-Status: Phases 1–7 complete. Phase 7 bounded runaway produce-cost (RESIL-05) and
-storage pressure (RESIL-06) with neutral messaging.
+Status: Phase 7 bounded runaway produce-cost (RESIL-05) and storage pressure
+(RESIL-06) with neutral messaging.
 
 RESIL-05 — Cost guardrail: `createProduceGate` (`src/host/produceGate.ts`) is a
 sliding-window soft cap (N=10 produce misses per 5-min window; named constants
@@ -117,7 +168,7 @@ None yet.
 - [Phase 4 — RESOLVED]: Static widgets only (declared via `@widget`); no dynamic/undeclared widgets. `useWidget` is fully synchronous (a pure `Map.get`). Decided + implemented in Phase 4.
 - [Phase 7 — RESOLVED]: The cost soft-cap hooks the PRODUCE PATH (loader, immediately before `produceComponent`), not the transport wrapper. Rationale: the requirement caps cache MISSES specifically, and a single hook at the produce call sidesteps having to distinguish app vs widget vs tweak traffic inside the shared `createResilientTransport`. The injected `Clock` (`createStubClock`) drove the window/recovery tests with zero real waits as planned.
 - [Phase 7 — RESOLVED]: Threshold decided — N=10 produce misses per 5-minute sliding window (named, configurable constants in `src/host/produceGate.ts`).
-- [Phase 8]: Confirm the exact allowed-globals denylist for handler scope; it may differ from the app/widget denylist (handlers need local compute, no network/storage). The `handlers` store now carries the same `useCount`/`updatedAt` LRU fields as apps/widgets (`WidgetRecord`/`HandlerRecord` extend `LruMeta`), and `evictUnderPressure` already sweeps the `handlers` store — so produced handlers participate in LRU eviction for free. A new `runHandler(intent,input)` resolve-or-produce path should reuse `Services.produceGate.tryAcquire()` (the cost cap) and set `useCount:0`/`updatedAt:Date.now()` on write to stay consistent with the apps path.
+- [Phase 8 — RESOLVED]: Handler denylist decided and implemented as `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage, sessionStorage, indexedDB, window, document]`, shadowed to `undefined` in the handler's `new Function` parameter list, plus a hostile `require` (throws) and no key in scope. It is intentionally a TARGETED denylist (handlers need local compute) — NOT the full app/widget lockdown, and NOT general sandboxing (HARD-01 iframe deferred to v2). `runHandler` reuses `Services.produceGate.tryAcquire()` on a produce miss and writes `useCount:0`/`updatedAt:Date.now()`, consistent with the apps path; produced handlers participate in `evictUnderPressure` (which already sweeps `handlers`) for free.
 
 ## Deferred Items
 

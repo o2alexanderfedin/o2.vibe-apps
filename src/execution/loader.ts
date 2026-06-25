@@ -25,6 +25,7 @@
 import type { ComponentType } from "react";
 import { transpile } from "./transpile";
 import { instantiate, makeUseWidget } from "./instantiate";
+import { runHandler } from "./handler";
 import { prewarmWidgets } from "./widgetPrewarm";
 import { SEEDED_SOURCES } from "../apps/seeds";
 import { produceComponent, type TransportFn as ProducerTransport } from "./producer";
@@ -95,7 +96,15 @@ async function instantiateWithWidgets(
   services: Services,
 ): Promise<ComponentType> {
   const widgetMap = await prewarmWidgets(source, services);
-  return instantiate(transpiledJS, makeUseWidget(widgetMap));
+  // Phase 8 (HANDLER-01): bind the backend-style data handler to THIS app's
+  // services and inject it into the component scope as a 2-arg `runHandler(intent,
+  // input)`. The app never sees `services` — registry/transport/key stay closed
+  // over here — and resolve-or-produce + the constrained-scope exec all happen
+  // inside `runHandler`. Apps that never call it pay nothing (it is just a bound
+  // function in scope).
+  const boundRunHandler = (intent: string, input: unknown) =>
+    runHandler(intent, input, services);
+  return instantiate(transpiledJS, makeUseWidget(widgetMap), boundRunHandler);
 }
 
 /**

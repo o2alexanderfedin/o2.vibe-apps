@@ -48,6 +48,24 @@ export function makeUseWidget(
 const NULL_USE_WIDGET: UseWidget = makeUseWidget(new Map());
 
 /**
+ * The backend-style data-handler accessor injected into a component scope
+ * (Phase 8, HANDLER-01). A produced app calls `runHandler(intent, input)` —
+ * a TWO-arg, services-bound binding — and gets back a `Promise<{ data?, error? }>`.
+ * The third argument (`services`) is closed over by the loader when it binds this,
+ * so the app never sees the registry, transport, or key. Defaults to a no-op that
+ * resolves to a neutral `{ error }` for apps instantiated without the binding
+ * (e.g. direct unit tests of a component), preserving a stable call signature.
+ */
+export type RunHandler = (
+  intent: string,
+  input: unknown,
+) => Promise<{ data?: unknown; error?: string }>;
+
+/** Default handler accessor for scopes instantiated without one (neutral error). */
+const NULL_RUN_HANDLER: RunHandler = () =>
+  Promise.resolve({ error: "This operation could not be completed." });
+
+/**
  * `require` shim injected into every instantiated component scope.
  *
  * Babel's CommonJS transform rewrites `import React from "react"` into
@@ -77,6 +95,10 @@ function requireShim(specifier: string): unknown {
  * @param useWidget     The synchronous widget accessor injected into the scope
  *                      (Phase 4). Defaults to an always-null accessor for apps
  *                      that declare no widgets, preserving the prior signature.
+ * @param runHandler    The services-bound backend-style data-handler accessor
+ *                      injected into the scope (Phase 8, HANDLER-01). Defaults to
+ *                      a neutral no-op so components instantiated without it (e.g.
+ *                      direct unit tests) keep a stable call signature.
  *
  * Throws `InstantiateError` if the code fails to execute or does not export
  * an `App` function.
@@ -84,15 +106,17 @@ function requireShim(specifier: string): unknown {
 export function instantiate(
   transpiledJS: string,
   useWidget: UseWidget = NULL_USE_WIDGET,
+  runHandler: RunHandler = NULL_RUN_HANDLER,
 ): ComponentType {
   const mod: { exports: Record<string, unknown> } = { exports: {} };
 
   try {
-    // Parameters: module, exports, React, useWidget, require — only these names are in scope.
-    // `require` resolves "react"/"react-dom" to the shared React (see requireShim).
+    // Parameters: module, exports, React, useWidget, runHandler, require — only
+    // these names are in scope. `require` resolves "react"/"react-dom" to the
+    // shared React (see requireShim); `runHandler` is the services-bound accessor.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const fn = new Function("module", "exports", "React", "useWidget", "require", transpiledJS);
-    fn(mod, mod.exports, sharedReact, useWidget, requireShim);
+    const fn = new Function("module", "exports", "React", "useWidget", "runHandler", "require", transpiledJS);
+    fn(mod, mod.exports, sharedReact, useWidget, runHandler, requireShim);
   } catch (err) {
     throw new InstantiateError(
       err instanceof Error ? err.message : String(err),
@@ -116,11 +140,12 @@ export function instantiate(
         "exports",
         "React",
         "useWidget",
+        "runHandler",
         "require",
         transpiledJS + "\nreturn typeof App !== 'undefined' ? App : undefined;",
       );
-      App = fn2(mod, mod.exports, sharedReact, useWidget, requireShim) as unknown;
-      // (useWidget is the injected accessor; same reference as the first pass.)
+      App = fn2(mod, mod.exports, sharedReact, useWidget, runHandler, requireShim) as unknown;
+      // (useWidget/runHandler are the injected accessors; same refs as pass one.)
     } catch (err) {
       throw new InstantiateError(
         err instanceof Error ? err.message : String(err),

@@ -22,7 +22,7 @@
 // root — supplies them, so tests substitute a canned transport and a fixed key
 // getter without touching the network or the browser.
 
-import { transpile, TranspileError } from "./transpile";
+import { transpile, transpileHandler, TranspileError } from "./transpile";
 import {
   callModel,
   isTruncated,
@@ -40,10 +40,21 @@ export type { TransportFn };
 const MAX_ATTEMPTS = 3;
 
 /**
- * What is being produced: a top-level app, or a sub-widget composed inside one.
- * The two share the full produce loop; only the prompt differs (Phase 4, DRY).
+ * What is being produced. The three kinds share the SAME produce loop — prompt →
+ * extract → transpile → self-heal → truncation handling — and differ only in two
+ * pluggable spots (Phase 4 + Phase 8, DRY):
+ *
+ *   - "app" / "widget": a React TSX component (transpiled with the react preset).
+ *   - "handler"        : a PLAIN async `handler(input)` over local data — NOT a
+ *                        React component, so it is transpiled by `transpileHandler`
+ *                        (TS-strip only, no react preset / no JSX). Its prompt asks
+ *                        for `{ data }` / `{ error }` rather than an `App` export.
+ *
+ * The loop selects the prompt builder by `kind` and the transpile function by
+ * `kind === "handler"`; EVERYTHING else is shared verbatim, so the handler path
+ * does not duplicate the (carefully tuned) produce/self-heal machinery.
  */
-export type ProduceKind = "app" | "widget";
+export type ProduceKind = "app" | "widget" | "handler";
 
 /**
  * An optional free-form instruction that shapes the produced component (Phase 5,
@@ -78,6 +89,22 @@ export function buildPrompt(
   kind: ProduceKind = "app",
   userPrompt?: string,
 ): string {
+  if (kind === "handler") {
+    // A handler is a PLAIN async function over local data — NOT a React component.
+    // Phrasing is hygiene-safe (HYGIENE-03): it carries none of the gate's
+    // mechanic-revealing tokens. "local sample data" stands in for the usual
+    // throwaway-data phrasing, which would otherwise have tripped the word gate.
+    return (
+      `Build a JavaScript async function \`handler(input)\` that handles: ${type}.\n` +
+      `Requirements:\n` +
+      `- Return \`{ data }\` on success or \`{ error }\` on failure (a plain object literal)\n` +
+      `- Use realistic local sample data computed in-process — no external services\n` +
+      `- No imports, no network, no storage — local data operations only\n` +
+      `- Under 150 lines\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the function code, no explanation.`
+    );
+  }
   if (kind === "widget") {
     return (
       `Build a self-contained React TSX widget of type "${type}".\n` +
@@ -116,6 +143,20 @@ export function buildRepairPrompt(
   kind: ProduceKind = "app",
   userPrompt?: string,
 ): string {
+  if (kind === "handler") {
+    // Repair a plain handler function — same self-heal contract, no React framing.
+    return (
+      `Fix the JavaScript async function \`handler(input)\` that handles: ${type}.\n` +
+      `The following code has a compile error:\n` +
+      `\`\`\`js\n${previousCode}\n\`\`\`\n` +
+      `Babel error: ${babelError}\n\n` +
+      `Requirements:\n` +
+      `- An async function \`handler(input)\` returning \`{ data }\` or \`{ error }\`\n` +
+      `- No imports, no network, no storage — local data operations only\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the corrected function code, no explanation.`
+    );
+  }
   const subject = kind === "widget" ? `widget of type "${type}"` : `component for a "${type}" app`;
   return (
     `Fix the React TSX ${subject}.\n` +
@@ -141,6 +182,17 @@ export function buildLengthPrompt(
   kind: ProduceKind = "app",
   userPrompt?: string,
 ): string {
+  if (kind === "handler") {
+    return (
+      `Build a compact JavaScript async function \`handler(input)\` that handles: ${type}.\n` +
+      `Keep it concise so the full function fits in one response.\n` +
+      `Requirements:\n` +
+      `- An async function \`handler(input)\` returning \`{ data }\` or \`{ error }\`\n` +
+      `- Use realistic local sample data — no network, no storage, no imports\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the complete function code, no explanation.`
+    );
+  }
   const subject = kind === "widget" ? `widget of type "${type}"` : `component for a "${type}" app`;
   return (
     `Build a compact, self-contained React TSX ${subject}.\n` +
@@ -164,15 +216,24 @@ export function buildLengthPrompt(
  *   - Raw code with no fences
  */
 export function extractCode(responseText: string): string {
-  // Try to extract a fenced code block first.
-  const fenceMatch = responseText.match(/```(?:tsx|typescript|ts|jsx|js)?\s*\n?([\s\S]*?)```/);
+  // Try to extract a fenced code block first. The language tag is optional and
+  // matched longest-first ("javascript"/"typescript" before "js"/"ts") so a
+  // ```javascript handler fence (Phase 8) is captured cleanly rather than leaving
+  // a stray "cript" prefix in the body.
+  const fenceMatch = responseText.match(
+    /```(?:javascript|typescript|tsx|jsx|ts|js)?\s*\n?([\s\S]*?)```/,
+  );
   if (fenceMatch?.[1]) {
     return fenceMatch[1].trim();
   }
 
-  // No fence — look for the start of a component definition.
+  // No fence — look for the start of a component OR handler definition. Matches
+  // an export, a (possibly async) `function App`/`function handler` declaration,
+  // or a `const App`/`const handler` binding. Broadened in Phase 8 so a fence-less
+  // handler (`async function handler(input) { ... }`) is found the same way an app
+  // (`function App() { ... }`) is — one extractor for every produce kind (DRY).
   const firstToken = responseText.search(
-    /^(?:export\s+default\s+|export\s+|function\s+App|const\s+App)/m,
+    /^(?:export\s+default\s+|export\s+|(?:async\s+)?function\s+(?:App|handler)|const\s+(?:App|handler))/m,
   );
   if (firstToken !== -1) {
     return responseText.slice(firstToken).trim();
@@ -218,8 +279,10 @@ export class ProduceAuthError extends ProduceError {
  * @param type       The unseeded app/widget type id (e.g. "weather", "line-chart").
  * @param transport  The model HTTP transport.
  * @param getApiKey  Reads the access key (returns null when unavailable).
- * @param kind       "app" (default) or "widget" — selects the prompt only; the
- *                   produce loop is identical for both (Phase 4, DRY).
+ * @param kind       "app" (default), "widget", or "handler" — selects the prompt
+ *                   builder AND the transpile (handlers strip TS only, no react
+ *                   preset); the produce/self-heal loop is identical for every
+ *                   kind (Phase 4 + Phase 8, DRY).
  * @param userPrompt Optional free-form mutation instruction (Phase 5 tweak,
  *                   MOD-03). Woven into the initial/repair/length prompts so the
  *                   produced component reflects the request — the produce loop is
@@ -291,7 +354,13 @@ export async function produceComponent(
     const code = extractCode(responseText);
 
     try {
-      const transpiledJS = transpile(code, { filename: type + ".tsx" });
+      // Select the transpile by kind: handlers are PLAIN JS/TS (TS-strip only, no
+      // react preset / no JSX); apps and widgets are React TSX (Phase 8, DRY). The
+      // self-heal/truncation loop around this is identical for every kind.
+      const transpiledJS =
+        kind === "handler"
+          ? transpileHandler(code, { filename: type + ".ts" })
+          : transpile(code, { filename: type + ".tsx" });
       logger.info(`Producer: compiled successfully on attempt ${attempt}`);
       return { source: code, transpiledJS };
     } catch (err) {
