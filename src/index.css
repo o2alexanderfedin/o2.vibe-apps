@@ -534,3 +534,78 @@ body {
   font-weight: 400;
   color: var(--color-text-tertiary);
 }
+
+/* ─────── Shared contextual prompt popover (MOD-01) — app + widget `⋮` ─────── */
+.contextual-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 12px;
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 10px;
+}
+
+.contextual-prompt__heading {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.contextual-prompt__input {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 8px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.contextual-prompt__input:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 1px;
+}
+
+.contextual-prompt__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.contextual-prompt__cancel,
+.contextual-prompt__apply {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.contextual-prompt__cancel {
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border-secondary);
+}
+
+.contextual-prompt__apply {
+  color: #fff;
+  background: var(--color-accent-primary);
+  border: 1px solid var(--color-accent-primary);
+}
+
+.contextual-prompt__apply:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.contextual-prompt__cancel:focus-visible,
+.contextual-prompt__apply:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
