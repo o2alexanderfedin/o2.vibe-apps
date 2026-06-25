@@ -54,7 +54,7 @@ const MAX_ATTEMPTS = 3;
  * `kind === "handler"`; EVERYTHING else is shared verbatim, so the handler path
  * does not duplicate the (carefully tuned) produce/self-heal machinery.
  */
-export type ProduceKind = "app" | "widget" | "handler";
+export type ProduceKind = "app" | "widget" | "handler" | "shell";
 
 /**
  * An optional free-form instruction that shapes the produced component (Phase 5,
@@ -95,14 +95,46 @@ export function buildPrompt(
     // mechanic-revealing tokens. "local sample data" stands in for the usual
     // throwaway-data phrasing, which would otherwise have tripped the word gate.
     return (
-      `Build a JavaScript async function \`handler(input)\` that handles: ${type}.\n` +
+      `Build a TypeScript async function \`handler(input)\` that handles: ${type}.\n` +
       `Requirements:\n` +
-      `- Return \`{ data }\` on success or \`{ error }\` on failure (a plain object literal)\n` +
-      `- Use realistic local sample data computed in-process — no external services\n` +
-      `- No imports, no network, no storage — local data operations only\n` +
+      `- Write TypeScript with EXPLICIT types: annotate the \`input\` parameter and the return type, and declare \`interface\`/\`type\` aliases for the input and output shapes — these types ARE the contract (the types are stripped before running, so they cost nothing at runtime).\n` +
+      `- Return \`{ data }\` on success or \`{ error }\` on failure (a plain object literal that matches the declared return type)\n` +
+      `- Pure in-process computation ONLY: do NOT import or require anything (no library, service, SDK, or model) and do NOT touch the network or storage — there is none, and any import fails at runtime. Compute the answer directly with plain TypeScript over the input and realistic local sample data.\n` +
       `- Under 150 lines\n` +
       mutationLine(userPrompt) +
-      `Return ONLY the function code, no explanation.`
+      `Return ONLY the TypeScript function code, no explanation.`
+    );
+  }
+  if (kind === "shell") {
+    // THIN-SHELL mode (the user's "minimal control + on-demand behavior" direction).
+    // The produced component is structure + state ONLY — every interaction is routed
+    // through the in-scope `runHandler`, which resolves-or-produces the real behavior
+    // on demand and caches it. So a big monolithic app collapses into a tiny shell
+    // (reliable to produce) plus per-action handlers that are each small, sandboxed,
+    // and cached. Drift across independently produced handlers is contained by making
+    // the SHELL the single source of truth: it owns the full state shape and embeds
+    // that shape into every (stable) intent, and it merges/keeps-prior on the result
+    // (see .planning/research/CONSULT-thin-shell-on-demand-handlers.md). Phrasing is
+    // hygiene-safe (HYGIENE-03); the `"${type}" app` substring is preserved.
+    return (
+      `Build a MINIMAL React TSX control for a "${type}" app — structure and state ONLY, with NO business logic.\n` +
+      `Requirements:\n` +
+      `- Default export named App (function App() { ... })\n` +
+      `- No imports — React is injected as a global; never write the word import\n` +
+      `- Uses CSS variables for theming: var(--color-surface), var(--color-text), var(--color-accent)\n` +
+      `- Hold the COMPLETE app state in ONE React.useState with an explicit, named initial shape (keep it small, e.g. { display: "0", expr: "" }) and a separate React.useState(false) "busy" flag.\n` +
+      `- Define ONE async function dispatch(action, payload) — the ONLY place behavior happens — that:\n` +
+      `    1. sets busy true;\n` +
+      `    2. const res = await runHandler(intent, { state, payload });\n` +
+      `    3. if (res && res.data && res.data.state) setState(prev => ({ ...prev, ...res.data.state }));\n` +
+      `    4. sets busy false.\n` +
+      `  Do NOT compute any result yourself — runHandler returns the next state.\n` +
+      `- The intent MUST be a STABLE string (NEVER embed live state values, so it is the same on every press) that fully specifies the behavior so it can be built on its own. It MUST include: the app name and action, the EXACT state shape, that input is { state, payload } where payload is a STRING, and that it must return { data: { state } } with the SAME shape. Be UNAMBIGUOUS — spell out the EXACT change THIS one action makes to the state; do NOT rely on the handler inferring behavior or expecting a structured payload. For example:\n` +
+      `    const intent = "${type} action '" + action + "': state is exactly { display: string, expr: string }; input is { state, payload } where payload is the single-character string '" + action + "'; for a digit/operator append payload to expr and set display to expr; for '=' evaluate expr and set display and expr to the result; return { data: { state } } with the same shape and always a valid state";\n` +
+      `- Render the control's minimal markup (a display reading from state, and buttons). Each interactive element calls dispatch("<action>", <payload>). Show a small busy hint (e.g. disable the buttons) while busy.\n` +
+      `- Functional control markup, no placeholders, but ZERO arithmetic or business logic in this file.\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the TSX code block, no explanation.`
     );
   }
   if (kind === "widget") {
@@ -119,14 +151,33 @@ export function buildPrompt(
       `Return ONLY the TSX code block, no explanation.`
     );
   }
+  // App prompt. Beyond the base contract it now surfaces TWO optional, in-scope
+  // helpers so a produced app can compose sub-widgets and run backend-style data
+  // operations — the capabilities the runtime already injects into the component
+  // scope (`useWidget`, `runHandler`) but that earlier prompts never mentioned, so
+  // real apps never used them. Design follows the recorded research consult
+  // (.planning/research/CONSULT-activating-widgets-handlers.md):
+  //   - the `// @widget <type>` declaration doubles as a chain-of-thought anchor
+  //     that primes the matching `useWidget(...)` call (so the declaration form is
+  //     kept verbatim — it is what `parseWidgetDeps` pre-warms);
+  //   - helpers are framed as GLOBALS (small models fail at injection patterns);
+  //   - explicit NO-OP / negative constraints + a two-widget cap keep simple apps
+  //     self-contained, protecting the resilience budget and first-paint latency
+  //     (every declared widget is an eager pre-warm produce on a cache miss).
+  // Phrasing stays hygiene-safe (HYGIENE-03) — none of the banned lexicon. The
+  // `"${type}" app` substring is load-bearing (the widget/app routing seam matches
+  // it); the app prompt deliberately never contains the widget-only `of type "…"`.
   return (
-    `Build a self-contained React TSX component for a "${type}" app.\n` +
+    `Build a React TSX component for a "${type}" app.\n` +
     `Requirements:\n` +
     `- Default export named App (function App() { ... })\n` +
     `- Uses React.useState / React.useEffect (React is available as a global)\n` +
     `- Uses CSS variables for theming: var(--color-surface), var(--color-text), var(--color-accent)\n` +
     `- Fully functional, no placeholders\n` +
     `- No imports — React is injected; no import statements at all\n` +
+    `Two optional helpers are in scope as globals — reach for them when the app naturally calls for them (a simple single-purpose app can stay one self-contained component):\n` +
+    `- Sub-widgets: when the app has a distinct reusable part (a chart, a stat card, a list section), declare it at the very top as a line comment like "// @widget chart" (at most two), then in render write const Chart = useWidget("chart") and place {Chart ? <Chart data={myData} /> : null}. A sub-widget accepts optional props { data?, config?, onAction? }. Prefer this when the app shows more than one distinct kind of content.\n` +
+    `- Data helper: when the app filters, summarizes, or derives values, do that work by calling await runHandler("describe the operation", input) inside React.useEffect or an event handler; it resolves to { data } or { error } — store { data } in state and render it.\n` +
     mutationLine(userPrompt) +
     `Return ONLY the TSX code block, no explanation.`
   );
@@ -146,15 +197,15 @@ export function buildRepairPrompt(
   if (kind === "handler") {
     // Repair a plain handler function — same self-heal contract, no React framing.
     return (
-      `Fix the JavaScript async function \`handler(input)\` that handles: ${type}.\n` +
+      `Fix the TypeScript async function \`handler(input)\` that handles: ${type}.\n` +
       `The following code has a compile error:\n` +
-      `\`\`\`js\n${previousCode}\n\`\`\`\n` +
+      `\`\`\`ts\n${previousCode}\n\`\`\`\n` +
       `Babel error: ${babelError}\n\n` +
       `Requirements:\n` +
-      `- An async function \`handler(input)\` returning \`{ data }\` or \`{ error }\`\n` +
+      `- A TypeScript async function \`handler(input)\` with explicit input/return types, returning \`{ data }\` or \`{ error }\`\n` +
       `- No imports, no network, no storage — local data operations only\n` +
       mutationLine(userPrompt) +
-      `Return ONLY the corrected function code, no explanation.`
+      `Return ONLY the corrected TypeScript function code, no explanation.`
     );
   }
   const subject = kind === "widget" ? `widget of type "${type}"` : `component for a "${type}" app`;
@@ -184,13 +235,13 @@ export function buildLengthPrompt(
 ): string {
   if (kind === "handler") {
     return (
-      `Build a compact JavaScript async function \`handler(input)\` that handles: ${type}.\n` +
+      `Build a compact TypeScript async function \`handler(input)\` that handles: ${type}.\n` +
       `Keep it concise so the full function fits in one response.\n` +
       `Requirements:\n` +
-      `- An async function \`handler(input)\` returning \`{ data }\` or \`{ error }\`\n` +
+      `- A TypeScript async function \`handler(input)\` with explicit input/return types, returning \`{ data }\` or \`{ error }\`\n` +
       `- Use realistic local sample data — no network, no storage, no imports\n` +
       mutationLine(userPrompt) +
-      `Return ONLY the complete function code, no explanation.`
+      `Return ONLY the complete TypeScript function code, no explanation.`
     );
   }
   const subject = kind === "widget" ? `widget of type "${type}"` : `component for a "${type}" app`;

@@ -187,7 +187,12 @@ describe("Marketplace — produce failure shows a neutral fallback (not silent)"
         messages: Array<{ content: string }>;
       };
       const content = body.messages[0]?.content ?? "";
-      const isInitialPrompt = content.includes("Build a self-contained");
+      // Detect the INITIAL app prompt (not the repair "Fix …" or the length
+      // "Build a compact, self-contained …" prompt) so the self-heal retries inside
+      // the first open all stay on the failing branch. The initial app prompt opens
+      // with "Build a React TSX component for" (the length prompt opens with
+      // "Build a compact, …", so this substring is unique to the first attempt).
+      const isInitialPrompt = content.includes("Build a React TSX component for");
       if (isInitialPrompt) opens += 1;
       const text =
         opens === 1

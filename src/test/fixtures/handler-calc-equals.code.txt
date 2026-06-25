@@ -1,0 +1,62 @@
+async function handler(input) {
+  try {
+    const { state } = input;
+    
+    if (!state || typeof state.expr !== 'string') {
+      return {
+        error: 'Invalid state: missing or invalid expr'
+      };
+    }
+    
+    const expr = state.expr.trim();
+    
+    if (!expr) {
+      return {
+        error: 'Empty expression'
+      };
+    }
+    
+    // Validate expression contains only safe characters
+    if (!/^[\d+\-*/%().]+$/.test(expr)) {
+      return {
+        error: 'Invalid expression: contains unsafe characters'
+      };
+    }
+    
+    // Prevent division by zero and other edge cases
+    let result;
+    try {
+      // Using Function constructor in a controlled way for arithmetic evaluation
+      result = Function('"use strict"; return (' + expr + ')')();
+    } catch (e) {
+      return {
+        error: 'Invalid expression: ' + e.message
+      };
+    }
+    
+    // Validate result is a valid number
+    if (typeof result !== 'number' || !isFinite(result)) {
+      return {
+        error: 'Invalid result: not a finite number'
+      };
+    }
+    
+    // Convert result to string, handling floating point precision
+    const resultStr = Number.isInteger(result) 
+      ? result.toString() 
+      : parseFloat(result.toFixed(10)).toString();
+    
+    return {
+      data: {
+        state: {
+          display: resultStr,
+          expr: resultStr
+        }
+      }
+    };
+  } catch (err) {
+    return {
+      error: err.message || 'Unknown error'
+    };
+  }
+}
