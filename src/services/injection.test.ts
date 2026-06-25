@@ -185,6 +185,15 @@ describe("DI — createServices() wires the real implementations", () => {
     expect(typeof services.getApiKey).toBe("function");
   });
 
+  it("wires the Phase 7 guardrails: a produce gate and a storage seam (RESIL-05/06)", () => {
+    const services = createServices();
+    // The cost gate exposes tryAcquire (the produce-path chokepoint hook).
+    expect(typeof services.produceGate.tryAcquire).toBe("function");
+    // The storage seam exposes the guarded persist + estimate surface.
+    expect(typeof services.storage.requestPersist).toBe("function");
+    expect(typeof services.storage.estimate).toBe("function");
+  });
+
   it("the test bundle does NOT wire the real transport (substitutable seam)", () => {
     const test = createTestServices({ transport: cannedTransport("x") });
     expect(test.transport).not.toBe(defaultTransport);

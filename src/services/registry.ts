@@ -20,9 +20,12 @@ export type StoreValue<S extends StoreName> = S extends "apps"
     : HandlerRecord;
 
 /**
- * The injectable registry contract: get/put/del over the three stores.
+ * The injectable registry contract: get/put/del/keys over the three stores.
  * Mirrors the module-level functions in ../registry/registry exactly so the
  * production adapter is a thin pass-through.
+ *
+ * Phase 7 (RESIL-06): adds `keys(store)` so the LRU eviction pass can enumerate
+ * candidate victims across stores without coupling to a concrete backend.
  */
 export interface Registry {
   get<S extends StoreName>(
@@ -35,4 +38,6 @@ export interface Registry {
     key: string,
   ): Promise<void>;
   del(store: StoreName, key: string): Promise<void>;
+  /** List every key in a store (used by LRU eviction to enumerate victims). */
+  keys(store: StoreName): Promise<string[]>;
 }

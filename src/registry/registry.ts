@@ -1,7 +1,12 @@
 // Registry module — IndexedDB init + probe write/delete + in-memory Map fallback (D-22, D-23).
 // All callers await dbReady before any get/put/del call.
 // The async interface is identical regardless of storage availability (D-23).
+//
+// Phase 7 (RESIL-06): adds `keys(store)` enumeration so the LRU eviction pass can
+// list candidate victims, and routes the persist request through the injectable
+// storage-pressure seam (guarded — persist may be undefined).
 import { openRegistry, type AppRecord, type WidgetRecord, type HandlerRecord } from "./db";
+import { navigatorStorageSeam } from "../host/storageEstimate";
 import { logger } from "../lib/logger";
 
 type StoreName = "apps" | "widgets" | "handlers";
@@ -37,13 +42,9 @@ export const dbReady: Promise<void> = (async () => {
   } catch {
     storageAvailable = false; // private mode / zero quota — degrade to Map
   }
-  // fire-and-forget persist request; guarded because jsdom lacks navigator.storage (Pitfall 3).
-  if (
-    typeof navigator !== "undefined" &&
-    typeof navigator.storage?.persist === "function"
-  ) {
-    void navigator.storage.persist();
-  }
+  // Fire-and-forget persist request through the guarded seam (RESIL-06); the seam
+  // is a no-op (resolves false) where navigator.storage.persist is unavailable.
+  void navigatorStorageSeam.requestPersist();
   logger.info("Registry initialized");
 })();
 
@@ -84,4 +85,17 @@ export async function del(store: StoreName, key: string): Promise<void> {
   } else {
     mapFor(store).delete(key);
   }
+}
+
+/**
+ * List all keys in a store (Phase 7, RESIL-06). The LRU eviction pass uses this
+ * to enumerate candidate victims across the three stores. Same async interface
+ * regardless of backend — IndexedDB `getAllKeys` or the in-memory Map's keys.
+ */
+export async function keys(store: StoreName): Promise<string[]> {
+  await dbReady;
+  if (storageAvailable && _db !== null) {
+    return (await _db.getAllKeys(store)) as string[];
+  }
+  return [...mapFor(store).keys()];
 }

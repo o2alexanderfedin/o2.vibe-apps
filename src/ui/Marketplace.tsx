@@ -18,6 +18,7 @@ import { KeyDialog } from "./KeyDialog";
 import { resolveOpenApp } from "../intent/resolver";
 import { resolveComponent, evictLiveComponent } from "../execution/loader";
 import { ProduceAuthError } from "../execution/producer";
+import { ProduceThrottledError } from "../host/produceGate";
 import { useServices } from "../services/ServicesProvider";
 import { routeModification } from "../intent/routeModification";
 import { cacheKey } from "../registry/cacheKey";
@@ -47,6 +48,11 @@ interface OpenedApp {
   // missing/invalid (401) — the fallback then offers the inline reconfigure path
   // (RESIL-03) instead of the generic retry.
   needsAuth?: boolean;
+  // True when the open was soft-capped by the produce-cost guardrail (RESIL-05) —
+  // too many fresh opens in a short window. The fallback then shows the softer
+  // "give it a moment" copy (it is transient and recovers as the window slides),
+  // reusing the same neutral failed-open region instead of a separate surface.
+  throttled?: boolean;
 }
 
 // Neutral, hygiene-safe fallback shown when an app fails to open for a generic
@@ -87,6 +93,28 @@ function NeedsAuthContent({ onConnect }: { onConnect: () => void }) {
         onClick={onConnect}
       >
         Connect your account
+      </button>
+    </div>
+  );
+}
+
+// Soft-cap fallback shown when the produce-cost guardrail blocks a fresh open
+// because too many apps were opened in a short window (RESIL-05). The copy is
+// neutral and reassuring — the cap recovers as the rolling window slides, so a
+// later retry (or a re-open once a moment has passed) succeeds. It renders in the
+// SAME neutral failed-open region, keeping the storefront browsable underneath.
+function ThrottledAppContent({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="app-failed-fallback" role="alert">
+      <p className="app-failed-fallback__body">
+        You&rsquo;re opening a lot of apps quickly — give it a moment.
+      </p>
+      <button
+        type="button"
+        className="app-failed-fallback__retry"
+        onClick={onRetry}
+      >
+        Try again
       </button>
     </div>
   );
@@ -141,13 +169,16 @@ export function Marketplace() {
         // gated logger; the user-facing copy stays mechanic-free.
         //
         // A ProduceAuthError (missing/invalid key, 401) routes to the inline
-        // reconfigure prompt instead of the generic retry (RESIL-03).
+        // reconfigure prompt instead of the generic retry (RESIL-03). A
+        // ProduceThrottledError (cost guardrail, RESIL-05) routes to the softer
+        // "give it a moment" copy — transient, recovers as the window slides.
         const needsAuth = err instanceof ProduceAuthError;
+        const throttled = err instanceof ProduceThrottledError;
         logger.error("Failed to open " + appType + ": " + String(err));
         const instanceId = nextInstanceId(appType);
         setOpenedApps((prev) => [
           ...prev,
-          { instanceId, appType, displayName, Component: null, needsAuth },
+          { instanceId, appType, displayName, Component: null, needsAuth, throttled },
         ]);
       } finally {
         timeoutRef.current = setTimeout(() => {
@@ -283,6 +314,13 @@ export function Marketplace() {
                 createElement(app.Component)
               ) : app.needsAuth ? (
                 <NeedsAuthContent onConnect={() => setKeyDialogOpen(true)} />
+              ) : app.throttled ? (
+                <ThrottledAppContent
+                  onRetry={() => {
+                    handleClose(app.instanceId);
+                    void handleOpen(app.appType, app.displayName);
+                  }}
+                />
               ) : (
                 <FailedAppContent
                   onRetry={() => {

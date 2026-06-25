@@ -84,6 +84,48 @@ describe("registry — happy path (IndexedDB available via fake-indexeddb)", () 
     const result = await get("handlers", "h-key");
     expect(result).toEqual(handler);
   });
+
+  // Phase 7 (RESIL-06): keys() enumeration + LRU bookkeeping fields ------------
+
+  it("keys() lists every key written to a store (used by LRU eviction)", async () => {
+    const { dbReady, put, keys } = await import("./registry");
+    await dbReady;
+    await put("apps", appRecord({ cacheKey: "k1" }), "k1");
+    await put("apps", appRecord({ cacheKey: "k2" }), "k2");
+    const allKeys = await keys("apps");
+    expect(allKeys).toContain("k1");
+    expect(allKeys).toContain("k2");
+  });
+
+  it("round-trips the new LRU fields (useCount, updatedAt) on an AppRecord", async () => {
+    const { dbReady, put, get } = await import("./registry");
+    await dbReady;
+    const rec = appRecord({ cacheKey: "lru", useCount: 7, updatedAt: 12345 });
+    await put("apps", rec, "lru");
+    const result = await get("apps", "lru");
+    expect(result?.useCount).toBe(7);
+    expect(result?.updatedAt).toBe(12345);
+  });
+
+  it("a v1-style record missing useCount/updatedAt reads back without the fields (migration default path)", async () => {
+    // Simulate a record written by the v1 schema: NO useCount/updatedAt. The
+    // additive v2 upgrade keeps it intact; consumers (the LRU layer) default the
+    // missing fields to 0 on read — proven here by their absence on the record.
+    const { dbReady, put, get } = await import("./registry");
+    await dbReady;
+    const v1Record = {
+      cacheKey: "legacy",
+      type: "legacy",
+      source: "s",
+      transpiledJS: "j",
+    };
+    await put("apps", v1Record as never, "legacy");
+    const result = await get("apps", "legacy");
+    expect(result?.useCount).toBeUndefined();
+    expect(result?.updatedAt).toBeUndefined();
+    // The original fields survive the upgrade untouched.
+    expect(result?.source).toBe("s");
+  });
 });
 
 describe("registry — fallback path (storage unavailable)", () => {
@@ -118,6 +160,20 @@ describe("registry — fallback path (storage unavailable)", () => {
     const { dbReady } = await import("./registry");
     // Must resolve without throwing
     await expect(dbReady).resolves.toBeUndefined();
+  });
+
+  it("keys() works through the in-memory fallback when storage is unavailable", async () => {
+    vi.doMock("./db", () => ({
+      REGISTRY_DB_VERSION: 2,
+      openRegistry: vi.fn().mockRejectedValue(new Error("no storage")),
+    }));
+
+    const { dbReady, put, keys } = await import("./registry");
+    await dbReady;
+    await put("apps", appRecord({ cacheKey: "m1" }), "m1");
+    await put("apps", appRecord({ cacheKey: "m2" }), "m2");
+    const allKeys = await keys("apps");
+    expect(allKeys.sort()).toEqual(["m1", "m2"]);
   });
 });
 
