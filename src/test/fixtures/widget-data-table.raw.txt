@@ -1,0 +1,235 @@
+
+```tsx
+function App(props: { data?: Array<Record<string, any>>; config?: { columns?: Array<{ key: string; label: string }>; sortable?: boolean; paginated?: boolean; pageSize?: number }; onAction?: (action: string, rowIndex: number, data: any) => void }) {
+  const [sortedData, setSortedData] = React.useState<Array<Record<string, any>>>([]);
+  const [currentPage, setCurrentPage] = React.useState(0);
+  const [sortColumn, setSortColumn] = React.useState<string | null>(null);
+  const [sortAsc, setSortAsc] = React.useState(true);
+
+  const data = props.data || [
+    { id: 1, name: "Alice Johnson", email: "alice@example.com", status: "Active" },
+    { id: 2, name: "Bob Smith", email: "bob@example.com", status: "Inactive" },
+    { id: 3, name: "Carol White", email: "carol@example.com", status: "Active" },
+    { id: 4, name: "David Brown", email: "david@example.com", status: "Pending" },
+    { id: 5, name: "Eve Davis", email: "eve@example.com", status: "Active" },
+  ];
+
+  const config = props.config || {
+    columns: data.length > 0
+      ? Object.keys(data[0]).map(key => ({ key, label: key.charAt(0).toUpperCase() + key.slice(1) }))
+      : [],
+    sortable: true,
+    paginated: true,
+    pageSize: 3,
+  };
+
+  const columns = config.columns || [];
+  const isSortable = config.sortable !== false;
+  const isPaginated = config.paginated !== false;
+  const pageSize = config.pageSize || 10;
+
+  React.useEffect(() => {
+    let newData = [...data];
+    if (sortColumn && isSortable) {
+      newData.sort((a, b) => {
+        const aVal = a[sortColumn];
+        const bVal = b[sortColumn];
+        if (aVal < bVal) return sortAsc ? -1 : 1;
+        if (aVal > bVal) return sortAsc ? 1 : -1;
+        return 0;
+      });
+    }
+    setSortedData(newData);
+    setCurrentPage(0);
+  }, [data, sortColumn, sortAsc]);
+
+  const handleSort = (column: string) => {
+    if (!isSortable) return;
+    if (sortColumn === column) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortColumn(column);
+      setSortAsc(true);
+    }
+  };
+
+  const paginatedData = isPaginated
+    ? sortedData.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+    : sortedData;
+
+  const totalPages = Math.ceil(sortedData.length / pageSize);
+
+  const handleAction = (action: string, rowIndex: number) => {
+    const actualIndex = isPaginated ? currentPage * pageSize + rowIndex : rowIndex;
+    if (props.onAction) {
+      props.onAction(action, actualIndex, sortedData[actualIndex]);
+    }
+  };
+
+  return (
+    <div style={styles.container}>
+      <style>{`
+        :root {
+          --color-surface: #ffffff;
+          --color-text: #1a1a1a;
+          --color-accent: #0066cc;
+        }
+      `}</style>
+      <div style={styles.tableWrapper}>
+        <table style={styles.table}>
+          <thead>
+            <tr style={styles.headerRow}>
+              {columns.map(col => (
+                <th
+                  key={col.key}
+                  style={{
+                    ...styles.headerCell,
+                    cursor: isSortable ? 'pointer' : 'default',
+                  }}
+                  onClick={() => handleSort(col.key)}
+                >
+                  <div style={styles.headerContent}>
+                    <span>{col.label}</span>
+                    {isSortable && sortColumn === col.key && (
+                      <span style={styles.sortIcon}>{sortAsc ? '▲' : '▼'}</span>
+                    )}
+                  </div>
+                </th>
+              ))}
+              <th style={styles.headerCell}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedData.map((row, idx) => (
+              <tr key={idx} style={{...styles.bodyRow, backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)'}}>
+                {columns.map(col => (
+                  <td key={col.key} style={styles.bodyCell}>
+                    {String(row[col.key])}
+                  </td>
+                ))}
+                <td style={styles.bodyCell}>
+                  <button
+                    style={styles.actionButton}
+                    onClick={() => handleAction('view', idx)}
+                  >
+                    View
+                  </button>
+                  <button
+                    style={{...styles.actionButton, marginLeft: '4px'}}
+                    onClick={() => handleAction('edit', idx)}
+                  >
+                    Edit
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {isPaginated && totalPages > 1 && (
+        <div style={styles.pagination}>
+          <button
+            style={styles.paginationButton}
+            onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+            disabled={currentPage === 0}
+          >
+            Previous
+          </button>
+          <span style={styles.pageInfo}>
+            Page {currentPage + 1} of {totalPages}
+          </span>
+          <button
+            style={styles.paginationButton}
+            onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+            disabled={currentPage === totalPages - 1}
+          >
+            Next
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    padding: '16px',
+    backgroundColor: 'var(--color-surface)',
+    color: 'var(--color-text)',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  tableWrapper: {
+    overflowX: 'auto',
+    borderRadius: '8px',
+    border: '1px solid #e0e0e0',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: '14px',
+  },
+  headerRow: {
+    backgroundColor: '#f5f5f5',
+    borderBottom: '2px solid #e0e0e0',
+  },
+  headerCell: {
+    padding: '12px 16px',
+    textAlign: 'left',
+    fontWeight: 600,
+    color: 'var(--color-text)',
+    userSelect: 'none',
+  },
+  headerContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  sortIcon: {
+    fontSize: '10px',
+    color: 'var(--color-accent)',
+  },
+  bodyRow: {
+    borderBottom: '1px solid #e0e0e0',
+    transition: 'background-color 0.2s',
+  },
+  bodyCell: {
+    padding: '12px 16px',
+    color: 'var(--color-text)',
+  },
+  actionButton: {
+    padding: '4px 12px',
+    backgroundColor: 'var(--color-accent)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: 500,
+    transition: 'opacity 0.2s',
+  },
+  pagination: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '16px',
+  },
+  paginationButton: {
+    padding: '8px 16px',
+    backgroundColor: 'var(--color-accent)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500,
+  },
+  pageInfo: {
+    fontSize: '14px',
+    color: 'var(--color-text)',
+  },
+};
+```

@@ -1,0 +1,236 @@
+
+```tsx
+function App() {
+  const [time, setTime] = React.useState(0);
+  const [isRunning, setIsRunning] = React.useState(false);
+  const [inputMinutes, setInputMinutes] = React.useState("");
+
+  React.useEffect(() => {
+    let interval;
+    if (isRunning && time > 0) {
+      interval = setInterval(() => {
+        setTime((prev) => {
+          if (prev <= 1) {
+            setIsRunning(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isRunning, time]);
+
+  const handleStart = () => {
+    if (time > 0) {
+      setIsRunning(true);
+    }
+  };
+
+  const handlePause = () => {
+    setIsRunning(false);
+  };
+
+  const handleReset = () => {
+    setIsRunning(false);
+    setTime(0);
+    setInputMinutes("");
+  };
+
+  const handleSetTime = () => {
+    const minutes = parseInt(inputMinutes, 10);
+    if (minutes > 0) {
+      setTime(minutes * 60);
+      setInputMinutes("");
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter") {
+      handleSetTime();
+    }
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "var(--color-surface)",
+        fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif',
+        padding: "20px",
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: "var(--color-surface)",
+          borderRadius: "16px",
+          padding: "40px 30px",
+          boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)",
+          textAlign: "center",
+          maxWidth: "400px",
+          width: "100%",
+        }}
+      >
+        <h1
+          style={{
+            color: "var(--color-text)",
+            fontSize: "28px",
+            marginBottom: "30px",
+            fontWeight: "600",
+            letterSpacing: "0.5px",
+          }}
+        >
+          Timer
+        </h1>
+
+        <div
+          style={{
+            fontSize: "64px",
+            fontWeight: "700",
+            color: "var(--color-accent)",
+            marginBottom: "30px",
+            fontFamily: '"Courier New", monospace",
+            letterSpacing: "2px",
+          }}
+        >
+          {formatTime(time)}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            marginBottom: "25px",
+          }}
+        >
+          <input
+            type="number"
+            value={inputMinutes}
+            onChange={(e) => setInputMinutes(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Enter minutes"
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              border: `2px solid var(--color-accent)`,
+              borderRadius: "6px",
+              fontSize: "14px",
+              backgroundColor: "var(--color-surface)",
+              color: "var(--color-text)",
+              outline: "none",
+              transition: "border-color 0.3s",
+            }}
+          />
+          <button
+            onClick={handleSetTime}
+            style={{
+              padding: "10px 16px",
+              backgroundColor: "var(--color-accent)",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+              transition: "opacity 0.2s",
+            }}
+            onMouseEnter={(e) => (e.target.style.opacity = "0.8")}
+            onMouseLeave={(e) => (e.target.style.opacity = "1")}
+          >
+            Set
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            justifyContent: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            onClick={handleStart}
+            disabled={time === 0 || isRunning}
+            style={{
+              padding: "12px 24px",
+              backgroundColor: isRunning || time === 0 ? "#ccc" : "var(--color-accent)",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: isRunning || time === 0 ? "not-allowed" : "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+              transition: "opacity 0.2s",
+              opacity: isRunning || time === 0 ? 0.5 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (time > 0 && !isRunning) e.target.style.opacity = "0.8";
+            }}
+            onMouseLeave={(e) => {
+              if (time > 0 && !isRunning) e.target.style.opacity = "1";
+            }}
+          >
+            Start
+          </button>
+
+          <button
+            onClick={handlePause}
+            disabled={!isRunning}
+            style={{
+              padding: "12px 24px",
+              backgroundColor: !isRunning ? "#ccc" : "var(--color-accent)",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: isRunning ? "pointer" : "not-allowed",
+              fontWeight: "600",
+              fontSize: "14px",
+              transition: "opacity 0.2s",
+              opacity: !isRunning ? 0.5 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (isRunning) e.target.style.opacity = "0.8";
+            }}
+            onMouseLeave={(e) => {
+              if (isRunning) e.target.style.opacity = "1";
+            }}
+          >
+            Pause
+          </button>
+
+          <button
+            onClick={handleReset}
+            style={{
+              padding: "12px 24px",
+              backgroundColor: "var(--color-accent)",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+              transition: "opacity 0.2s",
+            }}
+            onMouseEnter={(e) => (e.target.style.opacity = "0.8")}
+            onMouseLeave={(e) => (e.target.style.opacity = "1")}
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+```

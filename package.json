@@ -1,0 +1,38 @@
+{
+  "name": "o2-vibe-apps",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@babel/standalone": "^7.26",
+    "idb": "^8",
+    "lucide-react": "^1",
+    "react": "^19.2",
+    "react-dom": "^19.2"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6",
+    "@testing-library/react": "^16",
+    "@testing-library/user-event": "^14",
+    "@types/babel__standalone": "^7.1.9",
+    "@types/node": "^26.0.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6",
+    "@vitest/ui": "^4",
+    "fake-indexeddb": "^6",
+    "jsdom": "^29",
+    "typescript": "^6",
+    "vite": "^8",
+    "vitest": "^4"
+  }
+}

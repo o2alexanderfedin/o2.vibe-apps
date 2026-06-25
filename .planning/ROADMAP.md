@@ -12,14 +12,14 @@ The journey is a Vertical MVP: eight phases, each shipping an end-to-end, user-v
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Hygiene Foundation & Storefront Shell** - Storefront, key/theme config, opaque keys, IndexedDB init, single Anthropic egress, and the CI hygiene gate
-- [ ] **Phase 2: Static Open-One-App Loop** - Resolve → compile → instantiate → render a seeded app end-to-end, model risk removed
-- [ ] **Phase 3: Cache-Miss Generation (Core Value)** - An app that doesn't exist yet is produced on demand, cached, and rendered — instant on hit, seamless on miss
-- [ ] **Phase 4: Widget Composition** - Apps render isolated sub-widgets via transitive pre-warm and synchronous `useWidget`
-- [ ] **Phase 5: Contextual Modification** - The shared `⋮` prompt lets users remove, clone, and tweak apps and widgets in place
-- [ ] **Phase 6: API Error Degradation** - Missing/invalid key, rate limiting, and uncaught async errors degrade gracefully with neutral copy
-- [ ] **Phase 7: Storage & Cost Guardrails** - Storage pressure, eviction, and runaway produce-cost are bounded with neutral messaging
-- [ ] **Phase 8: Backend-Style Handlers** - Apps and widgets transparently resolve or produce cached data handlers on first need
+- [x] **Phase 1: Hygiene Foundation & Storefront Shell** - Storefront, key/theme config, opaque keys, IndexedDB init, single Anthropic egress, and the CI hygiene gate
+- [x] **Phase 2: Static Open-One-App Loop** - Resolve → compile → instantiate → render a seeded app end-to-end, model risk removed
+- [x] **Phase 3: Cache-Miss Generation (Core Value)** - An app that doesn't exist yet is produced on demand, cached, and rendered — instant on hit, seamless on miss
+- [x] **Phase 4: Widget Composition** - Apps render isolated sub-widgets via transitive pre-warm and synchronous `useWidget`
+- [x] **Phase 5: Contextual Modification** - The shared `⋮` prompt lets users remove, clone, and tweak apps and widgets in place
+- [x] **Phase 6: API Error Degradation** - Missing/invalid key, rate limiting, and uncaught async errors degrade gracefully with neutral copy
+- [x] **Phase 7: Storage & Cost Guardrails** - Storage pressure, eviction, and runaway produce-cost are bounded with neutral messaging
+- [x] **Phase 8: Backend-Style Handlers** - Apps and widgets transparently resolve or produce cached data handlers on first need
 
 ## Phase Details
 
@@ -33,10 +33,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. User can set, change, and clear their own Anthropic key from the UI (framed as activating the platform, stored under a neutral `localStorage` key), and switch theme between light/dark/system applied via CSS variables on `:root`.
   3. The IndexedDB registry (`apps`/`widgets`/`handlers`) initializes at startup with a probe write and falls back to an in-memory `Map` when storage is unavailable; cache keys are opaque SHA-256 hex over normalized input.
   4. A repo-wide F12 audit and the CI lexicon-grep gate find no devtools-visible surface (symbols, store/key names, logs, CSS, `data-*`, copy, `localStorage` keys) that narrates the on-demand mechanic, and the production build ships with source maps off and a CSP restricting `connect-src` to `'self' https://api.anthropic.com`.
-**Plans**: TBD
+**Plans**: 4 plans (3 waves)
 
 Plans:
-- [ ] 01-01: TBD during planning
+- [x] 01-01-PLAN.md — Walking Skeleton: Vite+React19+TS scaffold, test infra, CSP/FOUC, IndexedDB registry (probe+Map fallback), gated logger, storage constants (wave 1) — COMPLETED 2026-06-24
+- [x] 01-02-PLAN.md — Storefront UI slice: grid (SHELL-01/02), KeyDialog set/change/clear (SHELL-03), light/dark/system theme (SHELL-04), Skeleton/ErrorBoundary stubs (wave 2)
+- [x] 01-03-PLAN.md — Opaque SHA-256 cacheKey (LOOP-02) + Anthropic egress header stub (HYGIENE-05), TDD (wave 2)
+- [x] 01-04-PLAN.md — CI lexicon-grep hygiene gate (HYGIENE-01/02/03) over src/** + index.html (wave 3)
 
 ### Phase 2: Static Open-One-App Loop
 **Goal**: A user opens a seeded app from the storefront and it renders and is fully interactive, proving the resolve → compile → instantiate → render core with model nondeterminism removed.
@@ -77,11 +80,11 @@ Plans:
   1. User opens an app that declares `@widget` dependencies and all declared widgets appear already rendered on first paint (no pop-in waterfall), each inside its own widget shell with an independent `⋮` menu.
   2. Declared widgets are pre-warmed transitively before the app mounts, with a cycle guard and a concurrency cap (≤2), and `useWidget(type)` returns the resolved component synchronously at render time (a pure `Map.get`, never triggering async work during render).
   3. A widget that fails to load or throws shows a neutral placeholder via its own error boundary without crashing or visibly degrading its parent app.
-**Plans**: TBD
+**Plans**: 1 plan (executed in worktree feature/phase-4-widget-composition)
 **UI hint**: yes
 
 Plans:
-- [ ] 04-01: TBD during planning
+- [x] 04-01 — Widget composition: `@widget` parser, transitive pre-warm (cycle guard + concurrency cap ≤2), synchronous `useWidget`, WidgetShell + per-widget ErrorBoundary, DRY widget producer — COMPLETED 2026-06-24
 
 ### Phase 5: Contextual Modification
 **Goal**: A user opens the shared `⋮` prompt on any app or widget and can remove it, clone it, or tweak it with a free-form instruction, with the change applied in place and no surfaced version history.
@@ -96,7 +99,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 05-01: TBD during planning
+- [x] 05-01 — Contextual Modification: shared `⋮` ContextualPrompt popover (MOD-01), client-side prompt router (MOD-02), in-place app tweak + clone/remove with no model call (MOD-03/04), and widget `⋮` in-place tweak — COMPLETED 2026-06-24
 
 ### Phase 6: API Error Degradation
 **Goal**: When the key is missing/invalid, the API rate-limits, or generated code throws asynchronously, the user sees neutral, non-revealing recovery rather than a crash or a leak of the mechanic.
@@ -110,7 +113,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 06-01: TBD during planning
+- [x] 06-01 — API Error Degradation: typed `ModelHttpError`/`parseRetryAfter` transport refactor, `TokenBucket` limiter + exponential-backoff-with-jitter `createResilientTransport` (injected `Clock`, honors `retry-after`, neutral `ModelUnavailableError` on exhaustion), `installGlobalErrorBackstop` + React `onUncaughtError` async backstop, `ProduceAuthError` → inline KeyDialog reconfigure path, `WidgetErrorBoundary` retry — COMPLETED 2026-06-24 (worktree feature/phase-6-api-error-degradation)
 
 ### Phase 7: Storage & Cost Guardrails
 **Goal**: Heavy and returning users keep a working registry and bounded cost — storage pressure is managed before quota is hit and a soft cap prevents runaway produce calls — all surfaced with neutral messaging.
@@ -120,10 +123,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. `navigator.storage.persist()` is requested at init and, as the registry approaches quota, least-recently-used entries (by `useCount`/`updatedAt`) are evicted so the loop keeps working instead of throwing.
   2. After a configured threshold of cache misses per time window, a cost guardrail soft-caps further produce calls and surfaces neutral messaging rather than silently running up the user's Anthropic spend.
-**Plans**: TBD
+**Plans**: 1 plan (executed in worktree feature/phase-7-storage-cost-guardrails)
 
 Plans:
-- [ ] 07-01: TBD during planning
+- [x] 07-01 — Storage & Cost Guardrails: sliding-window `createProduceGate` (N=10 misses / 5-min window, injected `Clock`, neutral `ProduceThrottledError` surfaced via the failed-open fallback) hooked at the loader produce path; `useCount`/`updatedAt` LRU bookkeeping (DB schema v2, additive upgrade, default-on-read for v1 records); `evictUnderPressure` LRU eviction (oldest `updatedAt`, tie-broken by lowest `useCount`, until under a 0.9 usage/quota threshold) run before produce writes; injectable `StoragePressureSeam` (guarded `navigator.storage.persist`/`estimate`) + `Registry.keys()` enumeration — COMPLETED 2026-06-24
 
 ### Phase 8: Backend-Style Handlers
 **Goal**: A generated app or widget that needs a data operation gets one transparently — resolved from cache or produced on first need — without any visible "backend" and without ever reaching the network or the API key.
@@ -134,10 +137,10 @@ Plans:
   1. An app or widget calls a single `runHandler(intent, input)` helper that transparently resolves a cached handler or produces one on first need, executes it, and returns `{ data?, error? }`.
   2. A produced handler is cached in the `handlers` store and reused on subsequent calls with no further model call.
   3. Handler code executes in a constrained scope with no `fetch` and no storage/key access — local/mock data operations only — verified by a handler attempting network or storage access being blocked.
-**Plans**: TBD
+**Plans**: 1 plan (executed in worktree feature/phase-8-backend-handlers)
 
 Plans:
-- [ ] 08-01: TBD during planning
+- [x] 08-01 — Backend-Style Handlers: `runHandler(intent, input, services)` resolve-or-produce-then-exec (HANDLER-01); dual-cache (source + transpiledJS) in the `handlers` store with `useCount:0`/`updatedAt` on write and a bump on hit, reuse with no model call (HANDLER-02); constrained-scope execution via `new Function` with a targeted denylist (`fetch`/`XMLHttpRequest`/`localStorage`/`sessionStorage`/`indexedDB`/`window`/`document` shadowed to `undefined`, hostile `require`, no key in scope), neutral `{ error }` on any throw (HANDLER-03); handler produce reuses `produceComponent` via a `kind:"handler"` path (handler prompt + `transpileHandler` TS-strip, no react preset) and `produceGate.tryAcquire()` cost cap; `runHandler` wired into the produced-app `new Function` scope alongside `useWidget` — COMPLETED 2026-06-24
 
 ## Progress
 
@@ -146,11 +149,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Hygiene Foundation & Storefront Shell | 0/TBD | Not started | - |
-| 2. Static Open-One-App Loop | 0/TBD | Not started | - |
-| 3. Cache-Miss Generation (Core Value) | 0/TBD | Not started | - |
-| 4. Widget Composition | 0/TBD | Not started | - |
-| 5. Contextual Modification | 0/TBD | Not started | - |
-| 6. API Error Degradation | 0/TBD | Not started | - |
-| 7. Storage & Cost Guardrails | 0/TBD | Not started | - |
-| 8. Backend-Style Handlers | 0/TBD | Not started | - |
+| 1. Hygiene Foundation & Storefront Shell | 4/4 | Complete | 2026-06-24 |
+| 2. Static Open-One-App Loop | Complete | Complete | 2026-06-24 |
+| 3. Cache-Miss Generation (Core Value) | Complete | Complete | 2026-06-24 |
+| 4. Widget Composition | 1/1 | Complete | 2026-06-24 |
+| 5. Contextual Modification | 1/1 | Complete | 2026-06-24 |
+| 6. API Error Degradation | 1/1 | Complete | 2026-06-24 |
+| 7. Storage & Cost Guardrails | 1/1 | Complete | 2026-06-24 |
+| 8. Backend-Style Handlers | 1/1 | Complete | 2026-06-24 |
+
+**All 8 phases complete — milestone v1.0 feature-complete (45/45 requirements).**

@@ -1,0 +1,11 @@
+#!/bin/sh
+# git-flow enforcement: only push code that builds and passes tests.
+# Lightweight by design — runs at push time (infrequent), not on every commit.
+# CI=true forces Vitest into single-run (non-watch) mode regardless of npm script.
+if [ -f package.json ]; then
+  echo "▶ pre-push: build + test"
+  npm run build --silent || { echo "✖ build failed — push blocked"; exit 1; }
+  CI=true npm test --silent || { echo "✖ tests failed — push blocked"; exit 1; }
+  echo "✓ pre-push checks passed"
+fi
+exit 0

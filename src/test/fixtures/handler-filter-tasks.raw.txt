@@ -1,0 +1,89 @@
+
+```javascript
+async function handler(input) {
+  // Sample tasks data
+  const tasksData = [
+    { id: 1, title: "Review pull request", status: "in-progress", priority: "high" },
+    { id: 2, title: "Update documentation", status: "pending", priority: "medium" },
+    { id: 3, title: "Fix login bug", status: "completed", priority: "high" },
+    { id: 4, title: "Design new dashboard", status: "pending", priority: "low" },
+    { id: 5, title: "Deploy to production", status: "in-progress", priority: "high" },
+    { id: 6, title: "Write unit tests", status: "pending", priority: "medium" },
+    { id: 7, title: "Optimize database queries", status: "completed", priority: "high" },
+    { id: 8, title: "Schedule team meeting", status: "completed", priority: "low" },
+    { id: 9, title: "Refactor authentication module", status: "in-progress", priority: "high" },
+    { id: 10, title: "Update dependencies", status: "pending", priority: "medium" }
+  ];
+
+  try {
+    // Validate input
+    if (!input || typeof input !== "object") {
+      return { error: "Invalid input: must be an object" };
+    }
+
+    const { status } = input;
+
+    // Validate status parameter
+    if (!status || typeof status !== "string") {
+      return { error: "Invalid status: must be a non-empty string" };
+    }
+
+    const normalizedStatus = status.toLowerCase().trim();
+
+    // Valid status values
+    const validStatuses = ["pending", "in-progress", "completed"];
+    if (!validStatuses.includes(normalizedStatus)) {
+      return {
+        error: `Invalid status: must be one of ${validStatuses.join(", ")}`
+      };
+    }
+
+    // Filter tasks by status
+    const matchingTasks = tasksData.filter(
+      task => task.status.toLowerCase() === normalizedStatus
+    );
+
+    return {
+      data: {
+        status: normalizedStatus,
+        count: matchingTasks.length,
+        tasks: matchingTasks
+      }
+    };
+  } catch (err) {
+    return { error: `Handler error: ${err.message}` };
+  }
+}
+
+// Main execution
+async function main() {
+  // Test cases
+  const testCases = [
+    { status: "pending" },
+    { status: "in-progress" },
+    { status: "completed" },
+    { status: "PENDING" }, // Test case insensitivity
+    { status: "invalid" }, // Test invalid status
+    {}, // Test missing status
+    null // Test null input
+  ];
+
+  console.log("Testing task filter handler:\n");
+
+  for (const testInput of testCases) {
+    const result = await handler(testInput);
+    console.log(`Input: ${JSON.stringify(testInput)}`);
+    if (result.data) {
+      console.log(`Result: Found ${result.data.count} task(s) with status "${result.data.status}"`);
+      result.data.tasks.forEach(task => {
+        console.log(`  - [${task.id}] ${task.title} (Priority: ${task.priority})`);
+      });
+    } else {
+      console.log(`Error: ${result.error}`);
+    }
+    console.log();
+  }
+}
+
+main();
+```
