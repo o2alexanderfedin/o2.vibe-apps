@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Phase 6 (API Error Degradation) completed
-last_updated: "2026-06-24T22:51:01.347Z"
-last_activity: 2026-06-24 -- Phase 6 (API Error Degradation) completed
+stopped_at: Phase 7 (Storage & Cost Guardrails) completed
+last_updated: "2026-06-24T00:00:00.000Z"
+last_activity: 2026-06-24 -- Phase 7 (Storage & Cost Guardrails) completed
 progress:
   total_phases: 8
-  completed_phases: 6
-  total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_phases: 7
+  total_plans: 5
+  completed_plans: 4
+  percent: 88
 ---
 
 # Project State
@@ -21,34 +21,52 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-24)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 07 — Storage & Cost Guardrails (next)
+**Current focus:** Phase 08 — Backend-Style Handlers (next)
 
 ## Current Position
 
-Phase: 06 (API Error Degradation) — COMPLETE
-Status: Phases 1–6 complete. Phase 6 hardened the model/API error surface with
-neutral degradation (RESIL-01..04). The transport was refactored to throw a TYPED
-`ModelHttpError { status, retryAfter?, body? }` on `!res.ok` (with `parseRetryAfter`
-for numeric and HTTP-date forms) so callers branch on 401/429/500 instead of
-re-parsing prose (Phase 5 flag resolved). A shared `TokenBucket` limiter (injected
-`Clock`, lazy refill, concurrency cap) sits at the single egress, wrapped by
-`createResilientTransport`: a 429 triggers exponential backoff + full jitter that
-HONORS `retry-after`, then surfaces a neutral `ModelUnavailableError` on
-exhaustion; non-429 errors propagate unchanged. The `Clock` (now/sleep) and the
-jitter `rng` are injected so the whole backoff schedule is verified INSTANTLY with
-zero real waits (a `createStubClock` advances virtual time only and records every
-slept delay). A pure `installGlobalErrorBackstop` + React `onUncaughtError` route
-uncaught async/event-handler errors and unhandled rejections to the gated logger
-ONLY (name-only summaries, preventDefault suppresses the console dump). A 401 (or
-missing key) now raises `ProduceAuthError` → the Marketplace renders an inline
-"Connect your account" prompt that opens the existing KeyDialog with the storefront
-still browsable (no crash). `WidgetErrorBoundary` gained a neutral retry (RESIL-01).
-tsc 0 errors, build OK (no .map in dist), 253/253 tests pass (200 baseline + 53 new),
-hygiene gate green.
-Last activity: 2026-06-24 -- Phase 6 (API Error Degradation) completed on branch
-feature/phase-6-api-error-degradation
+Phase: 07 (Storage & Cost Guardrails) — COMPLETE
+Status: Phases 1–7 complete. Phase 7 bounded runaway produce-cost (RESIL-05) and
+storage pressure (RESIL-06) with neutral messaging.
 
-Progress: [███████░░░] 75% (6 of 8 phases)
+RESIL-05 — Cost guardrail: `createProduceGate` (`src/host/produceGate.ts`) is a
+sliding-window soft cap (N=10 produce misses per 5-min window; named constants
+`DEFAULT_PRODUCE_CAP`/`DEFAULT_PRODUCE_WINDOW_MS`, overridable). It keeps a list of
+recent produce timestamps, prunes those outside the window on each `tryAcquire()`,
+and either records `now` (under cap) or throws the neutral `ProduceThrottledError`
+("You're opening a lot of apps quickly — give it a moment."). It is injected via
+`Services.produceGate` and called in the loader IMMEDIATELY before the
+`produceComponent` model call — i.e. only on a cache MISS. Cache hits (tier 1/2/3)
+never reach it, so browsing already-opened apps is never throttled, and the window
+slides so the cap recovers automatically. The `Clock` is injected (real wall clock
+in prod, `createStubClock` in tests) so window/recovery is verified INSTANTLY.
+Marketplace catches `ProduceThrottledError` and renders the softer "give it a
+moment" copy in the SAME neutral failed-open region (storefront stays browsable).
+
+RESIL-06 — Storage pressure: records now carry `useCount`/`updatedAt` (LRU
+bookkeeping). DB bumped to schema v2 (`REGISTRY_DB_VERSION`); the upgrade is purely
+ADDITIVE and the registry/LRU layer defaults the two fields to 0 on read, so v1
+data keeps working. Cache hits bump `useCount` + refresh `updatedAt` (loader
+`touchRecord`); writes set `useCount:0`/`updatedAt:now`. `evictUnderPressure`
+(`src/registry/storagePressure.ts`) runs before every produce write: when the
+injected `estimate()` reports usage/quota over a 0.9 threshold
+(`DEFAULT_EVICTION_THRESHOLD`), it evicts least-recently-used entries (oldest
+`updatedAt`, tie-broken by lowest `useCount`) across apps/widgets/handlers until
+back under threshold (or nothing left). Storage access goes through an injectable
+`StoragePressureSeam` (`src/host/storageEstimate.ts`): `navigatorStorageSeam`
+guards `navigator.storage.persist`/`estimate` (degrade to false/null, never throw);
+init's persist request now routes through it. `Registry` gained `keys(store)`
+enumeration for victim listing. The in-memory fallback path is intact (keys() works
+there too). Tests inject a stub `estimate()` + in-memory registry — NO real
+IndexedDB/navigator.storage in unit scope.
+
+tsc 0 errors, build OK (no .map in dist), 295/295 tests pass (253 baseline + 42 new:
+8 produce-gate unit, 10 LRU unit, 12 storage-seam guard, 7 loader DI, 3 UI RTL, plus
+registry/injection additions), hygiene gate green.
+Last activity: 2026-06-24 -- Phase 7 (Storage & Cost Guardrails) completed on branch
+feature/phase-7-storage-cost-guardrails
+
+Progress: [█████████░] 88% (7 of 8 phases)
 
 ## Performance Metrics
 
@@ -97,9 +115,9 @@ None yet.
 [Issues that affect future work]
 
 - [Phase 4 — RESOLVED]: Static widgets only (declared via `@widget`); no dynamic/undeclared widgets. `useWidget` is fully synchronous (a pure `Map.get`). Decided + implemented in Phase 4.
-- [Phase 7 — egress chokepoint ready]: Phase 6 established the SINGLE egress chokepoint at `src/services/services.ts` `createModelTransport()`, where the real fetch transport is wrapped in a `TokenBucket` limiter + `createResilientTransport` (429 backoff). Phase 7's cost soft-cap should hang HERE — count produce calls / cache misses inside (or around) this wrapper, since EVERY model request (apps, widgets, tweaks) funnels through it. The injected `Clock` seam (`src/host/clock.ts`) is also reusable for the cost-cap's per-window timing in tests (stub clock, zero real waits).
-- [Phase 7]: Concrete cost-guardrail threshold (N cache misses per time window) must be decided before shipping.
-- [Phase 8]: Confirm the exact allowed-globals denylist for handler scope; it may differ from the app/widget denylist (handlers need local compute, no network/storage).
+- [Phase 7 — RESOLVED]: The cost soft-cap hooks the PRODUCE PATH (loader, immediately before `produceComponent`), not the transport wrapper. Rationale: the requirement caps cache MISSES specifically, and a single hook at the produce call sidesteps having to distinguish app vs widget vs tweak traffic inside the shared `createResilientTransport`. The injected `Clock` (`createStubClock`) drove the window/recovery tests with zero real waits as planned.
+- [Phase 7 — RESOLVED]: Threshold decided — N=10 produce misses per 5-minute sliding window (named, configurable constants in `src/host/produceGate.ts`).
+- [Phase 8]: Confirm the exact allowed-globals denylist for handler scope; it may differ from the app/widget denylist (handlers need local compute, no network/storage). The `handlers` store now carries the same `useCount`/`updatedAt` LRU fields as apps/widgets (`WidgetRecord`/`HandlerRecord` extend `LruMeta`), and `evictUnderPressure` already sweeps the `handlers` store — so produced handlers participate in LRU eviction for free. A new `runHandler(intent,input)` resolve-or-produce path should reuse `Services.produceGate.tryAcquire()` (the cost cap) and set `useCount:0`/`updatedAt:Date.now()` on write to stay consistent with the apps path.
 
 ## Deferred Items
 

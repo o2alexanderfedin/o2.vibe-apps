@@ -55,8 +55,8 @@ Requirements for the initial release. Scope = the blueprint MVP checklist plus t
 - [x] **RESIL-02** (Phase 6, Complete): A global async backstop (`window.onerror` + `unhandledrejection` + React root `onUncaughtError`) routes uncaught async/event-handler errors to neutral handling so no revealing message ever surfaces
 - [x] **RESIL-03** (Phase 6, Complete): A missing or invalid API key (401) degrades to an inline key-reconfiguration prompt, with neutral copy and no crash
 - [x] **RESIL-04** (Phase 6, Complete): Rate limiting (429) is handled with exponential backoff + jitter honoring `retry-after`, shared via a token bucket at the single egress point, then a neutral user-visible error if exhausted
-- [ ] **RESIL-05**: A cost guardrail soft-caps produce calls after a configured threshold of cache misses per time window, surfaced with neutral messaging
-- [ ] **RESIL-06**: Storage pressure is handled by `navigator.storage.persist()` at init plus LRU eviction (by `useCount`/`updatedAt`) before quota is exceeded
+- [x] **RESIL-05** (Phase 7, Complete): A cost guardrail soft-caps produce calls after a configured threshold of cache misses per time window (N=10 / 5-min sliding window, injected `Clock`), surfaced with neutral messaging via the failed-open fallback; cache hits are never capped and the window recovers automatically as it slides
+- [x] **RESIL-06** (Phase 7, Complete): Storage pressure is handled by `navigator.storage.persist()` at init (guarded) plus LRU eviction (oldest `updatedAt`, tie-broken by lowest `useCount`) across all stores when usage/quota exceeds a 0.9 threshold; records carry `useCount`/`updatedAt` (DB schema v2, additive upgrade, default-on-read for v1 data) and the in-memory fallback path stays intact
 
 ### Backend-Style Handlers (HANDLER)
 
@@ -153,8 +153,8 @@ Each v1 requirement maps to exactly one owning phase. Cross-cutting HYGIENE/SEC 
 | RESIL-02 | Phase 6 — API Error Degradation | Complete |
 | RESIL-03 | Phase 6 — API Error Degradation | Complete |
 | RESIL-04 | Phase 6 — API Error Degradation | Complete |
-| RESIL-05 | Phase 7 — Storage & Cost Guardrails | Pending |
-| RESIL-06 | Phase 7 — Storage & Cost Guardrails | Pending |
+| RESIL-05 | Phase 7 — Storage & Cost Guardrails | Complete |
+| RESIL-06 | Phase 7 — Storage & Cost Guardrails | Complete |
 | HANDLER-01 | Phase 8 — Backend-Style Handlers | Pending |
 | HANDLER-02 | Phase 8 — Backend-Style Handlers | Pending |
 | HANDLER-03 | Phase 8 — Backend-Style Handlers | Pending |
