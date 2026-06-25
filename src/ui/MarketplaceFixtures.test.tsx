@@ -187,12 +187,14 @@ describe("Marketplace — produce failure shows a neutral fallback (not silent)"
         messages: Array<{ content: string }>;
       };
       const content = body.messages[0]?.content ?? "";
-      // Detect the INITIAL app prompt (not the repair "Fix …" or the length
-      // "Build a compact, self-contained …" prompt) so the self-heal retries inside
-      // the first open all stay on the failing branch. The initial app prompt opens
-      // with "Build a React TSX component for" (the length prompt opens with
-      // "Build a compact, …", so this substring is unique to the first attempt).
-      const isInitialPrompt = content.includes("Build a React TSX component for");
+      // Detect the INITIAL produce prompt (not the repair "Fix …" or the length
+      // "Build a compact …" prompt) so the self-heal retries inside the first open
+      // all stay on the failing branch. Unseeded apps now produce in DELEGATED mode,
+      // whose initial prompt opens with "Build a React TSX module for" (the length
+      // prompt opens with "Build a compact …", so this substring is unique to the
+      // first attempt). The canned monolith below isn't a delegated module, so the
+      // loader's instantiate gracefully falls back to mounting it as a component.
+      const isInitialPrompt = content.includes("Build a React TSX module for");
       if (isInitialPrompt) opens += 1;
       const text =
         opens === 1

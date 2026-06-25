@@ -321,13 +321,17 @@ export function extractCode(responseText: string): string {
     return fenceMatch[1].trim();
   }
 
-  // No fence — look for the start of a component OR handler definition. Matches
-  // an export, a (possibly async) `function App`/`function handler` declaration,
-  // or a `const App`/`const handler` binding. Broadened in Phase 8 so a fence-less
-  // handler (`async function handler(input) { ... }`) is found the same way an app
-  // (`function App() { ... }`) is — one extractor for every produce kind (DRY).
+  // No fence — slice from the FIRST top-level code construct, dropping any prose
+  // preamble while KEEPING every leading definition. The match set covers all
+  // produce kinds: a component/handler (`function`/`const`), a typed handler's
+  // leading `interface`/`type`, an `import`/`export`, a leading comment, and a
+  // delegated MODULE that opens with a bare `const`/`function` (e.g.
+  // `const React = window.React`) and exports its names in a trailing
+  // `export { ... }`. The earlier App/handler-only regex matched that TRAILING
+  // export instead and sliced the whole module body away — this anchors on the
+  // first construct so leading definitions survive.
   const firstToken = responseText.search(
-    /^(?:export\s+default\s+|export\s+|(?:async\s+)?function\s+(?:App|handler)|const\s+(?:App|handler))/m,
+    /^(?:import\s|export\b|interface\s|type\s+\w|(?:async\s+)?function\s|const\s|let\s|var\s|\/\/|\/\*)/m,
   );
   if (firstToken !== -1) {
     return responseText.slice(firstToken).trim();

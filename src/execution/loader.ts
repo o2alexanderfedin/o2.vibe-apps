@@ -24,7 +24,8 @@
 
 import type { ComponentType } from "react";
 import { transpile } from "./transpile";
-import { instantiate, makeUseWidget } from "./instantiate";
+import { instantiate, makeUseWidget, InstantiateError } from "./instantiate";
+import { instantiateDelegated, makeDelegatedComponent } from "./delegated";
 import { runHandler } from "./handler";
 import { prewarmWidgets } from "./widgetPrewarm";
 import { SEEDED_SOURCES } from "../apps/seeds";
@@ -75,9 +76,19 @@ const liveComponents = new Map<string, ComponentType>();
  * (so widget `@widget` deps stay parseable on a cache hit) and the transpiled JS
  * (so no recompile). Phase 4 widened this from a bare JS string to the dual shape.
  */
+/**
+ * How an app's produced/seeded pieces are instantiated:
+ *   - "app"       : a monolithic React component (seeds + any legacy cached records).
+ *   - "delegated" : a behavior-free module (initialState + view + actionSpec) mounted
+ *                   through the permanent DelegatedShell runtime, with all behavior
+ *                   produced on demand per action. The default for newly produced apps.
+ */
+type AppMode = "app" | "delegated";
+
 interface CachedApp {
   source: string;
   transpiledJS: string;
+  mode: AppMode;
 }
 const transpiledCache = new Map<string, CachedApp>();
 
@@ -105,6 +116,42 @@ async function instantiateWithWidgets(
   const boundRunHandler = (intent: string, input: unknown) =>
     runHandler(intent, input, services);
   return instantiate(transpiledJS, makeUseWidget(widgetMap), boundRunHandler);
+}
+
+/**
+ * Instantiate an app's pieces by mode. A "delegated" app is a behavior-free module
+ * mounted through the permanent DelegatedShell (its on-demand behavior is bound to
+ * THIS app's services-backed runHandler — the app never sees services). An "app" is
+ * the monolithic component path (with transitive widget pre-warm). Shared by every
+ * non-live tier so the dispatch is identical regardless of where the pieces came
+ * from (DRY).
+ */
+async function instantiateApp(
+  source: string,
+  transpiledJS: string,
+  mode: AppMode,
+  appType: string,
+  services: Services,
+): Promise<ComponentType> {
+  if (mode === "delegated") {
+    try {
+      const module = instantiateDelegated(transpiledJS);
+      const boundRunHandler = (intent: string, input: unknown) =>
+        runHandler(intent, input, services);
+      return makeDelegatedComponent(appType, module, boundRunHandler);
+    } catch (err) {
+      // Graceful fallback: if the payload is not actually a delegated module (it
+      // exports no `view` — e.g. a monolithic component), mount it as a monolith.
+      // Keeps the path robust to either produced shape (real delegated modules take
+      // the delegated branch; a monolith still renders).
+      if (err instanceof InstantiateError) {
+        logger.info("Loader: not a delegated module — mounting as a monolithic app");
+        return instantiateWithWidgets(source, transpiledJS, services);
+      }
+      throw err;
+    }
+  }
+  return instantiateWithWidgets(source, transpiledJS, services);
 }
 
 /**
@@ -142,9 +189,11 @@ export async function resolveComponent(
   const cached = transpiledCache.get(appCacheKey);
   if (cached) {
     logger.info("Loader: tier-2 hit (transpiled cache) for " + appType);
-    const Component = await instantiateWithWidgets(
+    const Component = await instantiateApp(
       cached.source,
       cached.transpiledJS,
+      cached.mode,
+      appType,
       services,
     );
     liveComponents.set(instanceId, Component);
@@ -159,13 +208,19 @@ export async function resolveComponent(
     // entry is marked recently used and survives the next eviction sweep (RESIL-06).
     // A cache hit makes NO model call, so the produce gate is never consulted here.
     await touchRecord(services, appCacheKey, stored, appType);
+    // A record written by the delegated path carries mode:"delegated"; legacy/seeded
+    // records have no mode and instantiate as a monolithic "app" (back-compat).
+    const mode: AppMode = stored.mode === "delegated" ? "delegated" : "app";
     transpiledCache.set(appCacheKey, {
       source: stored.source,
       transpiledJS: stored.transpiledJS,
+      mode,
     });
-    const Component = await instantiateWithWidgets(
+    const Component = await instantiateApp(
       stored.source,
       stored.transpiledJS,
+      mode,
+      appType,
       services,
     );
     liveComponents.set(instanceId, Component);
@@ -179,16 +234,20 @@ export async function resolveComponent(
 
   let source: string;
   let transpiledJS: string;
+  let mode: AppMode;
 
   if (seededSource) {
-    // Seeded path: transpile locally, no model call.
+    // Seeded path: transpile locally, no model call. Seeds are monolithic components.
     logger.info("Loader: cache miss — compiling seeded source for " + appType);
     source = seededSource;
     transpiledJS = transpile(source, { filename: appType + ".tsx" });
+    mode = "app";
   } else {
-    // Unseeded path: on-demand produce via model (GEN-01..03, GEN-05). On a
-    // tweak (MOD-03) the user's instruction is woven into the produce prompt so
-    // the produced app reflects the request — same produce loop otherwise (DRY).
+    // Unseeded path: on-demand produce via model (GEN-01..03, GEN-05) in DELEGATED
+    // mode — a behavior-free module (initialState + view + actionSpec) mounted through
+    // the permanent DelegatedShell, with per-action behavior produced on demand. The
+    // produced module is far smaller (and so more reliable) than a monolith. On a
+    // tweak (MOD-03) the user's instruction is woven into the produce prompt.
     //
     // RESIL-05 cost guardrail: this is the ONE place a cache miss spends real
     // budget, so the soft cap is checked HERE, immediately before the model call.
@@ -201,14 +260,15 @@ export async function resolveComponent(
       appType,
       services.transport,
       services.getApiKey,
-      "app",
+      "delegated",
       userPrompt,
     );
     source = produced.source;
     transpiledJS = produced.transpiledJS;
+    mode = "delegated";
   }
 
-  transpiledCache.set(appCacheKey, { source, transpiledJS });
+  transpiledCache.set(appCacheKey, { source, transpiledJS, mode });
 
   // RESIL-06: before writing a new record, relieve storage pressure if the
   // registry is approaching quota — evict least-recently-used entries so the
@@ -230,14 +290,16 @@ export async function resolveComponent(
       type: appType,
       source,
       transpiledJS,
+      mode,
       useCount: 0,
       updatedAt: Date.now(),
     },
     appCacheKey,
   );
 
-  // Pre-warm declared widgets, then instantiate with the bound useWidget (WIDGET-02/03).
-  const Component = await instantiateWithWidgets(source, transpiledJS, services);
+  // Instantiate by mode: a delegated module mounts through DelegatedShell; a
+  // monolithic app pre-warms its declared widgets and binds useWidget (WIDGET-02/03).
+  const Component = await instantiateApp(source, transpiledJS, mode, appType, services);
   liveComponents.set(instanceId, Component);
   return Component;
 }
