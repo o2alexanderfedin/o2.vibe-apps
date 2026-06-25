@@ -15,7 +15,7 @@
 // getter without touching the network or the browser.
 
 import { transpile, TranspileError } from "./transpile";
-import { callModel, type TransportFn } from "../host/modelClient";
+import { callModel, isTruncated, type TransportFn } from "../host/modelClient";
 import type { ApiKeyGetter } from "../services/services";
 import { logger } from "../lib/logger";
 
@@ -62,6 +62,24 @@ export function buildRepairPrompt(
     `- No imports — React is injected as a global, no import statements\n` +
     `- Uses CSS variables: var(--color-surface), var(--color-text), var(--color-accent)\n` +
     `Return ONLY the corrected TSX code block, no explanation.`
+  );
+}
+
+/**
+ * Build a retry prompt for a response that was cut short by the token budget.
+ * Asks for a more compact component so the full output fits.
+ * Phrasing is neutral per hygiene gate (HYGIENE-03): no mechanic-revealing tokens.
+ */
+export function buildLengthPrompt(appType: string): string {
+  return (
+    `Build a compact, self-contained React TSX component for a "${appType}" app.\n` +
+    `Keep it concise so the full component fits in one response.\n` +
+    `Requirements:\n` +
+    `- Default export named App (function App() { ... })\n` +
+    `- Uses React.useState / React.useEffect (React is available as a global)\n` +
+    `- No imports — React is injected; no import statements at all\n` +
+    `- Fully functional, no placeholders, minimal inline styling\n` +
+    `Return ONLY the complete TSX code block, no explanation.`
   );
 }
 
@@ -135,13 +153,35 @@ export async function produceComponent(
     logger.info(`Producer: attempt ${attempt} for "${appType}"`);
 
     let responseText: string;
+    let stopReason: string | null;
     try {
-      responseText = await callModel(prompt, apiKey, transport);
+      const result = await callModel(prompt, apiKey, transport);
+      responseText = result.text;
+      stopReason = result.stopReason;
     } catch (err) {
       throw new ProduceError(
         `Model request failed on attempt ${attempt}: ${String(err)}`,
         err,
       );
+    }
+
+    // Defensive truncation handling: a response cut off by the token budget
+    // holds half-written code with no closing fence. Transpiling it would throw
+    // an opaque syntax error that the self-heal loop cannot repair (the code is
+    // not wrong, it is incomplete). Treat truncation as a retryable produce
+    // failure with a clear, hygiene-safe message instead. The retry asks for a
+    // shorter component, which has a real chance of fitting the budget.
+    if (isTruncated(stopReason)) {
+      const truncMsg = "Response was cut short before the component was complete";
+      logger.info(`Producer: truncated response on attempt ${attempt}`);
+      if (truncMsg === lastError || attempt >= MAX_ATTEMPTS) {
+        throw new ProduceError(
+          `Could not build a complete component for "${appType}" after ${attempt} attempt(s): the response was cut short`,
+        );
+      }
+      lastError = truncMsg;
+      prompt = buildLengthPrompt(appType);
+      continue;
     }
 
     const code = extractCode(responseText);
