@@ -8,14 +8,18 @@
 //      (self-heal loop, GEN-03) — early-stopping when two consecutive errors match.
 //
 // Prompt phrasing uses "Build", "Create", "Write", "Return" (hygiene-safe).
-// The transport is injectable for testing (no real key needed in tests).
+//
+// IoC/DI: the transport and the API-key getter are INJECTED (not reached for
+// via singletons or `localStorage`). The caller — ultimately the composition
+// root — supplies them, so tests substitute a canned transport and a fixed key
+// getter without touching the network or the browser.
 
 import { transpile, TranspileError } from "./transpile";
 import { callModel, type TransportFn } from "../host/modelClient";
-import { STORAGE_KEY_API } from "../lib/storage";
+import type { ApiKeyGetter } from "../services/services";
 import { logger } from "../lib/logger";
 
-// Re-export so the loader can type the optional transport parameter without
+// Re-export so the loader can type the injected transport parameter without
 // importing from modelClient directly.
 export type { TransportFn };
 
@@ -88,18 +92,6 @@ export function extractCode(responseText: string): string {
   return responseText.trim();
 }
 
-/**
- * Read the API key from localStorage (browser only).
- * Returns null if localStorage is unavailable or the key is absent.
- */
-function readApiKey(): string | null {
-  try {
-    return localStorage.getItem(STORAGE_KEY_API);
-  } catch {
-    return null;
-  }
-}
-
 export class ProduceError extends Error {
   readonly cause: unknown;
   constructor(message: string, cause?: unknown) {
@@ -115,14 +107,20 @@ export class ProduceError extends Error {
  * Returns the transpiled JS string (not the TSX source) so callers can
  * instantiate immediately. The caller is responsible for storing both pieces.
  *
- * @param appType   The unseeded app type id (e.g. "weather").
- * @param transport Optional transport override (for testing — no real key needed).
+ * Dependencies are injected (IoC/DI): the transport and the API-key getter are
+ * supplied by the caller (the composition root in production, test doubles in
+ * tests), so this function never touches `fetch` or `localStorage` directly.
+ *
+ * @param appType    The unseeded app type id (e.g. "weather").
+ * @param transport  The model HTTP transport.
+ * @param getApiKey  Reads the access key (returns null when unavailable).
  */
 export async function produceComponent(
   appType: string,
-  transport?: TransportFn,
+  transport: TransportFn,
+  getApiKey: ApiKeyGetter,
 ): Promise<{ source: string; transpiledJS: string }> {
-  const apiKey = readApiKey();
+  const apiKey = getApiKey();
   if (!apiKey) {
     throw new ProduceError(
       "No access key available. Connect your account to open this app.",
