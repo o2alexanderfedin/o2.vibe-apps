@@ -44,10 +44,10 @@ Requirements for the initial release. Scope = the blueprint MVP checklist plus t
 
 ### Contextual Modification (MOD)
 
-- [ ] **MOD-01**: A shared contextual prompt popover (used by both app and widget shells) accepts free-form natural-language instructions and names the target being modified
-- [ ] **MOD-02**: Prompt routing resolves remove/close and clone/duplicate client-side with no model call; everything else is treated as a tweak
-- [ ] **MOD-03**: A tweak derives a new cache key, resolves it (cache or produce), and replaces the target in place by re-rendering the existing root (no surfaced version history)
-- [ ] **MOD-04**: Remove unmounts the target's root and detaches it; clone creates a new instance from the stored record under a new instance id with no model call
+- [x] **MOD-01**: A shared contextual prompt popover (used by both app and widget shells) accepts free-form natural-language instructions and names the target being modified
+- [x] **MOD-02**: Prompt routing resolves remove/close and clone/duplicate client-side with no model call; everything else is treated as a tweak
+- [x] **MOD-03**: A tweak derives a new cache key, resolves it (cache or produce), and replaces the target in place by re-rendering the existing root (no surfaced version history)
+- [x] **MOD-04**: Remove unmounts the target's root and detaches it; clone creates a new instance from the stored record under a new instance id with no model call
 
 ### Resilience & Graceful Degradation (RESIL)
 
@@ -145,10 +145,10 @@ Each v1 requirement maps to exactly one owning phase. Cross-cutting HYGIENE/SEC 
 | WIDGET-03 | Phase 4 — Widget Composition | Complete |
 | WIDGET-04 | Phase 4 — Widget Composition | Complete |
 | WIDGET-05 | Phase 4 — Widget Composition | Complete |
-| MOD-01 | Phase 5 — Contextual Modification | Pending |
-| MOD-02 | Phase 5 — Contextual Modification | Pending |
-| MOD-03 | Phase 5 — Contextual Modification | Pending |
-| MOD-04 | Phase 5 — Contextual Modification | Pending |
+| MOD-01 | Phase 5 — Contextual Modification | Complete |
+| MOD-02 | Phase 5 — Contextual Modification | Complete |
+| MOD-03 | Phase 5 — Contextual Modification | Complete |
+| MOD-04 | Phase 5 — Contextual Modification | Complete |
 | RESIL-01 | Phase 6 — API Error Degradation | Pending |
 | RESIL-02 | Phase 6 — API Error Degradation | Pending |
 | RESIL-03 | Phase 6 — API Error Degradation | Pending |
