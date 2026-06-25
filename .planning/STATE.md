@@ -181,6 +181,17 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-24T22:39:41Z
-Stopped at: Plan 01-01 completed (Scaffold + Walking Skeleton)
-Resume file: .planning/phases/01-hygiene-foundation-storefront-shell/01-02-PLAN.md
+Last session: 2026-06-25
+Stopped at: **Delegated thin-shell on-demand generation built, validated live, and
+MERGED to develop** (merge 1a274b6, pushed; feature branch + worktree deleted). Unseeded
+apps now produce BEHAVIOR-FREE "delegated" modules (markup-only view + state SSOT +
+actionSpec) mounted through the permanent DelegatedShell, with per-action behavior
+produced on demand via runHandler and cached (event-delegation). Handlers are TypeScript
+with a require-purity guard; extractCode fixed for modules; produced views must inline-style
+their layout (no Tailwind/stylesheet) and fit their app type. Seeds stay monolithic; a
+graceful fallback mounts non-module payloads as monoliths. tsc 0, 368 tests, build clean
+(no source maps), hygiene green. Validated live in the browser (Calculator computes + caches;
+Budget renders type-appropriate + polished). See memory: [[delegated-on-demand-architecture]],
+[[verify-ui-visually]]. Known limits: network-dependent apps can't fetch in the sandboxed
+handler scope; generated reducers can have state-machine quirks.
+Resume file: .continue-here.md
