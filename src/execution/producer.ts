@@ -54,7 +54,7 @@ const MAX_ATTEMPTS = 3;
  * `kind === "handler"`; EVERYTHING else is shared verbatim, so the handler path
  * does not duplicate the (carefully tuned) produce/self-heal machinery.
  */
-export type ProduceKind = "app" | "widget" | "handler" | "shell";
+export type ProduceKind = "app" | "widget" | "handler" | "shell" | "delegated";
 
 /**
  * An optional free-form instruction that shapes the produced component (Phase 5,
@@ -97,9 +97,9 @@ export function buildPrompt(
     return (
       `Build a TypeScript async function \`handler(input)\` that handles: ${type}.\n` +
       `Requirements:\n` +
-      `- Write TypeScript with EXPLICIT types: annotate the \`input\` parameter and the return type, and declare \`interface\`/\`type\` aliases for the input and output shapes — these types ARE the contract (the types are stripped before running, so they cost nothing at runtime).\n` +
+      `- CRITICAL: this runs OFFLINE in a tiny scope with NO modules. Write NO import and NO require — there is no SDK, no package, no network, no model, no storage. Do the work yourself with plain TypeScript (Math, String, Array, JSON, Date). Any import makes the handler fail.\n` +
+      `- Write TypeScript with EXPLICIT types: annotate the \`input\` parameter and the return type, and declare \`interface\`/\`type\` aliases for the input and output shapes — these types ARE the contract (stripped before running, so they cost nothing at runtime).\n` +
       `- Return \`{ data }\` on success or \`{ error }\` on failure (a plain object literal that matches the declared return type)\n` +
-      `- Pure in-process computation ONLY: do NOT import or require anything (no library, service, SDK, or model) and do NOT touch the network or storage — there is none, and any import fails at runtime. Compute the answer directly with plain TypeScript over the input and realistic local sample data.\n` +
       `- Under 150 lines\n` +
       mutationLine(userPrompt) +
       `Return ONLY the TypeScript function code, no explanation.`
@@ -133,6 +133,25 @@ export function buildPrompt(
       `    const intent = "${type} action '" + action + "': state is exactly { display: string, expr: string }; input is { state, payload } where payload is the single-character string '" + action + "'; for a digit/operator append payload to expr and set display to expr; for '=' evaluate expr and set display and expr to the result; return { data: { state } } with the same shape and always a valid state";\n` +
       `- Render the control's minimal markup (a display reading from state, and buttons). Each interactive element calls dispatch("<action>", <payload>). Show a small busy hint (e.g. disable the buttons) while busy.\n` +
       `- Functional control markup, no placeholders, but ZERO arithmetic or business logic in this file.\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the TSX code block, no explanation.`
+    );
+  }
+  if (kind === "delegated") {
+    // DELEGATED mode (the productized "minimal control + on-demand behavior" path).
+    // The produced module is BEHAVIOR-FREE: it exports the state SSOT, a markup-only
+    // view, and a precise action spec. The permanent runtime (DelegatedShell) owns
+    // state, the container event delegate, on-demand behavior (runHandler) and the
+    // merge — so this module contains no handlers and never wires events itself.
+    // Phrasing is hygiene-safe; the `"${type}" app` substring is preserved.
+    return (
+      `Build a React TSX module for a "${type}" app as a BEHAVIOR-FREE view plus a small spec — it exports exactly three names and contains NO behavior.\n` +
+      `Requirements:\n` +
+      `- No imports — React is injected as a global; never write the word import. NO event handlers, NO onClick, and do NOT wire any actions — behavior is added elsewhere.\n` +
+      `- export const initialState = { ... } : the COMPLETE app state as ONE object with named fields and sensible initial values (e.g. { display: "0", expr: "" }).\n` +
+      `- export function view(state) { return ( ...markup... ); } : a PURE function that renders the UI from state. Every interactive element MUST carry a data-action="<short action id>" attribute (e.g. data-action="1", data-action="equals") and have NO onClick or other handler. Read all dynamic text from state. Use CSS variables: var(--color-surface), var(--color-text), var(--color-accent).\n` +
+      `- export const actionSpec = "..." : ONE precise description of the EXACT state shape and what EACH data-action does to the state — unambiguous, since this is the contract the behavior follows. Example: "state is { display: string, expr: string }; for a digit/operator action append it to expr and set display to expr; for 'equals' evaluate expr and set display and expr to the result".\n` +
+      `- Finish with: export { initialState, view, actionSpec };\n` +
       mutationLine(userPrompt) +
       `Return ONLY the TSX code block, no explanation.`
     );
@@ -208,6 +227,19 @@ export function buildRepairPrompt(
       `Return ONLY the corrected TypeScript function code, no explanation.`
     );
   }
+  if (kind === "delegated") {
+    return (
+      `Fix the React TSX module for a "${type}" app (a behavior-free view module).\n` +
+      `The following code has a compile error:\n` +
+      `\`\`\`tsx\n${previousCode}\n\`\`\`\n` +
+      `Babel error: ${babelError}\n\n` +
+      `Requirements:\n` +
+      `- export const initialState (one object), export function view(state) returning markup whose interactive elements carry data-action="..." and have NO handlers, and export const actionSpec (a string), then export { initialState, view, actionSpec }\n` +
+      `- No imports — React is injected as a global; no event handlers in this module\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the corrected TSX code block, no explanation.`
+    );
+  }
   const subject = kind === "widget" ? `widget of type "${type}"` : `component for a "${type}" app`;
   return (
     `Fix the React TSX ${subject}.\n` +
@@ -242,6 +274,17 @@ export function buildLengthPrompt(
       `- Use realistic local sample data — no network, no storage, no imports\n` +
       mutationLine(userPrompt) +
       `Return ONLY the complete TypeScript function code, no explanation.`
+    );
+  }
+  if (kind === "delegated") {
+    return (
+      `Build a compact React TSX module for a "${type}" app — a behavior-free view.\n` +
+      `Keep it concise so the full module fits in one response.\n` +
+      `Requirements:\n` +
+      `- export const initialState (one object), export function view(state) returning compact markup whose interactive elements carry data-action="..." and have NO handlers, and export const actionSpec (a short string), then export { initialState, view, actionSpec }\n` +
+      `- No imports — React is injected as a global; no behavior in this module\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the complete TSX code block, no explanation.`
     );
   }
   const subject = kind === "widget" ? `widget of type "${type}"` : `component for a "${type}" app`;
@@ -412,6 +455,19 @@ export async function produceComponent(
         kind === "handler"
           ? transpileHandler(code, { filename: type + ".ts" })
           : transpile(code, { filename: type + ".tsx" });
+      // Handler purity guard: a handler must be self-contained local computation, but
+      // the model sometimes reaches for an external module (e.g. an SDK) "to be
+      // helpful". The CJS transform turns any such import into a `require(...)` that
+      // the constrained scope's hostile require would throw on at runtime (a silent
+      // no-op to the user). Reject it at PRODUCE time so the self-heal loop gets an
+      // actionable error and retries for a pure handler instead. A clean handler
+      // imports nothing, so any `require(` is a definitive illegal-import signal.
+      if (kind === "handler" && /\brequire\s*\(/.test(transpiledJS)) {
+        throw new TranspileError(
+          "Handler must not import or require any module — no SDK, library, package, network, or model is available in this scope. Compute the result with plain local TypeScript only (Math, String, Array, JSON, Date).",
+          null,
+        );
+      }
       logger.info(`Producer: compiled successfully on attempt ${attempt}`);
       return { source: code, transpiledJS };
     } catch (err) {
