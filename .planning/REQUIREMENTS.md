@@ -36,11 +36,11 @@ Requirements for the initial release. Scope = the blueprint MVP checklist plus t
 
 ### Widget Composition (WIDGET)
 
-- [ ] **WIDGET-01**: An app can declare widget dependencies (`// @widget <type>`); the parser extracts them before mount
-- [ ] **WIDGET-02**: Declared widgets are pre-warmed (resolved from cache or produced) transitively before the app mounts, with a cycle guard and a concurrency cap (≤2) to avoid request storms
-- [ ] **WIDGET-03**: `useWidget(type)` returns the resolved widget component synchronously at render time (a pure `Map.get`, never triggering async work during render)
-- [ ] **WIDGET-04**: Each widget renders inside its own widget shell with an independent `⋮` menu, so a widget can be modified without touching its parent app
-- [ ] **WIDGET-05**: A widget that fails to load or throws shows a placeholder without crashing its parent app (per-widget error boundary)
+- [x] **WIDGET-01**: An app can declare widget dependencies (`// @widget <type>`); the parser extracts them before mount
+- [x] **WIDGET-02**: Declared widgets are pre-warmed (resolved from cache or produced) transitively before the app mounts, with a cycle guard and a concurrency cap (≤2) to avoid request storms
+- [x] **WIDGET-03**: `useWidget(type)` returns the resolved widget component synchronously at render time (a pure `Map.get`, never triggering async work during render)
+- [x] **WIDGET-04**: Each widget renders inside its own widget shell with an independent `⋮` menu, so a widget can be modified without touching its parent app
+- [x] **WIDGET-05**: A widget that fails to load or throws shows a placeholder without crashing its parent app (per-widget error boundary)
 
 ### Contextual Modification (MOD)
 
@@ -140,11 +140,11 @@ Each v1 requirement maps to exactly one owning phase. Cross-cutting HYGIENE/SEC 
 | GEN-03 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
 | GEN-04 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
 | GEN-05 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
-| WIDGET-01 | Phase 4 — Widget Composition | Pending |
-| WIDGET-02 | Phase 4 — Widget Composition | Pending |
-| WIDGET-03 | Phase 4 — Widget Composition | Pending |
-| WIDGET-04 | Phase 4 — Widget Composition | Pending |
-| WIDGET-05 | Phase 4 — Widget Composition | Pending |
+| WIDGET-01 | Phase 4 — Widget Composition | Complete |
+| WIDGET-02 | Phase 4 — Widget Composition | Complete |
+| WIDGET-03 | Phase 4 — Widget Composition | Complete |
+| WIDGET-04 | Phase 4 — Widget Composition | Complete |
+| WIDGET-05 | Phase 4 — Widget Composition | Complete |
 | MOD-01 | Phase 5 — Contextual Modification | Pending |
 | MOD-02 | Phase 5 — Contextual Modification | Pending |
 | MOD-03 | Phase 5 — Contextual Modification | Pending |

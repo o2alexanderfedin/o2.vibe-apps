@@ -1,0 +1,127 @@
+
+```tsx
+function App(props) {
+  const { data, config, onAction } = props;
+
+  const [value, setValue] = React.useState(data?.value || 0);
+  const [trend, setTrend] = React.useState(data?.trend || null);
+
+  React.useEffect(() => {
+    if (data?.value !== undefined) {
+      setValue(data.value);
+    }
+    if (data?.trend !== undefined) {
+      setTrend(data.trend);
+    }
+  }, [data]);
+
+  const title = config?.title || "Stat Card";
+  const unit = config?.unit || "";
+  const format = config?.format || "number";
+  const trendColor = config?.trendColor || "var(--color-accent)";
+
+  const formatValue = (val) => {
+    if (format === "percentage") {
+      return `${val}%`;
+    }
+    if (format === "currency") {
+      return `$${val.toLocaleString()}`;
+    }
+    return val.toLocaleString();
+  };
+
+  const handleClick = () => {
+    if (onAction) {
+      onAction({ type: "stat-clicked", value });
+    }
+  };
+
+  const trendIcon = trend > 0 ? "↑" : trend < 0 ? "↓" : "→";
+  const trendClass = trend > 0 ? "positive" : trend < 0 ? "negative" : "neutral";
+
+  return (
+    <div
+      style={{
+        backgroundColor: "var(--color-surface)",
+        color: "var(--color-text)",
+        padding: "24px",
+        borderRadius: "8px",
+        cursor: "pointer",
+        transition: "transform 0.2s, box-shadow 0.2s",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+      }}
+      onClick={handleClick}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.boxShadow =
+          "0 4px 12px rgba(0, 0, 0, 0.15)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = "none";
+      }}
+    >
+      <div
+        style={{
+          fontSize: "14px",
+          fontWeight: "500",
+          opacity: 0.7,
+          marginBottom: "8px",
+          textTransform: "uppercase",
+          letterSpacing: "0.5px",
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          gap: "8px",
+          marginBottom: "12px",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "28px",
+            fontWeight: "700",
+            lineHeight: "1",
+          }}
+        >
+          {formatValue(value)}
+        </div>
+        {unit && (
+          <div
+            style={{
+              fontSize: "14px",
+              opacity: 0.6,
+            }}
+          >
+            {unit}
+          </div>
+        )}
+      </div>
+
+      {trend !== null && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            fontSize: "12px",
+            color: trendColor,
+            fontWeight: "600",
+          }}
+          className={trendClass}
+        >
+          <span>{trendIcon}</span>
+          <span>{Math.abs(trend)}% {trend > 0 ? "increase" : trend < 0 ? "decrease" : "no change"}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
+```

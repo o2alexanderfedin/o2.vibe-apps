@@ -1,0 +1,250 @@
+
+```tsx
+function App(props) {
+  const { data, config, onAction } = props || {};
+
+  // Default data if not provided
+  const defaultData = [
+    { label: 'Jan', value: 65 },
+    { label: 'Feb', value: 78 },
+    { label: 'Mar', value: 90 },
+    { label: 'Apr', value: 81 },
+    { label: 'May', value: 95 },
+    { label: 'Jun', value: 107 },
+    { label: 'Jul', value: 120 },
+  ];
+
+  const defaultConfig = {
+    title: 'Line Chart',
+    width: 600,
+    height: 400,
+    yAxisLabel: 'Value',
+    xAxisLabel: 'Month',
+  };
+
+  const chartData = data || defaultData;
+  const chartConfig = { ...defaultConfig, ...config };
+
+  const [hoveredIndex, setHoveredIndex] = React.useState(null);
+  const [selectedIndex, setSelectedIndex] = React.useState(null);
+
+  // Calculate chart dimensions
+  const padding = { top: 30, right: 30, bottom: 50, left: 60 };
+  const innerWidth = chartConfig.width - padding.left - padding.right;
+  const innerHeight = chartConfig.height - padding.top - padding.bottom;
+
+  // Find min and max values for scaling
+  const values = chartData.map((d) => d.value);
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const valueRange = maxValue - minValue || 1;
+
+  // Calculate positions for points
+  const points = chartData.map((d, i) => {
+    const x = (i / (chartData.length - 1 || 1)) * innerWidth + padding.left;
+    const y =
+      padding.top +
+      innerHeight -
+      ((d.value - minValue) / valueRange) * innerHeight;
+    return { ...d, x, y, index: i };
+  });
+
+  // Generate SVG path for line
+  const pathData = points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+    .join(' ');
+
+  const handlePointClick = (index) => {
+    setSelectedIndex(index);
+    if (onAction) {
+      onAction({ type: 'point-selected', index, data: chartData[index] });
+    }
+  };
+
+  const handlePointHover = (index) => {
+    setHoveredIndex(index);
+    if (onAction) {
+      onAction({ type: 'point-hovered', index, data: chartData[index] });
+    }
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        padding: '20px',
+        backgroundColor: 'var(--color-surface)',
+        color: 'var(--color-text)',
+        borderRadius: '8px',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+      }}
+    >
+      <h2 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>
+        {chartConfig.title}
+      </h2>
+
+      <svg
+        width={chartConfig.width}
+        height={chartConfig.height}
+        style={{
+          border: `1px solid var(--color-accent)`,
+          borderRadius: '4px',
+          backgroundColor: 'rgba(0, 0, 0, 0.02)',
+        }}
+      >
+        {/* Y-axis */}
+        <line
+          x1={padding.left}
+          y1={padding.top}
+          x2={padding.left}
+          y2={padding.top + innerHeight}
+          stroke='var(--color-accent)'
+          strokeWidth='2'
+        />
+
+        {/* X-axis */}
+        <line
+          x1={padding.left}
+          y1={padding.top + innerHeight}
+          x2={padding.left + innerWidth}
+          y2={padding.top + innerHeight}
+          stroke='var(--color-accent)'
+          strokeWidth='2'
+        />
+
+        {/* Grid lines and Y-axis labels */}
+        {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
+          const y = padding.top + innerHeight - ratio * innerHeight;
+          const value = Math.round(minValue + ratio * valueRange);
+          return (
+            <g key={`grid-${i}`}>
+              <line
+                x1={padding.left - 5}
+                y1={y}
+                x2={padding.left + innerWidth}
+                y2={y}
+                stroke='var(--color-accent)'
+                strokeWidth='1'
+                opacity='0.2'
+                strokeDasharray='4'
+              />
+              <text
+                x={padding.left - 10}
+                y={y}
+                textAnchor='end'
+                dy='0.3em'
+                fontSize='12'
+                fill='var(--color-text)'
+                opacity='0.7'
+              >
+                {value}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* X-axis labels */}
+        {points.map((p, i) => (
+          <text
+            key={`label-${i}`}
+            x={p.x}
+            y={padding.top + innerHeight + 20}
+            textAnchor='middle'
+            fontSize='12'
+            fill='var(--color-text)'
+            opacity='0.7'
+          >
+            {p.label}
+          </text>
+        ))}
+
+        {/* Y-axis label */}
+        <text
+          x={20}
+          y={padding.top + innerHeight / 2}
+          textAnchor='middle'
+          fontSize='12'
+          fill='var(--color-text)'
+          opacity='0.7'
+          transform={`rotate(-90 20 ${padding.top + innerHeight / 2})`}
+        >
+          {chartConfig.yAxisLabel}
+        </text>
+
+        {/* Line path */}
+        <path
+          d={pathData}
+          stroke='var(--color-accent)'
+          strokeWidth='2'
+          fill='none'
+          strokeLinecap='round'
+          strokeLinejoin='round'
+        />
+
+        {/* Area under line */}
+        <path
+          d={`${pathData} L ${padding.left + innerWidth} ${padding.top + innerHeight} L ${padding.left} ${padding.top + innerHeight} Z`}
+          fill='var(--color-accent)'
+          opacity='0.1'
+        />
+
+        {/* Data points */}
+        {points.map((p, i) => (
+          <g key={`point-${i}`}>
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r={hoveredIndex === i || selectedIndex === i ? 6 : 4}
+              fill={selectedIndex === i ? 'var(--color-accent)' : 'var(--color-text)'}
+              stroke='var(--color-surface)'
+              strokeWidth='2'
+              cursor='pointer'
+              onClick={() => handlePointClick(i)}
+              onMouseEnter={() => handlePointHover(i)}
+              onMouseLeave={() => setHoveredIndex(null)}
+              style={{
+                transition: 'all 200ms ease-out',
+              }}
+            />
+            {(hoveredIndex === i || selectedIndex === i) && (
+              <text
+                x={p.x}
+                y={p.y - 15}
+                textAnchor='middle'
+                fontSize='12'
+                fontWeight='bold'
+                fill='var(--color-accent)'
+                pointerEvents='none'
+              >
+                {p.value}
+              </text>
+            )}
+          </g>
+        ))}
+      </svg>
+
+      <div
+        style={{
+          display: 'flex',
+          gap: '8px',
+          fontSize: '12px',
+          opacity: '0.7',
+        }}
+      >
+        <span>
+          ●{' '}
+          <span style={{ color: 'var(--color-accent)' }}>
+            {hoveredIndex !== null
+              ? `${chartData[hoveredIndex].label}: ${chartData[hoveredIndex].value}`
+              : 'Hover over points to see values'}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+```

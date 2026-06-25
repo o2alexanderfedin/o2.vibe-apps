@@ -21,16 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-24)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 01 — Hygiene Foundation & Storefront Shell
+**Current focus:** Phase 05 — Contextual Modification (next)
 
 ## Current Position
 
-Phase: 01 (Hygiene Foundation & Storefront Shell) — EXECUTING
-Plan: 2 of 4 (Plan 01 completed)
-Status: Plan 01-01 complete — ready for Plan 01-02
-Last activity: 2026-06-24 -- Plan 01-01 (Scaffold + Walking Skeleton) completed
+Phase: 04 (Widget Composition) — COMPLETE
+Status: Phases 1–4 complete. Phase 4 delivered the `@widget` parser, transitive
+pre-warm (cycle guard + concurrency cap ≤2), synchronous `useWidget`, WidgetShell
++ per-widget ErrorBoundary, and a DRY app/widget producer. All WIDGET-01..05
+requirements Complete. tsc 0 errors, build OK (no .map in dist), 164/164 tests
+pass (127 baseline + 37 new), hygiene gate green.
+Last activity: 2026-06-24 -- Phase 4 (Widget Composition) completed on branch
+feature/phase-4-widget-composition
 
-Progress: [█░░░░░░░░░] 3%
+Progress: [█████░░░░░] 50% (4 of 8 phases)
 
 ## Performance Metrics
 
@@ -78,7 +82,7 @@ None yet.
 
 [Issues that affect future work]
 
-- [Phase 4]: Product decision needed — are dynamic (undeclared) widgets required? If yes, `useWidget` needs a skeleton-then-async fallback; if no, it stays fully synchronous.
+- [Phase 4 — RESOLVED]: Static widgets only (declared via `@widget`); no dynamic/undeclared widgets. `useWidget` is fully synchronous (a pure `Map.get`). Decided + implemented in Phase 4.
 - [Phase 7]: Concrete cost-guardrail threshold (N cache misses per time window) must be decided before shipping.
 - [Phase 8]: Confirm the exact allowed-globals denylist for handler scope; it may differ from the app/widget denylist (handlers need local compute, no network/storage).
 
