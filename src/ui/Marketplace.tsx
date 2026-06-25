@@ -16,6 +16,7 @@ import { AppShell } from "./AppShell";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { resolveOpenApp } from "../intent/resolver";
 import { resolveComponent, evictLiveComponent } from "../execution/loader";
+import { useServices } from "../services/ServicesProvider";
 import { logger } from "../lib/logger";
 
 // Map the neutral icon key (data layer) to a concrete glyph (render layer)
@@ -47,33 +48,42 @@ function nextInstanceId(appType: string): string {
 }
 
 export function Marketplace() {
+  const services = useServices();
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openedApps, setOpenedApps] = useState<OpenedApp[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleOpen = useCallback(async (appType: string, displayName: string) => {
-    logger.info("Opening " + appType);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setOpeningId(appType);
+  const handleOpen = useCallback(
+    async (appType: string, displayName: string) => {
+      logger.info("Opening " + appType);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      setOpeningId(appType);
 
-    try {
-      const intent = await resolveOpenApp(appType);
-      const instanceId = nextInstanceId(appType);
-      const Component = await resolveComponent(instanceId, appType, intent.cacheKey);
+      try {
+        const intent = await resolveOpenApp(appType);
+        const instanceId = nextInstanceId(appType);
+        const Component = await resolveComponent(
+          instanceId,
+          appType,
+          intent.cacheKey,
+          services,
+        );
 
-      setOpenedApps((prev) => [
-        ...prev,
-        { instanceId, appType, displayName, Component },
-      ]);
-    } catch (err) {
-      logger.error("Failed to open " + appType + ": " + String(err));
-    } finally {
-      timeoutRef.current = setTimeout(() => {
-        setOpeningId(null);
-        timeoutRef.current = null;
-      }, 300);
-    }
-  }, []);
+        setOpenedApps((prev) => [
+          ...prev,
+          { instanceId, appType, displayName, Component },
+        ]);
+      } catch (err) {
+        logger.error("Failed to open " + appType + ": " + String(err));
+      } finally {
+        timeoutRef.current = setTimeout(() => {
+          setOpeningId(null);
+          timeoutRef.current = null;
+        }, 300);
+      }
+    },
+    [services],
+  );
 
   const handleClose = useCallback((instanceId: string) => {
     evictLiveComponent(instanceId);

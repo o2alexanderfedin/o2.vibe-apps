@@ -2,7 +2,7 @@
 //
 // All network calls are replaced with canned transports — no real API key is needed.
 // Test doubles are named "canned", "stub", or "testTransport" (hygiene-safe naming).
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   buildPrompt,
   buildRepairPrompt,
@@ -11,6 +11,11 @@ import {
   ProduceError,
 } from "./producer";
 import type { TransportFn } from "../host/modelClient";
+import { unusedTransport } from "../services/testServices";
+
+// Injected API-key getters (IoC/DI): no localStorage access in these tests.
+const withKey = () => "sk-test-key";
+const withoutKey = () => null;
 
 // ---------------------------------------------------------------------------
 // Helpers — canned transport builders
@@ -158,43 +163,34 @@ describe("extractCode", () => {
 // ---------------------------------------------------------------------------
 
 describe("produceComponent", () => {
-  beforeEach(() => {
-    // Ensure no stale key from other tests.
-    localStorage.removeItem("marketplace.apiKey");
-  });
-
   it("throws ProduceError when no API key is available", async () => {
-    await expect(produceComponent("weather")).rejects.toBeInstanceOf(ProduceError);
-    await expect(produceComponent("weather")).rejects.toThrow(/No access key/);
+    await expect(
+      produceComponent("weather", unusedTransport, withoutKey),
+    ).rejects.toBeInstanceOf(ProduceError);
+    await expect(
+      produceComponent("weather", unusedTransport, withoutKey),
+    ).rejects.toThrow(/No access key/);
   });
 
   it("success path: returns source and transpiledJS for a valid canned response", async () => {
-    localStorage.setItem("marketplace.apiKey", "sk-ant-test");
     const transport = singleResponseTransport(VALID_COMPONENT);
 
-    const result = await produceComponent("weather", transport);
+    const result = await produceComponent("weather", transport, withKey);
     expect(typeof result.source).toBe("string");
     expect(typeof result.transpiledJS).toBe("string");
     expect(result.source.length).toBeGreaterThan(0);
     expect(result.transpiledJS.length).toBeGreaterThan(0);
-
-    localStorage.removeItem("marketplace.apiKey");
   });
 
   it("extracts code from fenced markdown in the canned response", async () => {
-    localStorage.setItem("marketplace.apiKey", "sk-ant-test");
     const transport = singleResponseTransport(VALID_FENCED);
 
-    const result = await produceComponent("notes-type", transport);
+    const result = await produceComponent("notes-type", transport, withKey);
     expect(result.source).toContain("function App()");
     expect(result.source).not.toContain("```");
-
-    localStorage.removeItem("marketplace.apiKey");
   });
 
   it("self-heal loop: feeds Babel error into the repair prompt on second attempt", async () => {
-    localStorage.setItem("marketplace.apiKey", "sk-ant-test");
-
     const callLog: string[] = [];
     const transport: TransportFn = (_url, init) => {
       const body = JSON.parse(init.body as string) as {
@@ -209,7 +205,7 @@ describe("produceComponent", () => {
       return cannedResponse(VALID_COMPONENT);
     };
 
-    const result = await produceComponent("calendar", transport);
+    const result = await produceComponent("calendar", transport, withKey);
 
     // Should have succeeded on the second attempt.
     expect(callLog).toHaveLength(2);
@@ -217,28 +213,24 @@ describe("produceComponent", () => {
     expect(callLog[1]).toMatch(/Babel error|compile error/i);
     // Final result is valid.
     expect(typeof result.transpiledJS).toBe("string");
-
-    localStorage.removeItem("marketplace.apiKey");
   });
 
   it("self-heal loop: early-stops when two consecutive errors are identical", async () => {
-    localStorage.setItem("marketplace.apiKey", "sk-ant-test");
     let callCount = 0;
     const transport: TransportFn = (_url, _init) => {
       callCount++;
       return cannedResponse(INVALID_COMPONENT);
     };
 
-    await expect(produceComponent("budget", transport)).rejects.toBeInstanceOf(ProduceError);
+    await expect(
+      produceComponent("budget", transport, withKey),
+    ).rejects.toBeInstanceOf(ProduceError);
     // First call: compile error. Second call: same error → early stop.
     // No third call is made.
     expect(callCount).toBe(2);
-
-    localStorage.removeItem("marketplace.apiKey");
   });
 
   it("gives up after MAX_ATTEMPTS (3) when errors keep changing", async () => {
-    localStorage.setItem("marketplace.apiKey", "sk-ant-test");
     const brokenVariants = [
       "function App( { return null; }",    // parse error variant A
       "function App() { return <div>}",    // parse error variant B
@@ -246,9 +238,7 @@ describe("produceComponent", () => {
     ];
     const transport = sequenceTransport(brokenVariants);
 
-    const attempt = produceComponent("currency", transport);
+    const attempt = produceComponent("currency", transport, withKey);
     await expect(attempt).rejects.toBeInstanceOf(ProduceError);
-
-    localStorage.removeItem("marketplace.apiKey");
   });
 });
