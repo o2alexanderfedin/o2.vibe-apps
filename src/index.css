@@ -459,3 +459,37 @@ body {
   outline: 2px solid var(--color-accent-primary);
   outline-offset: 2px;
 }
+
+/* Neutral fallback shown inside an app shell when an app fails to open. */
+.app-failed-fallback {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.app-failed-fallback__body {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  margin-bottom: 20px;
+}
+
+.app-failed-fallback__retry {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  background: var(--color-background-tertiary);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.app-failed-fallback__retry:hover {
+  filter: brightness(0.96);
+}
+
+.app-failed-fallback__retry:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
