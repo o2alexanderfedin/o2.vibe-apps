@@ -6,7 +6,7 @@
 // fallback, the same store semantics. Business logic depends on the Registry
 // interface; this adapter supplies it in the composition root.
 
-import { get, put, del } from "../registry/registry";
+import { get, put, del, keys } from "../registry/registry";
 import type { Registry, StoreName, StoreValue } from "./registry";
 
 export const realRegistry: Registry = {
@@ -15,4 +15,5 @@ export const realRegistry: Registry = {
   put: <S extends StoreName>(store: S, value: StoreValue<S>, key: string) =>
     put(store, value, key),
   del: (store: StoreName, key: string) => del(store, key),
+  keys: (store: StoreName) => keys(store),
 };

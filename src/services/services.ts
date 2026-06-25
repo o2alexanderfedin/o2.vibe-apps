@@ -14,6 +14,11 @@ import { defaultTransport, type TransportFn } from "../host/modelClient";
 import { realClock } from "../host/clock";
 import { TokenBucket } from "../host/tokenBucket";
 import { createResilientTransport } from "../host/resilientTransport";
+import { createProduceGate, type ProduceGate } from "../host/produceGate";
+import {
+  navigatorStorageSeam,
+  type StoragePressureSeam,
+} from "../host/storageEstimate";
 import { STORAGE_KEY_API } from "../lib/storage";
 import type { Registry } from "./registry";
 import { realRegistry } from "./realRegistry";
@@ -29,6 +34,16 @@ export interface Services {
   registry: Registry;
   /** Reads the access key (localStorage in production). */
   getApiKey: ApiKeyGetter;
+  /**
+   * Produce-cost guardrail (Phase 7, RESIL-05): the loader calls this before a
+   * cache MISS reaches the model, soft-capping produce calls per rolling window.
+   */
+  produceGate: ProduceGate;
+  /**
+   * Storage-pressure seam (Phase 7, RESIL-06): persist request + usage/quota
+   * estimate, driving LRU eviction when the registry approaches quota.
+   */
+  storage: StoragePressureSeam;
 }
 
 /**
@@ -75,5 +90,10 @@ export function createServices(): Services {
     transport: createModelTransport(),
     registry: realRegistry,
     getApiKey: localStorageApiKeyGetter,
+    // RESIL-05: one gate per session, anchored on the real wall clock, so its
+    // rolling window matches real elapsed time at the produce chokepoint.
+    produceGate: createProduceGate({ clock: realClock }),
+    // RESIL-06: the real navigator.storage seam (guarded persist + estimate).
+    storage: navigatorStorageSeam,
   };
 }

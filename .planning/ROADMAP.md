@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Widget Composition** - Apps render isolated sub-widgets via transitive pre-warm and synchronous `useWidget`
 - [x] **Phase 5: Contextual Modification** - The shared `⋮` prompt lets users remove, clone, and tweak apps and widgets in place
 - [x] **Phase 6: API Error Degradation** - Missing/invalid key, rate limiting, and uncaught async errors degrade gracefully with neutral copy
-- [ ] **Phase 7: Storage & Cost Guardrails** - Storage pressure, eviction, and runaway produce-cost are bounded with neutral messaging
+- [x] **Phase 7: Storage & Cost Guardrails** - Storage pressure, eviction, and runaway produce-cost are bounded with neutral messaging
 - [ ] **Phase 8: Backend-Style Handlers** - Apps and widgets transparently resolve or produce cached data handlers on first need
 
 ## Phase Details
@@ -123,10 +123,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. `navigator.storage.persist()` is requested at init and, as the registry approaches quota, least-recently-used entries (by `useCount`/`updatedAt`) are evicted so the loop keeps working instead of throwing.
   2. After a configured threshold of cache misses per time window, a cost guardrail soft-caps further produce calls and surfaces neutral messaging rather than silently running up the user's Anthropic spend.
-**Plans**: TBD
+**Plans**: 1 plan (executed in worktree feature/phase-7-storage-cost-guardrails)
 
 Plans:
-- [ ] 07-01: TBD during planning
+- [x] 07-01 — Storage & Cost Guardrails: sliding-window `createProduceGate` (N=10 misses / 5-min window, injected `Clock`, neutral `ProduceThrottledError` surfaced via the failed-open fallback) hooked at the loader produce path; `useCount`/`updatedAt` LRU bookkeeping (DB schema v2, additive upgrade, default-on-read for v1 records); `evictUnderPressure` LRU eviction (oldest `updatedAt`, tie-broken by lowest `useCount`, until under a 0.9 usage/quota threshold) run before produce writes; injectable `StoragePressureSeam` (guarded `navigator.storage.persist`/`estimate`) + `Registry.keys()` enumeration — COMPLETED 2026-06-24
 
 ### Phase 8: Backend-Style Handlers
 **Goal**: A generated app or widget that needs a data operation gets one transparently — resolved from cache or produced on first need — without any visible "backend" and without ever reaching the network or the API key.
@@ -155,5 +155,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Widget Composition | 1/1 | Complete | 2026-06-24 |
 | 5. Contextual Modification | 1/1 | Complete | 2026-06-24 |
 | 6. API Error Degradation | 1/1 | Complete | 2026-06-24 |
-| 7. Storage & Cost Guardrails | 0/TBD | Not started | - |
+| 7. Storage & Cost Guardrails | 1/1 | Complete | 2026-06-24 |
 | 8. Backend-Style Handlers | 0/TBD | Not started | - |

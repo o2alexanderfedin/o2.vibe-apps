@@ -29,7 +29,42 @@ import { prewarmWidgets } from "./widgetPrewarm";
 import { SEEDED_SOURCES } from "../apps/seeds";
 import { produceComponent, type TransportFn as ProducerTransport } from "./producer";
 import type { Services } from "../services/services";
+import { evictUnderPressure } from "../registry/storagePressure";
 import { logger } from "../lib/logger";
+
+/**
+ * Refresh the LRU bookkeeping of a stored record after a cache HIT (Phase 7,
+ * RESIL-06): bump `useCount` and stamp `updatedAt` with "now", then write it back
+ * so the entry counts as recently used and survives the next eviction sweep. The
+ * write is best-effort — a failure here must never break the open path, so any
+ * error is swallowed to the gated logger. "now" comes from the injected storage
+ * seam's clock-free path: we use Date.now() at the persistence boundary only (the
+ * window-timing clock injection lives in the produce gate, not here).
+ */
+async function touchRecord(
+  services: Services,
+  cacheKey: string,
+  record: { source: string; transpiledJS: string } & Record<string, unknown>,
+  type: string,
+): Promise<void> {
+  try {
+    const useCount =
+      typeof record.useCount === "number" ? record.useCount + 1 : 1;
+    await services.registry.put(
+      "apps",
+      {
+        ...record,
+        cacheKey,
+        type,
+        useCount,
+        updatedAt: Date.now(),
+      },
+      cacheKey,
+    );
+  } catch (err) {
+    logger.error("Loader: failed to refresh LRU bookkeeping: " + String(err));
+  }
+}
 
 /** Tier 1: live component instances, keyed by instance id. */
 const liveComponents = new Map<string, ComponentType>();
@@ -111,6 +146,10 @@ export async function resolveComponent(
   const stored = await services.registry.get("apps", appCacheKey);
   if (stored?.transpiledJS && stored?.source) {
     logger.info("Loader: tier-3 hit (registry) for " + appType);
+    // Cache HIT: refresh LRU bookkeeping (bump useCount, stamp updatedAt) so this
+    // entry is marked recently used and survives the next eviction sweep (RESIL-06).
+    // A cache hit makes NO model call, so the produce gate is never consulted here.
+    await touchRecord(services, appCacheKey, stored, appType);
     transpiledCache.set(appCacheKey, {
       source: stored.source,
       transpiledJS: stored.transpiledJS,
@@ -141,6 +180,13 @@ export async function resolveComponent(
     // Unseeded path: on-demand produce via model (GEN-01..03, GEN-05). On a
     // tweak (MOD-03) the user's instruction is woven into the produce prompt so
     // the produced app reflects the request — same produce loop otherwise (DRY).
+    //
+    // RESIL-05 cost guardrail: this is the ONE place a cache miss spends real
+    // budget, so the soft cap is checked HERE, immediately before the model call.
+    // tryAcquire throws ProduceThrottledError (neutral copy) when the rolling
+    // window cap is exceeded; the open flow maps it to the failed-open fallback.
+    // A cache hit (tier 1/2/3) never reaches this line, so it is never capped.
+    services.produceGate.tryAcquire();
     logger.info("Loader: unseeded type — requesting component for " + appType);
     const produced = await produceComponent(
       appType,
@@ -155,10 +201,29 @@ export async function resolveComponent(
 
   transpiledCache.set(appCacheKey, { source, transpiledJS });
 
+  // RESIL-06: before writing a new record, relieve storage pressure if the
+  // registry is approaching quota — evict least-recently-used entries so the
+  // write succeeds instead of tripping QuotaExceededError. No-ops when under
+  // threshold (or when the platform exposes no estimate). Best-effort: an
+  // eviction failure must not block the open, so it is swallowed to the logger.
+  try {
+    await evictUnderPressure({ registry: services.registry, storage: services.storage });
+  } catch (err) {
+    logger.error("Loader: storage-pressure eviction failed: " + String(err));
+  }
+
   // Persist both pieces to the registry — next open is an instant cache hit (GEN-04).
+  // Fresh LRU bookkeeping: useCount 0 (no hits yet), updatedAt = now (RESIL-06).
   await services.registry.put(
     "apps",
-    { cacheKey: appCacheKey, type: appType, source, transpiledJS },
+    {
+      cacheKey: appCacheKey,
+      type: appType,
+      source,
+      transpiledJS,
+      useCount: 0,
+      updatedAt: Date.now(),
+    },
     appCacheKey,
   );
 
