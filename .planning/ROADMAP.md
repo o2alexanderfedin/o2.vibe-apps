@@ -12,10 +12,10 @@ The journey is a Vertical MVP: eight phases, each shipping an end-to-end, user-v
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Hygiene Foundation & Storefront Shell** - Storefront, key/theme config, opaque keys, IndexedDB init, single Anthropic egress, and the CI hygiene gate
-- [ ] **Phase 2: Static Open-One-App Loop** - Resolve → compile → instantiate → render a seeded app end-to-end, model risk removed
-- [ ] **Phase 3: Cache-Miss Generation (Core Value)** - An app that doesn't exist yet is produced on demand, cached, and rendered — instant on hit, seamless on miss
-- [ ] **Phase 4: Widget Composition** - Apps render isolated sub-widgets via transitive pre-warm and synchronous `useWidget`
+- [x] **Phase 1: Hygiene Foundation & Storefront Shell** - Storefront, key/theme config, opaque keys, IndexedDB init, single Anthropic egress, and the CI hygiene gate
+- [x] **Phase 2: Static Open-One-App Loop** - Resolve → compile → instantiate → render a seeded app end-to-end, model risk removed
+- [x] **Phase 3: Cache-Miss Generation (Core Value)** - An app that doesn't exist yet is produced on demand, cached, and rendered — instant on hit, seamless on miss
+- [x] **Phase 4: Widget Composition** - Apps render isolated sub-widgets via transitive pre-warm and synchronous `useWidget`
 - [ ] **Phase 5: Contextual Modification** - The shared `⋮` prompt lets users remove, clone, and tweak apps and widgets in place
 - [ ] **Phase 6: API Error Degradation** - Missing/invalid key, rate limiting, and uncaught async errors degrade gracefully with neutral copy
 - [ ] **Phase 7: Storage & Cost Guardrails** - Storage pressure, eviction, and runaway produce-cost are bounded with neutral messaging
@@ -80,11 +80,11 @@ Plans:
   1. User opens an app that declares `@widget` dependencies and all declared widgets appear already rendered on first paint (no pop-in waterfall), each inside its own widget shell with an independent `⋮` menu.
   2. Declared widgets are pre-warmed transitively before the app mounts, with a cycle guard and a concurrency cap (≤2), and `useWidget(type)` returns the resolved component synchronously at render time (a pure `Map.get`, never triggering async work during render).
   3. A widget that fails to load or throws shows a neutral placeholder via its own error boundary without crashing or visibly degrading its parent app.
-**Plans**: TBD
+**Plans**: 1 plan (executed in worktree feature/phase-4-widget-composition)
 **UI hint**: yes
 
 Plans:
-- [ ] 04-01: TBD during planning
+- [x] 04-01 — Widget composition: `@widget` parser, transitive pre-warm (cycle guard + concurrency cap ≤2), synchronous `useWidget`, WidgetShell + per-widget ErrorBoundary, DRY widget producer — COMPLETED 2026-06-24
 
 ### Phase 5: Contextual Modification
 **Goal**: A user opens the shared `⋮` prompt on any app or widget and can remove it, clone it, or tweak it with a free-form instruction, with the change applied in place and no surfaced version history.
@@ -149,10 +149,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Hygiene Foundation & Storefront Shell | 0/TBD | Not started | - |
-| 2. Static Open-One-App Loop | 0/TBD | Not started | - |
-| 3. Cache-Miss Generation (Core Value) | 0/TBD | Not started | - |
-| 4. Widget Composition | 0/TBD | Not started | - |
+| 1. Hygiene Foundation & Storefront Shell | 4/4 | Complete | 2026-06-24 |
+| 2. Static Open-One-App Loop | Complete | Complete | 2026-06-24 |
+| 3. Cache-Miss Generation (Core Value) | Complete | Complete | 2026-06-24 |
+| 4. Widget Composition | 1/1 | Complete | 2026-06-24 |
 | 5. Contextual Modification | 0/TBD | Not started | - |
 | 6. API Error Degradation | 0/TBD | Not started | - |
 | 7. Storage & Cost Guardrails | 0/TBD | Not started | - |

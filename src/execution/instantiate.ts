@@ -1,4 +1,5 @@
-// Component instantiation from a transpiled JS string (Phase 2, LOOP-06/07).
+// Component instantiation from a transpiled JS string (Phase 2, LOOP-06/07;
+// Phase 4 wires the real `useWidget`).
 //
 // Security note: this phase uses a plain new Function() scope. The user
 // explicitly deferred sandbox/iframe isolation (SEC-01/02/03 are out of scope
@@ -9,9 +10,15 @@
 // prevent "Invalid hook call" errors that arise when two separate React copies
 // are loaded. The reference is captured once at module load and never re-imported.
 //
-// `useWidget` is stubbed (always returns null) because widget composition is
-// a Phase 3+ concern. The stub keeps the call signature stable so seeded apps
-// can reference it without errors.
+// `useWidget` (Phase 4, WIDGET-03): the synchronous widget accessor injected
+// into the function scope. It is a pure `Map.get` over the per-instance
+// widget-component map that the pre-warm pass (WIDGET-02) populates BEFORE the
+// host component renders. Because every declared widget is resolved ahead of
+// render, `useWidget(type)` never does async work at render time — it returns
+// the already-resolved component (or null for an undeclared type, which the host
+// can render around). When no map is supplied (an app with no widgets), the
+// accessor is a closed-over empty-map getter that always returns null, preserving
+// the stable call signature seeded apps relied on.
 
 import React from "react";
 import type { ComponentType } from "react";
@@ -19,10 +26,26 @@ import type { ComponentType } from "react";
 /** The shared React instance injected into every instantiated component scope. */
 const sharedReact = React;
 
-/** Stub for the widget composition hook (Phase 3+). */
-function useWidget(_type: string): null {
-  return null;
+/**
+ * The synchronous widget accessor signature injected into a component scope.
+ * Returns the resolved component for a declared widget type, or null otherwise.
+ * NEVER triggers async work — it is a pure read of the pre-warmed map (WIDGET-03).
+ */
+export type UseWidget = (type: string) => ComponentType | null;
+
+/**
+ * Build a synchronous `useWidget` bound to a specific widget-component map.
+ * The map is populated by the pre-warm pass before the host renders, so this is
+ * a pure `Map.get` (WIDGET-03). Exported for direct unit testing.
+ */
+export function makeUseWidget(
+  widgetMap: ReadonlyMap<string, ComponentType>,
+): UseWidget {
+  return (type: string) => widgetMap.get(type) ?? null;
 }
+
+/** Empty-map accessor for apps that declare no widgets (always returns null). */
+const NULL_USE_WIDGET: UseWidget = makeUseWidget(new Map());
 
 /**
  * `require` shim injected into every instantiated component scope.
@@ -50,10 +73,18 @@ function requireShim(specifier: string): unknown {
  * A CJS-style module/exports shim is provided so Babel's CommonJS output
  * (`module.exports = ...` or `exports.default = ...`) resolves correctly.
  *
+ * @param transpiledJS  The Babel-compiled JS string.
+ * @param useWidget     The synchronous widget accessor injected into the scope
+ *                      (Phase 4). Defaults to an always-null accessor for apps
+ *                      that declare no widgets, preserving the prior signature.
+ *
  * Throws `InstantiateError` if the code fails to execute or does not export
  * an `App` function.
  */
-export function instantiate(transpiledJS: string): ComponentType {
+export function instantiate(
+  transpiledJS: string,
+  useWidget: UseWidget = NULL_USE_WIDGET,
+): ComponentType {
   const mod: { exports: Record<string, unknown> } = { exports: {} };
 
   try {
@@ -89,6 +120,7 @@ export function instantiate(transpiledJS: string): ComponentType {
         transpiledJS + "\nreturn typeof App !== 'undefined' ? App : undefined;",
       );
       App = fn2(mod, mod.exports, sharedReact, useWidget, requireShim) as unknown;
+      // (useWidget is the injected accessor; same reference as the first pass.)
     } catch (err) {
       throw new InstantiateError(
         err instanceof Error ? err.message : String(err),

@@ -30,3 +30,16 @@ export function rawFixture(name: FixtureName): string {
 export function codeFixture(name: FixtureName): string {
   return readFileSync(join(FIXTURE_DIR, `${name}.code.txt`), "utf8");
 }
+
+// Phase 4 widget fixtures — REAL captured Haiku widget outputs (raw, with fences).
+// Committed as widget-<type>.raw.txt (.txt so the hygiene gate skips them). The
+// UI tests feed these through a canned transport so they exercise real produced
+// widget code. All three transpile + instantiate + render cleanly; their stable
+// rendered text (for assertions) is: line-chart → "Line Chart"; data-table →
+// "Alice Johnson"/"Active"; stat-card → "Stat Card".
+export type WidgetFixtureName = "line-chart" | "data-table" | "stat-card";
+
+/** Read the raw model response for a captured widget fixture. */
+export function rawWidgetFixture(name: WidgetFixtureName): string {
+  return readFileSync(join(FIXTURE_DIR, `widget-${name}.raw.txt`), "utf8");
+}

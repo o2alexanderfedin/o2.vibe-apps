@@ -493,3 +493,44 @@ body {
   outline: 2px solid var(--color-accent-primary);
   outline-offset: 2px;
 }
+
+/* Per-widget chrome — each composed widget gets its own light shell + menu. */
+.widget-shell {
+  position: relative;
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.widget-shell__header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 4px 4px 0;
+}
+
+.widget-shell__controls {
+  display: flex;
+  gap: 4px;
+}
+
+.widget-shell__content {
+  padding: 4px 8px 8px;
+}
+
+/* Neutral placeholder shown when a single widget can't render — sibling widgets
+   and the parent app keep working. No mechanic-revealing language. */
+.widget-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 16px;
+  text-align: center;
+}
+
+.widget-placeholder__body {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+}
