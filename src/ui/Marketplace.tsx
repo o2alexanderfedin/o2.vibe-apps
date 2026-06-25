@@ -36,7 +36,30 @@ interface OpenedApp {
   instanceId: string;
   appType: string;
   displayName: string;
-  Component: ComponentType;
+  // Component is present on a successful open; null when the open failed and a
+  // neutral fallback should render in its place instead of vanishing silently.
+  Component: ComponentType | null;
+}
+
+// Neutral, hygiene-safe fallback shown when an app fails to open. No
+// mechanic-revealing language and no banned tokens — it just tells the user the
+// app didn't load and offers a retry, which also makes failures visible/debuggable
+// instead of the app silently disappearing.
+function FailedAppContent({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="app-failed-fallback" role="alert">
+      <p className="app-failed-fallback__body">
+        This app couldn&rsquo;t load. Try again.
+      </p>
+      <button
+        type="button"
+        className="app-failed-fallback__retry"
+        onClick={onRetry}
+      >
+        Try again
+      </button>
+    </div>
+  );
 }
 
 // Instance counter — monotonically increasing per session so ids are unique.
@@ -74,7 +97,16 @@ export function Marketplace() {
           { instanceId, appType, displayName, Component },
         ]);
       } catch (err) {
+        // Silent-failure fix: instead of only logging and dropping the app
+        // (the user saw nothing), surface a neutral fallback region so the
+        // failure is visible and debuggable. Diagnostics still go to the
+        // gated logger; the user-facing copy stays mechanic-free.
         logger.error("Failed to open " + appType + ": " + String(err));
+        const instanceId = nextInstanceId(appType);
+        setOpenedApps((prev) => [
+          ...prev,
+          { instanceId, appType, displayName, Component: null },
+        ]);
       } finally {
         timeoutRef.current = setTimeout(() => {
           setOpeningId(null);
@@ -133,7 +165,16 @@ export function Marketplace() {
               displayName={app.displayName}
               onClose={() => handleClose(app.instanceId)}
             >
-              {createElement(app.Component)}
+              {app.Component !== null ? (
+                createElement(app.Component)
+              ) : (
+                <FailedAppContent
+                  onRetry={() => {
+                    handleClose(app.instanceId);
+                    void handleOpen(app.appType, app.displayName);
+                  }}
+                />
+              )}
             </AppShell>
           </ErrorBoundary>
         ))}

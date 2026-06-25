@@ -12,8 +12,18 @@ const MESSAGES_ENDPOINT = ANTHROPIC_API_BASE + "/v1/messages";
 // not silently invalidated by an alias repoint.
 export const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 
-/** Maximum tokens for a component response. */
-const MAX_TOKENS = 2048;
+/**
+ * Maximum tokens for a component response.
+ *
+ * Real component responses are ~6–12 KB of TSX (a full weather/calculator/budget
+ * app, fences included). At 2048 the response was truncated mid-code: the closing
+ * markdown fence never arrived, `extractCode` returned half a component, and the
+ * transpiler threw ("Unterminated string constant" / "Unexpected token") — which
+ * the open flow then dropped silently. 8192 comfortably fits the largest observed
+ * component (~12 KB ≈ ~3–4 K tokens) with headroom, so complete components arrive
+ * intact and the closing fence is present.
+ */
+export const MAX_TOKENS = 8192;
 
 /**
  * Assemble the exact request headers for a browser → Anthropic call.
@@ -73,7 +83,25 @@ export const defaultTransport: TransportFn = async (url, init) => {
 };
 
 /**
- * Send a single-turn prompt to the model and return the raw text response.
+ * Result of a single model call: the text plus the stop reason.
+ *
+ * `stop_reason === "max_tokens"` means the response was truncated (the token
+ * budget was exhausted before the model finished). A truncated response holds
+ * half-written code with no closing fence, so callers must treat it as a failed
+ * produce and retry rather than handing the fragment to the transpiler.
+ */
+export interface ModelResult {
+  text: string;
+  stopReason: string | null;
+}
+
+/** True when the model stopped because it ran out of token budget (truncated). */
+export function isTruncated(stopReason: string | null | undefined): boolean {
+  return stopReason === "max_tokens";
+}
+
+/**
+ * Send a single-turn prompt to the model and return the text plus stop reason.
  *
  * @param prompt  The user-turn message text to send.
  * @param apiKey  The access key (read from localStorage by the caller).
@@ -83,7 +111,7 @@ export async function callModel(
   prompt: string,
   apiKey: string,
   transport: TransportFn = defaultTransport,
-): Promise<string> {
+): Promise<ModelResult> {
   assertAnthropicTarget(MESSAGES_ENDPOINT);
   const headers = buildHeaders(apiKey);
   const body = JSON.stringify({
@@ -98,9 +126,10 @@ export async function callModel(
     body,
   });
 
+  const stopReason = response.stop_reason ?? null;
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock?.text) {
     throw new Error("Model returned no text content");
   }
-  return textBlock.text;
+  return { text: textBlock.text, stopReason };
 }
