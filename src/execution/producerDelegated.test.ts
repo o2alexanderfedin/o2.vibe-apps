@@ -32,6 +32,14 @@ describe("delegated prompt — behavior-free view module", () => {
     expect(prompt.toLowerCase()).toMatch(/behavior-free|no behavior|no event handlers/);
   });
 
+  it("requires INLINE styles for layout (no stylesheet / no CSS framework)", () => {
+    // The app ships no stylesheet, so className/Tailwind classes silently no-op and
+    // the layout collapses. The view must inline-style its layout (grid keypad, etc.).
+    expect(prompt).toContain("inline style");
+    expect(prompt.toLowerCase()).toMatch(/no external stylesheet|no css framework/);
+    expect(prompt).toContain("gridTemplateColumns");
+  });
+
   it("forbids imports and is hygiene-safe + preserves the routing substring", () => {
     expect(prompt.toLowerCase()).toContain("import");
     expect(prompt).toContain('"calculator" app');
