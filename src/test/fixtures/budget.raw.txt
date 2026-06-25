@@ -1,0 +1,412 @@
+
+```tsx
+function App() {
+  const [budget, setBudget] = React.useState(5000);
+  const [expenses, setExpenses] = React.useState<{
+    id: string;
+    description: string;
+    amount: number;
+    date: string;
+  }[]>([]);
+  const [description, setDescription] = React.useState("");
+  const [amount, setAmount] = React.useState("");
+  const [error, setError] = React.useState("");
+
+  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const remaining = budget - totalExpenses;
+
+  const handleAddExpense = () => {
+    setError("");
+
+    if (!description.trim()) {
+      setError("Please enter a description");
+      return;
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      setError("Please enter a valid amount");
+      return;
+    }
+
+    if (parsedAmount > remaining) {
+      setError("Amount exceeds remaining budget");
+      return;
+    }
+
+    const newExpense = {
+      id: Date.now().toString(),
+      description: description.trim(),
+      amount: parsedAmount,
+      date: new Date().toLocaleDateString(),
+    };
+
+    setExpenses([...expenses, newExpense]);
+    setDescription("");
+    setAmount("");
+  };
+
+  const handleDeleteExpense = (id: string) => {
+    setExpenses(expenses.filter((exp) => exp.id !== id));
+  };
+
+  const handleBudgetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value) && value > 0) {
+      setBudget(value);
+      setError("");
+    }
+  };
+
+  const percentageUsed = (totalExpenses / budget) * 100;
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        padding: "20px",
+        fontFamily: "system-ui, -apple-system, sans-serif",
+        backgroundColor: "var(--color-surface)",
+        color: "var(--color-text)",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "600px",
+          margin: "0 auto",
+        }}
+      >
+        <h1 style={{ marginBottom: "30px", textAlign: "center" }}>
+          Budget Tracker
+        </h1>
+
+        <div
+          style={{
+            backgroundColor: "rgba(var(--color-accent-rgb, 100, 100, 255), 0.1)",
+            padding: "20px",
+            borderRadius: "8px",
+            marginBottom: "30px",
+            border: "2px solid var(--color-accent)",
+          }}
+        >
+          <label style={{ display: "block", marginBottom: "10px" }}>
+            Total Budget: ${budget.toFixed(2)}
+          </label>
+          <input
+            type="number"
+            value={budget}
+            onChange={handleBudgetChange}
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: "4px",
+              border: "1px solid var(--color-accent)",
+              backgroundColor: "transparent",
+              color: "var(--color-text)",
+              fontSize: "16px",
+              boxSizing: "border-box",
+            }}
+            min="1"
+            step="100"
+          />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "20px",
+            marginBottom: "30px",
+          }}
+        >
+          <div
+            style={{
+              padding: "20px",
+              borderRadius: "8px",
+              backgroundColor: "rgba(76, 175, 80, 0.1)",
+              border: "1px solid rgba(76, 175, 80, 0.3)",
+            }}
+          >
+            <p style={{ margin: "0 0 8px 0", fontSize: "14px", opacity: 0.8 }}>
+              Remaining
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "24px",
+                fontWeight: "bold",
+                color: remaining >= 0 ? "#4caf50" : "#f44336",
+              }}
+            >
+              ${remaining.toFixed(2)}
+            </p>
+          </div>
+
+          <div
+            style={{
+              padding: "20px",
+              borderRadius: "8px",
+              backgroundColor: "rgba(255, 152, 0, 0.1)",
+              border: "1px solid rgba(255, 152, 0, 0.3)",
+            }}
+          >
+            <p style={{ margin: "0 0 8px 0", fontSize: "14px", opacity: 0.8 }}>
+              Total Spent
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "24px",
+                fontWeight: "bold",
+                color: "#ff9800",
+              }}
+            >
+              ${totalExpenses.toFixed(2)}
+            </p>
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginBottom: "30px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: "8px",
+            }}
+          >
+            <span style={{ fontSize: "14px" }}>Budget Usage</span>
+            <span
+              style={{
+                fontSize: "14px",
+                fontWeight: "bold",
+                color: "var(--color-accent)",
+              }}
+            >
+              {percentageUsed.toFixed(1)}%
+            </span>
+          </div>
+          <div
+            style={{
+              width: "100%",
+              height: "8px",
+              backgroundColor: "rgba(100, 100, 100, 0.2)",
+              borderRadius: "4px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.min(percentageUsed, 100)}%`,
+                height: "100%",
+                backgroundColor:
+                  percentageUsed > 90
+                    ? "#f44336"
+                    : percentageUsed > 75
+                      ? "#ff9800"
+                      : "var(--color-accent)",
+                transition: "width 0.3s ease",
+              }}
+            />
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: "rgba(var(--color-accent-rgb, 100, 100, 255), 0.05)",
+            padding: "20px",
+            borderRadius: "8px",
+            marginBottom: "30px",
+            border: "1px solid rgba(var(--color-accent-rgb, 100, 100, 255), 0.2)",
+          }}
+        >
+          <h3 style={{ marginTop: 0, marginBottom: "15px" }}>Add Expense</h3>
+
+          <input
+            type="text"
+            placeholder="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px",
+              marginBottom: "10px",
+              borderRadius: "4px",
+              border: "1px solid var(--color-accent)",
+              backgroundColor: "transparent",
+              color: "var(--color-text)",
+              boxSizing: "border-box",
+              fontSize: "14px",
+            }}
+            onKeyPress={(e) => {
+              if (e.key === "Enter") handleAddExpense();
+            }}
+          />
+
+          <input
+            type="number"
+            placeholder="Amount"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px",
+              marginBottom: "10px",
+              borderRadius: "4px",
+              border: "1px solid var(--color-accent)",
+              backgroundColor: "transparent",
+              color: "var(--color-text)",
+              boxSizing: "border-box",
+              fontSize: "14px",
+            }}
+            onKeyPress={(e) => {
+              if (e.key === "Enter") handleAddExpense();
+            }}
+            min="0"
+            step="0.01"
+          />
+
+          {error && (
+            <p style={{ color: "#f44336", margin: "10px 0", fontSize: "14px" }}>
+              {error}
+            </p>
+          )}
+
+          <button
+            onClick={handleAddExpense}
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: "4px",
+              border: "none",
+              backgroundColor: "var(--color-accent)",
+              color: "white",
+              fontSize: "16px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              transition: "opacity 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.opacity = "0.9";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.opacity = "1";
+            }}
+          >
+            Add Expense
+          </button>
+        </div>
+
+        {expenses.length > 0 && (
+          <div>
+            <h3 style={{ marginBottom: "15px" }}>Recent Expenses</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {expenses.map((expense) => (
+                <div
+                  key={expense.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px",
+                    backgroundColor: "rgba(var(--color-accent-rgb, 100, 100, 255), 0.05)",
+                    borderRadius: "4px",
+                    border: "1px solid rgba(var(--color-accent-rgb, 100, 100, 255), 0.2)",
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: "0 0 4px 0", fontWeight: "500" }}>
+                      {expense.description}
+                    </p>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: "12px",
+                        opacity: 0.7,
+                      }}
+                    >
+                      {expense.date}
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                    <span
+                      style={{
+                        fontWeight: "bold",
+                        color: "var(--color-accent)",
+                        minWidth: "80px",
+                        textAlign: "right",
+                      }}
+                    >
+                      ${expense.amount.toFixed(2)}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteExpense(expense.id)}
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: "4px",
+                        border: "none",
+                        backgroundColor: "#f44336",
+                        color: "white",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        transition: "opacity 0.2s",
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.target as HTMLButtonElement).style.opacity = "0.9";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.target as HTMLButtonElement).style.opacity = "1";
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {expenses.length === 0 && (
+          <p style={{ textAlign: "center", opacity: 0.5, marginTop: "40px" }}>
+            No expenses yet. Add one to get started!
+          </p>
+        )}
+      </div>
+
+      <style>{`
+        :root {
+          --color-surface: #1e1e2e;
+          --color-text: #e0e0e0;
+          --color-accent: #6366f1;
+          --color-accent-rgb: 99, 102, 241;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          padding: 0;
+        }
+
+        input::placeholder {
+          color: var(--color-text);
+          opacity: 0.5;
+        }
+
+        input:focus {
+          outline: none;
+          box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.3);
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default App;
+```
