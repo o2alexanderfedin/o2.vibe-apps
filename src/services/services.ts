@@ -11,6 +11,9 @@
 // API-key getter are injected, because those are the things tests must replace.
 
 import { defaultTransport, type TransportFn } from "../host/modelClient";
+import { realClock } from "../host/clock";
+import { TokenBucket } from "../host/tokenBucket";
+import { createResilientTransport } from "../host/resilientTransport";
 import { STORAGE_KEY_API } from "../lib/storage";
 import type { Registry } from "./registry";
 import { realRegistry } from "./realRegistry";
@@ -41,13 +44,35 @@ export const localStorageApiKeyGetter: ApiKeyGetter = () => {
 };
 
 /**
- * Build the production services bundle: real fetch transport, real IndexedDB
- * registry, and the localStorage key getter. Behavior is identical to the
- * pre-DI implementation — this is wiring only, no behavior change.
+ * Build the production model transport: the real fetch transport wrapped with
+ * the shared token-bucket limiter and 429 backoff (Phase 6, RESIL-04).
+ *
+ * The limiter is constructed HERE, once, so a single instance governs the whole
+ * session at the single egress chokepoint — apps, widgets, and tweaks all share
+ * the same rate/concurrency budget (the place Phase 7's cost cap will also hang).
+ * Defaults are conservative for the direct-browser path: a small burst, a slow
+ * sustained rate, and ≤2 simultaneous in-flight requests (matching the widget
+ * pre-warm concurrency cap). The real wall clock is injected for backoff/refill.
+ */
+export function createModelTransport(inner: TransportFn = defaultTransport): TransportFn {
+  const limiter = new TokenBucket({
+    capacity: 4,
+    refillPerSec: 1,
+    maxConcurrent: 2,
+    clock: realClock,
+  });
+  return createResilientTransport({ inner, limiter, clock: realClock });
+}
+
+/**
+ * Build the production services bundle: the resilient model transport, the real
+ * IndexedDB registry, and the localStorage key getter. The transport now carries
+ * the limiter + 429 backoff (Phase 6); the success path is unchanged, so the open
+ * flow behaves identically on a healthy connection.
  */
 export function createServices(): Services {
   return {
-    transport: defaultTransport,
+    transport: createModelTransport(),
     registry: realRegistry,
     getApiKey: localStorageApiKeyGetter,
   };

@@ -14,8 +14,10 @@ import { createElement, type ComponentType } from "react";
 import { APP_REGISTRY } from "../data/appRegistry";
 import { AppShell } from "./AppShell";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { KeyDialog } from "./KeyDialog";
 import { resolveOpenApp } from "../intent/resolver";
 import { resolveComponent, evictLiveComponent } from "../execution/loader";
+import { ProduceAuthError } from "../execution/producer";
 import { useServices } from "../services/ServicesProvider";
 import { routeModification } from "../intent/routeModification";
 import { cacheKey } from "../registry/cacheKey";
@@ -41,12 +43,16 @@ interface OpenedApp {
   // Component is present on a successful open; null when the open failed and a
   // neutral fallback should render in its place instead of vanishing silently.
   Component: ComponentType | null;
+  // True when the open failed specifically because the account connection is
+  // missing/invalid (401) — the fallback then offers the inline reconfigure path
+  // (RESIL-03) instead of the generic retry.
+  needsAuth?: boolean;
 }
 
-// Neutral, hygiene-safe fallback shown when an app fails to open. No
-// mechanic-revealing language and no banned tokens — it just tells the user the
-// app didn't load and offers a retry, which also makes failures visible/debuggable
-// instead of the app silently disappearing.
+// Neutral, hygiene-safe fallback shown when an app fails to open for a generic
+// reason. No mechanic-revealing language and no banned tokens — it just tells the
+// user the app didn't load and offers a retry, which also makes failures
+// visible/debuggable instead of the app silently disappearing.
 function FailedAppContent({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="app-failed-fallback" role="alert">
@@ -64,6 +70,28 @@ function FailedAppContent({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+// Inline reconfigure prompt shown when an open failed for an auth reason (401 /
+// missing key, RESIL-03). It keeps the storefront browsable (it renders INSIDE
+// the failed app's shell, the rest of the page is untouched) and offers a single
+// neutral "Connect your account" action that opens the existing KeyDialog. Copy
+// is neutral and never mentions the underlying mechanic.
+function NeedsAuthContent({ onConnect }: { onConnect: () => void }) {
+  return (
+    <div className="app-failed-fallback" role="alert">
+      <p className="app-failed-fallback__body">
+        Connect your account to open this app.
+      </p>
+      <button
+        type="button"
+        className="app-failed-fallback__retry"
+        onClick={onConnect}
+      >
+        Connect your account
+      </button>
+    </div>
+  );
+}
+
 // Instance counter — monotonically increasing per session so ids are unique.
 let instanceCounter = 0;
 
@@ -76,6 +104,10 @@ export function Marketplace() {
   const services = useServices();
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openedApps, setOpenedApps] = useState<OpenedApp[]>([]);
+  // Owns the inline reconfigure dialog (RESIL-03): the storefront stays mounted
+  // and browsable while the KeyDialog is open over it, so a 401 never crashes
+  // the page or blocks the rest of the storefront.
+  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A ref mirror of openedApps so handleModify can read the current list (e.g.
   // the target's appType/Component) without re-creating on every list change.
@@ -107,11 +139,15 @@ export function Marketplace() {
         // (the user saw nothing), surface a neutral fallback region so the
         // failure is visible and debuggable. Diagnostics still go to the
         // gated logger; the user-facing copy stays mechanic-free.
+        //
+        // A ProduceAuthError (missing/invalid key, 401) routes to the inline
+        // reconfigure prompt instead of the generic retry (RESIL-03).
+        const needsAuth = err instanceof ProduceAuthError;
         logger.error("Failed to open " + appType + ": " + String(err));
         const instanceId = nextInstanceId(appType);
         setOpenedApps((prev) => [
           ...prev,
-          { instanceId, appType, displayName, Component: null },
+          { instanceId, appType, displayName, Component: null, needsAuth },
         ]);
       } finally {
         timeoutRef.current = setTimeout(() => {
@@ -245,6 +281,8 @@ export function Marketplace() {
             >
               {app.Component !== null ? (
                 createElement(app.Component)
+              ) : app.needsAuth ? (
+                <NeedsAuthContent onConnect={() => setKeyDialogOpen(true)} />
               ) : (
                 <FailedAppContent
                   onRetry={() => {
@@ -257,6 +295,11 @@ export function Marketplace() {
           </ErrorBoundary>
         ))}
       </div>
+
+      {/* Inline key reconfiguration (RESIL-03): opened from a 401 fallback. The
+          storefront stays mounted underneath, so the page never crashes and the
+          rest of the storefront remains browsable. */}
+      {keyDialogOpen && <KeyDialog onClose={() => setKeyDialogOpen(false)} />}
     </>
   );
 }

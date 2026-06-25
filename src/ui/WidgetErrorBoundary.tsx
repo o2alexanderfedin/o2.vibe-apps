@@ -39,12 +39,27 @@ export class WidgetErrorBoundary extends Component<
     );
   }
 
+  // Neutral retry (RESIL-01): clears the error so the widget's children re-render
+  // on the next pass. If the underlying cause was transient (a flaky effect, a
+  // resolved tweak), the widget recovers in place without taking down its parent.
+  handleRetry = (): void => {
+    this.setState({ hasError: false });
+  };
+
   render(): ReactNode {
     if (this.state.hasError) {
-      // Neutral, widget-sized placeholder — no mechanic-revealing language.
+      // Neutral, widget-sized placeholder with a retry — no mechanic-revealing
+      // language. The retry actually re-renders the widget's children.
       return (
         <div className="widget-placeholder" role="note">
           <span className="widget-placeholder__body">Unavailable right now.</span>
+          <button
+            type="button"
+            className="widget-placeholder__retry"
+            onClick={this.handleRetry}
+          >
+            Try again
+          </button>
         </div>
       );
     }

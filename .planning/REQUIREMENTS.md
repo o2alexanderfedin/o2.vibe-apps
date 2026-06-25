@@ -51,10 +51,10 @@ Requirements for the initial release. Scope = the blueprint MVP checklist plus t
 
 ### Resilience & Graceful Degradation (RESIL)
 
-- [ ] **RESIL-01**: Every app and every widget is wrapped in an error boundary that catches render errors and offers a neutral retry without taking down the rest of the page
-- [ ] **RESIL-02**: A global async backstop (`window.onerror` + `unhandledrejection` + React root `onUncaughtError`) routes uncaught async/event-handler errors to neutral handling so no revealing message ever surfaces
-- [ ] **RESIL-03**: A missing or invalid API key (401) degrades to an inline key-reconfiguration prompt, with neutral copy and no crash
-- [ ] **RESIL-04**: Rate limiting (429) is handled with exponential backoff + jitter honoring `retry-after`, shared via a token bucket at the single egress point, then a neutral user-visible error if exhausted
+- [x] **RESIL-01** (Phase 6, Complete): Every app and every widget is wrapped in an error boundary that catches render errors and offers a neutral retry without taking down the rest of the page
+- [x] **RESIL-02** (Phase 6, Complete): A global async backstop (`window.onerror` + `unhandledrejection` + React root `onUncaughtError`) routes uncaught async/event-handler errors to neutral handling so no revealing message ever surfaces
+- [x] **RESIL-03** (Phase 6, Complete): A missing or invalid API key (401) degrades to an inline key-reconfiguration prompt, with neutral copy and no crash
+- [x] **RESIL-04** (Phase 6, Complete): Rate limiting (429) is handled with exponential backoff + jitter honoring `retry-after`, shared via a token bucket at the single egress point, then a neutral user-visible error if exhausted
 - [ ] **RESIL-05**: A cost guardrail soft-caps produce calls after a configured threshold of cache misses per time window, surfaced with neutral messaging
 - [ ] **RESIL-06**: Storage pressure is handled by `navigator.storage.persist()` at init plus LRU eviction (by `useCount`/`updatedAt`) before quota is exceeded
 
@@ -149,10 +149,10 @@ Each v1 requirement maps to exactly one owning phase. Cross-cutting HYGIENE/SEC 
 | MOD-02 | Phase 5 — Contextual Modification | Complete |
 | MOD-03 | Phase 5 — Contextual Modification | Complete |
 | MOD-04 | Phase 5 — Contextual Modification | Complete |
-| RESIL-01 | Phase 6 — API Error Degradation | Pending |
-| RESIL-02 | Phase 6 — API Error Degradation | Pending |
-| RESIL-03 | Phase 6 — API Error Degradation | Pending |
-| RESIL-04 | Phase 6 — API Error Degradation | Pending |
+| RESIL-01 | Phase 6 — API Error Degradation | Complete |
+| RESIL-02 | Phase 6 — API Error Degradation | Complete |
+| RESIL-03 | Phase 6 — API Error Degradation | Complete |
+| RESIL-04 | Phase 6 — API Error Degradation | Complete |
 | RESIL-05 | Phase 7 — Storage & Cost Guardrails | Pending |
 | RESIL-06 | Phase 7 — Storage & Cost Guardrails | Pending |
 | HANDLER-01 | Phase 8 — Backend-Style Handlers | Pending |

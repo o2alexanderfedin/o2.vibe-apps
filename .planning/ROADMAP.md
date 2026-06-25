@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Cache-Miss Generation (Core Value)** - An app that doesn't exist yet is produced on demand, cached, and rendered — instant on hit, seamless on miss
 - [x] **Phase 4: Widget Composition** - Apps render isolated sub-widgets via transitive pre-warm and synchronous `useWidget`
 - [x] **Phase 5: Contextual Modification** - The shared `⋮` prompt lets users remove, clone, and tweak apps and widgets in place
-- [ ] **Phase 6: API Error Degradation** - Missing/invalid key, rate limiting, and uncaught async errors degrade gracefully with neutral copy
+- [x] **Phase 6: API Error Degradation** - Missing/invalid key, rate limiting, and uncaught async errors degrade gracefully with neutral copy
 - [ ] **Phase 7: Storage & Cost Guardrails** - Storage pressure, eviction, and runaway produce-cost are bounded with neutral messaging
 - [ ] **Phase 8: Backend-Style Handlers** - Apps and widgets transparently resolve or produce cached data handlers on first need
 
@@ -113,7 +113,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 06-01: TBD during planning
+- [x] 06-01 — API Error Degradation: typed `ModelHttpError`/`parseRetryAfter` transport refactor, `TokenBucket` limiter + exponential-backoff-with-jitter `createResilientTransport` (injected `Clock`, honors `retry-after`, neutral `ModelUnavailableError` on exhaustion), `installGlobalErrorBackstop` + React `onUncaughtError` async backstop, `ProduceAuthError` → inline KeyDialog reconfigure path, `WidgetErrorBoundary` retry — COMPLETED 2026-06-24 (worktree feature/phase-6-api-error-degradation)
 
 ### Phase 7: Storage & Cost Guardrails
 **Goal**: Heavy and returning users keep a working registry and bounded cost — storage pressure is managed before quota is hit and a soft cap prevents runaway produce calls — all surfaced with neutral messaging.
@@ -154,6 +154,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Cache-Miss Generation (Core Value) | Complete | Complete | 2026-06-24 |
 | 4. Widget Composition | 1/1 | Complete | 2026-06-24 |
 | 5. Contextual Modification | 1/1 | Complete | 2026-06-24 |
-| 6. API Error Degradation | 0/TBD | Not started | - |
+| 6. API Error Degradation | 1/1 | Complete | 2026-06-24 |
 | 7. Storage & Cost Guardrails | 0/TBD | Not started | - |
 | 8. Backend-Style Handlers | 0/TBD | Not started | - |
