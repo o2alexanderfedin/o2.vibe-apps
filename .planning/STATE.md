@@ -21,20 +21,26 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-24)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 05 — Contextual Modification (next)
+**Current focus:** Phase 06 — API Error Degradation (next)
 
 ## Current Position
 
-Phase: 04 (Widget Composition) — COMPLETE
-Status: Phases 1–4 complete. Phase 4 delivered the `@widget` parser, transitive
-pre-warm (cycle guard + concurrency cap ≤2), synchronous `useWidget`, WidgetShell
-+ per-widget ErrorBoundary, and a DRY app/widget producer. All WIDGET-01..05
-requirements Complete. tsc 0 errors, build OK (no .map in dist), 164/164 tests
-pass (127 baseline + 37 new), hygiene gate green.
-Last activity: 2026-06-24 -- Phase 4 (Widget Composition) completed on branch
-feature/phase-4-widget-composition
+Phase: 05 (Contextual Modification) — COMPLETE
+Status: Phases 1–5 complete. Phase 5 delivered the SHARED `ContextualPrompt`
+popover (MOD-01) wired into both AppShell and WidgetShell `⋮`, a client-side
+prompt router (MOD-02: remove|delete|close → remove; clone|duplicate|copy →
+clone; else tweak), in-place app tweak (MOD-03 — new cache key from
+type+instruction, resolve via the existing `instantiateWithWidgets` path so a
+changed `@widget` set re-pre-warms, replace the same `openedApps` entry's
+Component, neutral fallback on failure), clone/remove with NO model call (MOD-04),
+and a stateful `wrapWidget` so a widget `⋮` tweak re-resolves THAT widget in place
+(independent of its parent app). The producer was generalized DRY with an optional
+`userPrompt` woven into the initial/repair/length prompts. tsc 0 errors, build OK
+(no .map in dist), 200/200 tests pass (164 baseline + 36 new), hygiene gate green.
+Last activity: 2026-06-24 -- Phase 5 (Contextual Modification) completed on branch
+feature/phase-5-contextual-modification
 
-Progress: [█████░░░░░] 50% (4 of 8 phases)
+Progress: [██████░░░░] 62.5% (5 of 8 phases)
 
 ## Performance Metrics
 

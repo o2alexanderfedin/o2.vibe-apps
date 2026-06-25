@@ -68,14 +68,23 @@ async function instantiateWithWidgets(
  *
  * @param instanceId  Unique id for this mounted instance (e.g. "counter-1").
  * @param appType     App type id from the storefront (e.g. "counter").
- * @param appCacheKey Opaque SHA-256 cache key from the intent resolver.
+ * @param appCacheKey Opaque SHA-256 cache key from the intent resolver. For a
+ *                    tweak (MOD-03) this is derived from (type + instruction) so
+ *                    the tweaked variant caches separately from the original.
  * @param services    Injected dependency bundle (registry, transport, key getter).
+ * @param userPrompt  Optional free-form mutation instruction (Phase 5 tweak,
+ *                    MOD-03). When set on a FULL miss for an unseeded type, it is
+ *                    woven into the produce prompt so the produced app reflects
+ *                    the request. The resolve/cache machinery is otherwise
+ *                    identical to a fresh open (DRY) — a tweaked app that hits the
+ *                    cache (same key) reuses the cached variant with no model call.
  */
 export async function resolveComponent(
   instanceId: string,
   appType: string,
   appCacheKey: string,
   services: Services,
+  userPrompt?: string,
 ): Promise<ComponentType> {
   // Tier 1: live component already instantiated for this instance.
   const live = liveComponents.get(instanceId);
@@ -115,8 +124,10 @@ export async function resolveComponent(
     return Component;
   }
 
-  // Full miss — resolve source.
-  const seededSource = SEEDED_SOURCES.get(appType);
+  // Full miss — resolve source. A tweak (userPrompt present) must reflect the
+  // user's instruction, so it ALWAYS produces via the model even for a seeded
+  // type — the seed is the un-tweaked baseline and ignores the instruction.
+  const seededSource = userPrompt ? undefined : SEEDED_SOURCES.get(appType);
 
   let source: string;
   let transpiledJS: string;
@@ -127,12 +138,16 @@ export async function resolveComponent(
     source = seededSource;
     transpiledJS = transpile(source, { filename: appType + ".tsx" });
   } else {
-    // Unseeded path: on-demand produce via model (GEN-01..03, GEN-05).
+    // Unseeded path: on-demand produce via model (GEN-01..03, GEN-05). On a
+    // tweak (MOD-03) the user's instruction is woven into the produce prompt so
+    // the produced app reflects the request — same produce loop otherwise (DRY).
     logger.info("Loader: unseeded type — requesting component for " + appType);
     const produced = await produceComponent(
       appType,
       services.transport,
       services.getApiKey,
+      "app",
+      userPrompt,
     );
     source = produced.source;
     transpiledJS = produced.transpiledJS;

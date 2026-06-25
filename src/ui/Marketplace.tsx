@@ -17,6 +17,8 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { resolveOpenApp } from "../intent/resolver";
 import { resolveComponent, evictLiveComponent } from "../execution/loader";
 import { useServices } from "../services/ServicesProvider";
+import { routeModification } from "../intent/routeModification";
+import { cacheKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
 
 // Map the neutral icon key (data layer) to a concrete glyph (render layer)
@@ -75,6 +77,10 @@ export function Marketplace() {
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openedApps, setOpenedApps] = useState<OpenedApp[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A ref mirror of openedApps so handleModify can read the current list (e.g.
+  // the target's appType/Component) without re-creating on every list change.
+  const openedAppsRef = useRef<OpenedApp[]>(openedApps);
+  openedAppsRef.current = openedApps;
 
   const handleOpen = useCallback(
     async (appType: string, displayName: string) => {
@@ -122,6 +128,75 @@ export function Marketplace() {
     setOpenedApps((prev) => prev.filter((a) => a.instanceId !== instanceId));
   }, []);
 
+  // Contextual modification (Phase 5, MOD-02/03/04). A free-form instruction
+  // from an app's `⋮` prompt is routed CLIENT-SIDE:
+  //   - remove → drop the instance (same teardown as the close button) — no model call.
+  //   - clone  → add a NEW instance reusing the SAME resolved component — no model call.
+  //   - tweak  → derive a NEW cache key from (type + instruction), resolve it
+  //              (cache hit or produce with the instruction woven in), and REPLACE
+  //              the same entry's Component IN PLACE so React re-renders this
+  //              AppShell. The resolve runs through instantiateWithWidgets, so a
+  //              tweak that changes the `@widget` set re-pre-warms widgets.
+  const handleModify = useCallback(
+    async (instanceId: string, instruction: string) => {
+      const target = openedAppsRef.current.find(
+        (a) => a.instanceId === instanceId,
+      );
+      if (!target) return;
+      const routed = routeModification(instruction);
+
+      if (routed.kind === "remove") {
+        handleClose(instanceId);
+        return;
+      }
+
+      if (routed.kind === "clone") {
+        // Reuse the SAME resolved component/record under a new instance id — no
+        // model call. (A failed-to-open target has a null Component; the clone
+        // carries the same null and renders the same neutral fallback.)
+        const cloneId = nextInstanceId(target.appType);
+        setOpenedApps((prev) => [
+          ...prev,
+          {
+            instanceId: cloneId,
+            appType: target.appType,
+            displayName: target.displayName,
+            Component: target.Component,
+          },
+        ]);
+        return;
+      }
+
+      // Tweak — re-resolve and replace this entry's Component in place.
+      logger.info("Tweaking " + target.appType);
+      try {
+        const tweakKey = await cacheKey(target.appType + "\n" + routed.instruction);
+        const Component = await resolveComponent(
+          instanceId + "-tweak-" + tweakKey.slice(0, 8),
+          target.appType,
+          tweakKey,
+          services,
+          routed.instruction,
+        );
+        setOpenedApps((prev) =>
+          prev.map((a) =>
+            a.instanceId === instanceId ? { ...a, Component } : a,
+          ),
+        );
+      } catch (err) {
+        // A tweak that fails to resolve surfaces the existing neutral fallback
+        // (Component: null) rather than vanishing the app or showing a mechanic.
+        logger.error("Failed to tweak " + target.appType + ": " + String(err));
+        setOpenedApps((prev) =>
+          prev.map((a) =>
+            a.instanceId === instanceId ? { ...a, Component: null } : a,
+          ),
+        );
+      }
+    },
+    [services, handleClose],
+  );
+
   // Clear any pending reset timer on unmount.
   useEffect(() => {
     return () => {
@@ -164,6 +239,9 @@ export function Marketplace() {
             <AppShell
               displayName={app.displayName}
               onClose={() => handleClose(app.instanceId)}
+              onModify={(instruction) =>
+                void handleModify(app.instanceId, instruction)
+              }
             >
               {app.Component !== null ? (
                 createElement(app.Component)

@@ -105,6 +105,75 @@ async function resolveWidget(
 }
 
 /**
+ * Re-resolve a SINGLE widget under a free-form tweak instruction (Phase 5,
+ * MOD-03 — widget path). Unlike pre-warm, a tweak ALWAYS produces a fresh
+ * component (the instruction is woven into the produce prompt via `userPrompt`),
+ * keyed by a NEW cache key derived from (type + instruction) so the registry
+ * caches the tweaked variant separately from the original. The result is a RAW
+ * (unwrapped) component the caller swaps into the widget's existing WidgetShell —
+ * so the tweak replaces the widget IN PLACE, independent of its parent app.
+ *
+ * Its own nested `@widget` declarations resolve against an empty map for now
+ * (KISS — a tweaked widget re-composing sub-widgets is deferred); a nested
+ * `useWidget` returns null, which the widget renders around exactly as in a
+ * failed-to-resolve sibling. Returns null on any produce/instantiate failure so
+ * the caller can keep showing the current widget instead of blanking it.
+ *
+ * @param widgetType   The widget type id being tweaked (e.g. "line-chart").
+ * @param instruction  The user's free-form mutation instruction.
+ * @param services     Injected dependency bundle (registry, transport, key getter).
+ */
+export async function resolveWidgetTweak(
+  widgetType: string,
+  instruction: string,
+  services: Services,
+): Promise<ComponentType | null> {
+  // New cache key from (type + instruction) — the tweaked variant is cached
+  // separately, so re-applying the same tweak is an instant registry hit.
+  const key = await cacheKey(widgetType + "\n" + instruction);
+
+  let source: string;
+  let transpiledJS: string;
+  try {
+    const stored = await services.registry.get("widgets", key);
+    const storedSource = stored?.["source"];
+    const storedJS = stored?.["transpiledJS"];
+    if (typeof storedSource === "string" && typeof storedJS === "string") {
+      logger.info("Widget tweak: registry hit for " + widgetType);
+      source = storedSource;
+      transpiledJS = storedJS;
+    } else {
+      logger.info("Widget tweak: requesting tweaked widget for " + widgetType);
+      const produced = await produceComponent(
+        widgetType,
+        services.transport,
+        services.getApiKey,
+        "widget",
+        instruction,
+      );
+      source = produced.source;
+      transpiledJS = produced.transpiledJS;
+      await services.registry.put(
+        "widgets",
+        { cacheKey: key, type: widgetType, source, transpiledJS },
+        key,
+      );
+    }
+  } catch (err) {
+    logger.error("Widget tweak: could not resolve " + widgetType + ": " + String(err));
+    return null;
+  }
+
+  try {
+    // Instantiate against an empty map (nested-widget composition deferred).
+    return instantiate(transpiledJS, makeUseWidget(new Map()));
+  } catch (err) {
+    logger.error("Widget tweak: could not instantiate " + widgetType + ": " + String(err));
+    return null;
+  }
+}
+
+/**
  * Transitively pre-warm every widget declared by `rootSource` (and nested
  * declarations), returning a map of widget type → resolved ComponentType.
  *
@@ -158,7 +227,9 @@ export async function prewarmWidgets(
     // stays absent from the map and useWidget returns null for it (WIDGET-05).
     try {
       const raw = instantiate(resolved.transpiledJS, makeUseWidget(components));
-      components.set(widgetType, wrapWidget(widgetType, raw));
+      // Pass `services` so the wrapped widget's `⋮` can re-resolve THAT widget
+      // in place on a tweak (MOD-03), independent of the parent app.
+      components.set(widgetType, wrapWidget(widgetType, raw, services));
     } catch (err) {
       logger.error("Widget pre-warm: could not instantiate " + widgetType + ": " + String(err));
     }

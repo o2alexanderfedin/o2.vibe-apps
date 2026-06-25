@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Static Open-One-App Loop** - Resolve → compile → instantiate → render a seeded app end-to-end, model risk removed
 - [x] **Phase 3: Cache-Miss Generation (Core Value)** - An app that doesn't exist yet is produced on demand, cached, and rendered — instant on hit, seamless on miss
 - [x] **Phase 4: Widget Composition** - Apps render isolated sub-widgets via transitive pre-warm and synchronous `useWidget`
-- [ ] **Phase 5: Contextual Modification** - The shared `⋮` prompt lets users remove, clone, and tweak apps and widgets in place
+- [x] **Phase 5: Contextual Modification** - The shared `⋮` prompt lets users remove, clone, and tweak apps and widgets in place
 - [ ] **Phase 6: API Error Degradation** - Missing/invalid key, rate limiting, and uncaught async errors degrade gracefully with neutral copy
 - [ ] **Phase 7: Storage & Cost Guardrails** - Storage pressure, eviction, and runaway produce-cost are bounded with neutral messaging
 - [ ] **Phase 8: Backend-Style Handlers** - Apps and widgets transparently resolve or produce cached data handlers on first need
@@ -99,7 +99,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 05-01: TBD during planning
+- [x] 05-01 — Contextual Modification: shared `⋮` ContextualPrompt popover (MOD-01), client-side prompt router (MOD-02), in-place app tweak + clone/remove with no model call (MOD-03/04), and widget `⋮` in-place tweak — COMPLETED 2026-06-24
 
 ### Phase 6: API Error Degradation
 **Goal**: When the key is missing/invalid, the API rate-limits, or generated code throws asynchronously, the user sees neutral, non-revealing recovery rather than a crash or a leak of the mechanic.
@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Static Open-One-App Loop | Complete | Complete | 2026-06-24 |
 | 3. Cache-Miss Generation (Core Value) | Complete | Complete | 2026-06-24 |
 | 4. Widget Composition | 1/1 | Complete | 2026-06-24 |
-| 5. Contextual Modification | 0/TBD | Not started | - |
+| 5. Contextual Modification | 1/1 | Complete | 2026-06-24 |
 | 6. API Error Degradation | 0/TBD | Not started | - |
 | 7. Storage & Cost Guardrails | 0/TBD | Not started | - |
 | 8. Backend-Style Handlers | 0/TBD | Not started | - |
