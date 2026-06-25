@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Plan 01-01 completed (Scaffold + Walking Skeleton)
+stopped_at: Phase 6 (API Error Degradation) completed
 last_updated: "2026-06-24T22:51:01.347Z"
-last_activity: 2026-06-24 -- Plan 01-01 (Scaffold + Walking Skeleton) completed
+last_activity: 2026-06-24 -- Phase 6 (API Error Degradation) completed
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 6
   total_plans: 4
   completed_plans: 3
   percent: 75
@@ -21,26 +21,34 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-24)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 06 — API Error Degradation (next)
+**Current focus:** Phase 07 — Storage & Cost Guardrails (next)
 
 ## Current Position
 
-Phase: 05 (Contextual Modification) — COMPLETE
-Status: Phases 1–5 complete. Phase 5 delivered the SHARED `ContextualPrompt`
-popover (MOD-01) wired into both AppShell and WidgetShell `⋮`, a client-side
-prompt router (MOD-02: remove|delete|close → remove; clone|duplicate|copy →
-clone; else tweak), in-place app tweak (MOD-03 — new cache key from
-type+instruction, resolve via the existing `instantiateWithWidgets` path so a
-changed `@widget` set re-pre-warms, replace the same `openedApps` entry's
-Component, neutral fallback on failure), clone/remove with NO model call (MOD-04),
-and a stateful `wrapWidget` so a widget `⋮` tweak re-resolves THAT widget in place
-(independent of its parent app). The producer was generalized DRY with an optional
-`userPrompt` woven into the initial/repair/length prompts. tsc 0 errors, build OK
-(no .map in dist), 200/200 tests pass (164 baseline + 36 new), hygiene gate green.
-Last activity: 2026-06-24 -- Phase 5 (Contextual Modification) completed on branch
-feature/phase-5-contextual-modification
+Phase: 06 (API Error Degradation) — COMPLETE
+Status: Phases 1–6 complete. Phase 6 hardened the model/API error surface with
+neutral degradation (RESIL-01..04). The transport was refactored to throw a TYPED
+`ModelHttpError { status, retryAfter?, body? }` on `!res.ok` (with `parseRetryAfter`
+for numeric and HTTP-date forms) so callers branch on 401/429/500 instead of
+re-parsing prose (Phase 5 flag resolved). A shared `TokenBucket` limiter (injected
+`Clock`, lazy refill, concurrency cap) sits at the single egress, wrapped by
+`createResilientTransport`: a 429 triggers exponential backoff + full jitter that
+HONORS `retry-after`, then surfaces a neutral `ModelUnavailableError` on
+exhaustion; non-429 errors propagate unchanged. The `Clock` (now/sleep) and the
+jitter `rng` are injected so the whole backoff schedule is verified INSTANTLY with
+zero real waits (a `createStubClock` advances virtual time only and records every
+slept delay). A pure `installGlobalErrorBackstop` + React `onUncaughtError` route
+uncaught async/event-handler errors and unhandled rejections to the gated logger
+ONLY (name-only summaries, preventDefault suppresses the console dump). A 401 (or
+missing key) now raises `ProduceAuthError` → the Marketplace renders an inline
+"Connect your account" prompt that opens the existing KeyDialog with the storefront
+still browsable (no crash). `WidgetErrorBoundary` gained a neutral retry (RESIL-01).
+tsc 0 errors, build OK (no .map in dist), 253/253 tests pass (200 baseline + 53 new),
+hygiene gate green.
+Last activity: 2026-06-24 -- Phase 6 (API Error Degradation) completed on branch
+feature/phase-6-api-error-degradation
 
-Progress: [██████░░░░] 62.5% (5 of 8 phases)
+Progress: [███████░░░] 75% (6 of 8 phases)
 
 ## Performance Metrics
 
@@ -89,6 +97,7 @@ None yet.
 [Issues that affect future work]
 
 - [Phase 4 — RESOLVED]: Static widgets only (declared via `@widget`); no dynamic/undeclared widgets. `useWidget` is fully synchronous (a pure `Map.get`). Decided + implemented in Phase 4.
+- [Phase 7 — egress chokepoint ready]: Phase 6 established the SINGLE egress chokepoint at `src/services/services.ts` `createModelTransport()`, where the real fetch transport is wrapped in a `TokenBucket` limiter + `createResilientTransport` (429 backoff). Phase 7's cost soft-cap should hang HERE — count produce calls / cache misses inside (or around) this wrapper, since EVERY model request (apps, widgets, tweaks) funnels through it. The injected `Clock` seam (`src/host/clock.ts`) is also reusable for the cost-cap's per-window timing in tests (stub clock, zero real waits).
 - [Phase 7]: Concrete cost-guardrail threshold (N cache misses per time window) must be decided before shipping.
 - [Phase 8]: Confirm the exact allowed-globals denylist for handler scope; it may differ from the app/widget denylist (handlers need local compute, no network/storage).
 

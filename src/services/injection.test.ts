@@ -15,9 +15,14 @@ import {
   cannedTransport,
   unusedTransport,
 } from "./testServices";
-import { createServices } from "./services";
+import { createServices, createModelTransport } from "./services";
 import { realRegistry } from "./realRegistry";
-import { defaultTransport, type TransportFn, type MessagesResponse } from "../host/modelClient";
+import {
+  defaultTransport,
+  ModelHttpError,
+  type TransportFn,
+  type MessagesResponse,
+} from "../host/modelClient";
 import { rawFixture, codeFixture } from "../test/fixtures/load";
 
 const withKey = () => "sk-test-key";
@@ -170,9 +175,12 @@ describe("DI — no real fetch / localStorage / indexedDB touched in unit scope"
 // ---------------------------------------------------------------------------
 
 describe("DI — createServices() wires the real implementations", () => {
-  it("returns the real transport and registry singletons plus a key getter", () => {
+  it("returns a transport function, the real registry singleton, and a key getter", () => {
     const services = createServices();
-    expect(services.transport).toBe(defaultTransport);
+    // Phase 6: production wraps the real fetch transport in the resilient
+    // limiter + backoff, so it is a function but no longer the BARE default.
+    expect(typeof services.transport).toBe("function");
+    expect(services.transport).not.toBe(defaultTransport);
     expect(services.registry).toBe(realRegistry);
     expect(typeof services.getApiKey).toBe("function");
   });
@@ -181,5 +189,32 @@ describe("DI — createServices() wires the real implementations", () => {
     const test = createTestServices({ transport: cannedTransport("x") });
     expect(test.transport).not.toBe(defaultTransport);
     expect(test.registry).not.toBe(realRegistry);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createModelTransport wraps an inner transport with the shared limiter + 429
+// backoff (Phase 6, RESIL-04). Proven by injecting a canned inner that 429s once
+// then succeeds — the wrapper recovers transparently with no real network.
+// ---------------------------------------------------------------------------
+
+describe("DI — createModelTransport wraps the inner with limiter + backoff", () => {
+  it("retries a transient 429 from the injected inner transport and succeeds", async () => {
+    let calls = 0;
+    const inner: TransportFn = () => {
+      calls += 1;
+      if (calls === 1) {
+        return Promise.reject(new ModelHttpError(429, 0, "rate"));
+      }
+      return Promise.resolve<MessagesResponse>({
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+      });
+    };
+    // retry-after: 0 → the real-clock sleep is ~0ms, so this stays fast.
+    const transport = createModelTransport(inner);
+    const res = await transport("u", {});
+    expect(res.content[0]?.text).toBe("ok");
+    expect(calls).toBe(2);
   });
 });

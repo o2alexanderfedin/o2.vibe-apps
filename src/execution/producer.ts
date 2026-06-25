@@ -23,7 +23,12 @@
 // getter without touching the network or the browser.
 
 import { transpile, TranspileError } from "./transpile";
-import { callModel, isTruncated, type TransportFn } from "../host/modelClient";
+import {
+  callModel,
+  isTruncated,
+  ModelHttpError,
+  type TransportFn,
+} from "../host/modelClient";
 import type { ApiKeyGetter } from "../services/services";
 import { logger } from "../lib/logger";
 
@@ -187,6 +192,20 @@ export class ProduceError extends Error {
 }
 
 /**
+ * A produce failure caused by a missing or invalid access key (Phase 6,
+ * RESIL-03). Distinguished from a generic ProduceError so the UI can route to
+ * the INLINE key-reconfiguration prompt ("Connect your account") instead of the
+ * generic "couldn't load" fallback. Raised both when no key is present and when
+ * the API rejects the key with a 401/403. The copy is neutral and mechanic-free.
+ */
+export class ProduceAuthError extends ProduceError {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause);
+    this.name = "ProduceAuthError";
+  }
+}
+
+/**
  * On-demand produce: prompt the model, extract TSX, transpile with self-heal.
  *
  * Returns the transpiled JS string (not the TSX source) so callers can
@@ -215,7 +234,8 @@ export async function produceComponent(
 ): Promise<{ source: string; transpiledJS: string }> {
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new ProduceError(
+    // No key at all → route to the inline reconfigure prompt (RESIL-03).
+    throw new ProduceAuthError(
       "No access key available. Connect your account to open this app.",
     );
   }
@@ -234,6 +254,15 @@ export async function produceComponent(
       responseText = result.text;
       stopReason = result.stopReason;
     } catch (err) {
+      // A 401/403 means the stored key is invalid/expired — route to the inline
+      // reconfigure prompt (RESIL-03) rather than the generic fallback. The key
+      // is NEVER echoed into the message (HYGIENE / D-13).
+      if (err instanceof ModelHttpError && err.isAuth) {
+        throw new ProduceAuthError(
+          "Your account connection needs attention. Connect your account to open this app.",
+          err,
+        );
+      }
       throw new ProduceError(
         `Model request failed on attempt ${attempt}: ${String(err)}`,
         err,

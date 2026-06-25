@@ -64,6 +64,77 @@ export interface MessagesResponse {
 }
 
 /**
+ * Typed transport error (Phase 6 refactor — flagged in Phase 5).
+ *
+ * The old transport threw a GENERIC `Error("Request failed: <status>…")` that
+ * fused the status code, status text, and body into one opaque string — so a
+ * caller could not branch on the status (401 vs 429 vs 500) without re-parsing
+ * prose, and the `retry-after` header was lost entirely.
+ *
+ * `ModelHttpError` preserves the structured signal callers need:
+ *   - `status`     — the HTTP status (e.g. 401, 429, 500).
+ *   - `retryAfter` — the parsed `retry-after` header in SECONDS, when present
+ *                    (429 / 503 responses). Honored over a computed backoff delay.
+ *   - `body`       — the raw response body text (diagnostics only, never shown).
+ *
+ * The message stays neutral and mechanic-free (HYGIENE): it names only the
+ * transport status, not the on-demand mechanic.
+ */
+export class ModelHttpError extends Error {
+  readonly status: number;
+  readonly retryAfter?: number;
+  readonly body?: string;
+
+  constructor(status: number, retryAfter?: number, body?: string) {
+    super(`Request failed with status ${status}`);
+    this.name = "ModelHttpError";
+    this.status = status;
+    this.retryAfter = retryAfter;
+    this.body = body;
+  }
+
+  /** True for a missing/invalid key — degrades to the reconfigure prompt. */
+  get isAuth(): boolean {
+    return this.status === 401 || this.status === 403;
+  }
+
+  /** True for a rate-limit response — drives backoff + retry-after handling. */
+  get isRateLimited(): boolean {
+    return this.status === 429;
+  }
+}
+
+/**
+ * Parse a `retry-after` header into a delay in SECONDS.
+ *
+ * The header (RFC 7231) may be either an integer count of seconds
+ * ("retry-after: 30") or an HTTP-date ("retry-after: Wed, 21 Oct 2025 07:28:00
+ * GMT"). Both forms are handled; an absent/garbage value yields `undefined`.
+ *
+ * @param headers  The response headers (`res.headers`), or any `{ get }` shape.
+ * @param nowMs    Current epoch ms — injected so the HTTP-date branch is
+ *                 deterministic in tests (defaults to `Date.now()`).
+ */
+export function parseRetryAfter(
+  headers: { get(name: string): string | null },
+  nowMs: number = Date.now(),
+): number | undefined {
+  const raw = headers.get("retry-after");
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+
+  // Numeric form: delta-seconds.
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+
+  // HTTP-date form: compute the delta from now (never negative).
+  const dateMs = Date.parse(trimmed);
+  if (Number.isNaN(dateMs)) return undefined;
+  return Math.max(0, Math.round((dateMs - nowMs) / 1000));
+}
+
+/**
  * Transport function signature — allows test stubs to replace the real fetch.
  * The real implementation is a plain browser fetch call.
  */
@@ -72,12 +143,19 @@ export type TransportFn = (
   init: RequestInit,
 ) => Promise<MessagesResponse>;
 
-/** Default transport: real browser fetch to the Anthropic messages endpoint. */
+/**
+ * Default transport: real browser fetch to the Anthropic messages endpoint.
+ *
+ * On `!res.ok` it throws a TYPED `ModelHttpError` carrying the status code and
+ * the parsed `retry-after` header (Phase 6), so the resilience wrapper can
+ * branch on 401 vs 429 vs 500 and honor the server's backoff hint. The success
+ * path is unchanged: it returns the parsed `MessagesResponse`.
+ */
 export const defaultTransport: TransportFn = async (url, init) => {
   const res = await fetch(url, init);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Request failed: ${res.status} ${res.statusText} — ${body}`);
+    throw new ModelHttpError(res.status, parseRetryAfter(res.headers), body);
   }
   return res.json() as Promise<MessagesResponse>;
 };
