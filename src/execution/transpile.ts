@@ -3,6 +3,14 @@
 // Babel is configured for:
 //   - TypeScript (including TSX syntax, type-annotation stripping)
 //   - React classic runtime (emits React.createElement — no import of react/jsx-runtime)
+//   - ESM → CommonJS (transform-modules-commonjs): rewrites `export default X`
+//     and `export { X }` into `exports.default = X` / `exports.X = X`, and any
+//     `import X from "y"` into `const X = require("y")`. Without this, an
+//     `export default App;` (the shape real component output ships) survives
+//     into the transpiled string and throws a SyntaxError when handed to the
+//     `new Function(...)` evaluator in instantiate.ts — the component then
+//     silently fails to render. The plugin ships inside @babel/standalone
+//     (verified: `Babel.availablePlugins["transform-modules-commonjs"]`).
 //
 // The classic runtime is non-negotiable: the new Function scope injects only the
 // React global, so automatic-runtime output (which emits `_jsx(...)` plus an
@@ -13,6 +21,14 @@
 // does not cache internally — caching lives in the resolver (LOOP-04).
 
 import * as Babel from "@babel/standalone";
+
+// Guard: fail loud at module load if the bundled Babel is missing the CommonJS
+// module transform — that would silently reintroduce the export-survival bug.
+if (!("transform-modules-commonjs" in Babel.availablePlugins)) {
+  throw new Error(
+    "transpile: required Babel plugin 'transform-modules-commonjs' is not bundled in @babel/standalone",
+  );
+}
 
 /** Options accepted by transpile(). */
 export interface TranspileOptions {
@@ -35,6 +51,10 @@ export function transpile(source: string, opts?: TranspileOptions): string {
         ["typescript", { isTSX: true, allExtensions: true }],
         ["react", { runtime: "classic" }],
       ],
+      // Rewrite ESM export/import into CommonJS exports.*/require(...) so the
+      // `new Function("module","exports","React","useWidget","require", ...)`
+      // evaluator in instantiate.ts can execute the output without a SyntaxError.
+      plugins: ["transform-modules-commonjs"],
     });
   } catch (err) {
     throw new TranspileError(

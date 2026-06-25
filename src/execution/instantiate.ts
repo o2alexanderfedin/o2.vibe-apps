@@ -25,6 +25,25 @@ function useWidget(_type: string): null {
 }
 
 /**
+ * `require` shim injected into every instantiated component scope.
+ *
+ * Babel's CommonJS transform rewrites `import React from "react"` into
+ * `require("react")`. Produced component code occasionally keeps that import,
+ * so the evaluator must resolve "react"/"react-dom" to the SINGLE shared React
+ * instance (a second React copy would trigger "Invalid hook call"). Any other
+ * specifier throws a clear error rather than silently returning undefined.
+ */
+function requireShim(specifier: string): unknown {
+  if (specifier === "react" || specifier === "react-dom") {
+    return sharedReact;
+  }
+  throw new Error(
+    `Component requested an unavailable module "${specifier}". ` +
+      `Only "react" is provided in this scope.`,
+  );
+}
+
+/**
  * Instantiate a React component from transpiled JS.
  *
  * The transpiled JS must define `App` as a function (no default export).
@@ -38,10 +57,11 @@ export function instantiate(transpiledJS: string): ComponentType {
   const mod: { exports: Record<string, unknown> } = { exports: {} };
 
   try {
-    // Parameters: module, exports, React, useWidget — only these names are in scope.
+    // Parameters: module, exports, React, useWidget, require — only these names are in scope.
+    // `require` resolves "react"/"react-dom" to the shared React (see requireShim).
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const fn = new Function("module", "exports", "React", "useWidget", transpiledJS);
-    fn(mod, mod.exports, sharedReact, useWidget);
+    const fn = new Function("module", "exports", "React", "useWidget", "require", transpiledJS);
+    fn(mod, mod.exports, sharedReact, useWidget, requireShim);
   } catch (err) {
     throw new InstantiateError(
       err instanceof Error ? err.message : String(err),
@@ -65,9 +85,10 @@ export function instantiate(transpiledJS: string): ComponentType {
         "exports",
         "React",
         "useWidget",
+        "require",
         transpiledJS + "\nreturn typeof App !== 'undefined' ? App : undefined;",
       );
-      App = fn2(mod, mod.exports, sharedReact, useWidget) as unknown;
+      App = fn2(mod, mod.exports, sharedReact, useWidget, requireShim) as unknown;
     } catch (err) {
       throw new InstantiateError(
         err instanceof Error ? err.message : String(err),
