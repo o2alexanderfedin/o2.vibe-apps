@@ -68,6 +68,48 @@ export function transpile(source: string, opts?: TranspileOptions): string {
   return result.code;
 }
 
+/**
+ * Transpile a PLAIN TS/JS handler to runnable JS (Phase 8, HANDLER-01).
+ *
+ * Handlers are NOT React components — they are an async `handler(input)`
+ * function over local data. So this path strips TS type annotations only
+ * (preset-typescript) and DELIBERATELY omits the react preset / JSX transform:
+ * a handler that accidentally contains JSX is a malformed handler, not something
+ * to silently compile against a React global that the handler scope does not get.
+ *
+ * It is otherwise identical to `transpile`: the CommonJS module transform is kept
+ * so a handler that uses `export`/`import` does not survive as raw ESM into the
+ * `new Function` evaluator (the same SyntaxError trap the React path avoids), and
+ * a Babel error is wrapped in the same `TranspileError` so the producer's
+ * self-heal loop can feed it back verbatim (DRY across both paths).
+ *
+ * Plain JS already runs as-is, but routing it through the same Babel call keeps a
+ * single code path (one set of plugins, one error shape) rather than branching on
+ * "does this look like TS" — KISS.
+ */
+export function transpileHandler(source: string, opts?: TranspileOptions): string {
+  let result: { code?: string | null };
+  try {
+    result = Babel.transform(source, {
+      filename: opts?.filename ?? "handler.ts",
+      // TS type-stripping only — NO react preset, NO JSX transform (Phase 8).
+      presets: [["typescript", { isTSX: false, allExtensions: true }]],
+      // Same CommonJS rewrite as the React path so export/import don't leak into
+      // the new Function evaluator as raw ESM.
+      plugins: ["transform-modules-commonjs"],
+    });
+  } catch (err) {
+    throw new TranspileError(
+      err instanceof Error ? err.message : String(err),
+      err,
+    );
+  }
+  if (!result.code) {
+    throw new TranspileError("Transpiler returned empty output", null);
+  }
+  return result.code;
+}
+
 /** Structured error thrown by transpile() on compile failures. */
 export class TranspileError extends Error {
   readonly cause: unknown;

@@ -43,3 +43,26 @@ export type WidgetFixtureName = "line-chart" | "data-table" | "stat-card";
 export function rawWidgetFixture(name: WidgetFixtureName): string {
   return readFileSync(join(FIXTURE_DIR, `widget-${name}.raw.txt`), "utf8");
 }
+
+// Phase 8 handler fixtures — REAL captured Haiku handler outputs (raw, with fences,
+// and the extracted code). Committed as handler-<name>.{raw,code}.txt (.txt so the
+// hygiene gate skips them). The DI/run tests feed these through a canned transport,
+// so they exercise REAL produced handler code with NO network at test time.
+//
+// Coverage of the two fixtures:
+//   filter-tasks   — a clean self-contained `handler(input)` over local sample
+//                    data; `{ status: "completed" }` → { data: { count: 3, … } }.
+//   summarize-list — realistically tried to reach an external module
+//                    (require(...)) — so it PROVES the constrained scope: its
+//                    top-level require throws, and runHandler returns { error }.
+export type HandlerFixtureName = "filter-tasks" | "summarize-list";
+
+/** Read the raw model response (markdown fences included) for a handler fixture. */
+export function rawHandlerFixture(name: HandlerFixtureName): string {
+  return readFileSync(join(FIXTURE_DIR, `handler-${name}.raw.txt`), "utf8");
+}
+
+/** Read the pre-extracted handler code (no fences) for a handler fixture. */
+export function codeHandlerFixture(name: HandlerFixtureName): string {
+  return readFileSync(join(FIXTURE_DIR, `handler-${name}.code.txt`), "utf8");
+}

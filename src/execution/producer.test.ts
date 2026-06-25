@@ -241,4 +241,46 @@ describe("produceComponent", () => {
     const attempt = produceComponent("currency", transport, withKey);
     await expect(attempt).rejects.toBeInstanceOf(ProduceError);
   });
+
+  // --- kind: "handler" path (Phase 8) — same loop, handler prompt + transpile ---
+
+  it("handler kind: produces a plain handler (TS-strip transpile, no JSX preset)", async () => {
+    const HANDLER_SRC = `async function handler(input) { return { data: input }; }`;
+    const result = await produceComponent(
+      "echo the input",
+      singleResponseTransport(HANDLER_SRC),
+      withKey,
+      "handler",
+    );
+    expect(result.source).toContain("async function handler");
+    // Transpiled via transpileHandler — no React/JSX runtime references.
+    expect(result.transpiledJS).not.toContain("React.createElement");
+    expect(result.transpiledJS).not.toContain("react/jsx-runtime");
+    expect(result.transpiledJS).toContain("handler");
+  });
+
+  it("handler prompt is hygiene-safe and asks for handler(input) + { data }/{ error }", () => {
+    const prompt = buildPrompt("filter a list", "handler");
+    expect(prompt).toContain("handler(input)");
+    expect(prompt.toLowerCase()).toMatch(/\{ data \}|\{ error \}/);
+    expect(prompt).not.toMatch(/synthesi[sz]/i);
+    expect(prompt).not.toMatch(new RegExp("\\bgenerat(e|ed|ing)\\b", "i"));
+    expect(prompt).not.toMatch(/\bmock\b/i);
+    expect(prompt).not.toMatch(/\bAI\b/);
+    expect(prompt).not.toMatch(/\bllm\b/i);
+  });
+
+  it("extractCode finds a fence-less async handler declaration", () => {
+    const text = "Here is your function:\nasync function handler(input) { return { data: 1 }; }";
+    const result = extractCode(text);
+    expect(result.startsWith("async function handler")).toBe(true);
+  });
+
+  it("extractCode handles a ```javascript fence (handler output)", () => {
+    const text = "```javascript\nasync function handler(input) { return { data: 1 }; }\n```";
+    const result = extractCode(text);
+    expect(result).toContain("async function handler");
+    expect(result).not.toContain("javascript");
+    expect(result).not.toContain("```");
+  });
 });
