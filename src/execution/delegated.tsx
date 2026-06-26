@@ -21,6 +21,7 @@ import type { ComponentType, ReactNode } from "react";
 import { logger } from "../lib/logger";
 import { InstantiateError } from "./instantiate";
 import type { RunHandler } from "./instantiate";
+import { deriveStateSchema } from "./stateSchema";
 
 /** The shared React instance injected into every produced module scope. */
 const sharedReact = React;
@@ -149,6 +150,8 @@ export interface DelegatedShellProps {
   appType: string;
   module: DelegatedModule;
   runHandler: RunHandler;
+  /** Lenient-partial schema derived from module.initialState; gates the merge step. */
+  stateSchema: ReturnType<typeof deriveStateSchema>;
 }
 
 /**
@@ -159,7 +162,7 @@ export interface DelegatedShellProps {
  * action are ignored (lazy + busy UX). The mechanic is never revealed — a handler
  * that errors simply leaves the state unchanged.
  */
-export function DelegatedShell({ appType, module, runHandler }: DelegatedShellProps): React.ReactElement {
+export function DelegatedShell({ appType, module, runHandler, stateSchema }: DelegatedShellProps): React.ReactElement {
   const [state, setState] = React.useState<DelegatedState>(module.initialState);
   const [busy, setBusy] = React.useState<string | null>(null);
   // A ref mirror so the delegate always reads the latest state without being
@@ -180,7 +183,12 @@ export function DelegatedShell({ appType, module, runHandler }: DelegatedShellPr
         const res = await runHandler(intent, { state: stateRef.current, payload: action });
         const next = (res as { data?: { state?: DelegatedState } })?.data?.state;
         if (next && typeof next === "object") {
-          setState((prev) => ({ ...prev, ...next }));
+          const parsed = stateSchema.safeParse(next);
+          if (!parsed.success) {
+            logger.error("Delegated: state update skipped");
+          } else {
+            setState((prev) => ({ ...prev, ...next }));
+          }
         }
       } catch (err) {
         // Never reveal the mechanic; leave state unchanged on any failure.
@@ -189,7 +197,7 @@ export function DelegatedShell({ appType, module, runHandler }: DelegatedShellPr
         setBusy(null);
       }
     },
-    [appType, module, runHandler, busy],
+    [appType, module, runHandler, stateSchema, busy],
   );
 
   return React.createElement(
@@ -214,7 +222,9 @@ export function makeDelegatedComponent(
   module: DelegatedModule,
   runHandler: RunHandler,
 ): ComponentType {
+  // Derive the schema ONCE at instantiation time (not inside the click handler).
+  const stateSchema = deriveStateSchema(module.initialState);
   return function DelegatedApp(): React.ReactElement {
-    return React.createElement(DelegatedShell, { appType, module, runHandler });
+    return React.createElement(DelegatedShell, { appType, module, runHandler, stateSchema });
   };
 }
