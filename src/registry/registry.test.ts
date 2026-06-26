@@ -126,6 +126,43 @@ describe("registry — happy path (IndexedDB available via fake-indexeddb)", () 
     // The original fields survive the upgrade untouched.
     expect(result?.source).toBe("s");
   });
+
+  it("a record missing displayName/prompt/createdAt reads back without those fields (Phase 9 additive migration)", async () => {
+    const { dbReady, put, get } = await import("./registry");
+    await dbReady;
+    const legacyRecord = {
+      cacheKey: "v2-legacy",
+      type: "counter",
+      source: "s",
+      transpiledJS: "j",
+      useCount: 3,
+      updatedAt: 1000,
+    };
+    await put("apps", legacyRecord as never, "v2-legacy");
+    const result = await get("apps", "v2-legacy");
+    expect(result?.displayName).toBeUndefined();
+    expect(result?.prompt).toBeUndefined();
+    expect(result?.createdAt).toBeUndefined();
+    // Existing fields survive untouched.
+    expect(result?.useCount).toBe(3);
+    expect(result?.source).toBe("s");
+  });
+
+  it("round-trips displayName, prompt, and createdAt on an AppRecord", async () => {
+    const { dbReady, put, get } = await import("./registry");
+    await dbReady;
+    const rec = appRecord({
+      cacheKey: "rich",
+      displayName: "Weather",
+      prompt: "show celsius",
+      createdAt: 99999,
+    });
+    await put("apps", rec, "rich");
+    const result = await get("apps", "rich");
+    expect(result?.displayName).toBe("Weather");
+    expect(result?.prompt).toBe("show celsius");
+    expect(result?.createdAt).toBe(99999);
+  });
 });
 
 describe("registry — fallback path (storage unavailable)", () => {
