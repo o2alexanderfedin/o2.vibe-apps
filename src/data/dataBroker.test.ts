@@ -53,18 +53,19 @@ const FX_FIXTURE = {
 
 // ---- Helpers ----
 
-/** Track the last URL passed to the fetch double so tests can inspect it. */
-let lastFetchedUrl = "";
-
 /**
- * Create a fetch stub that records the URL it was called with into `lastFetchedUrl`,
- * then returns the given JSON body with status 200.
+ * Create a fetch stub that records the URL it was called with (per-instance,
+ * not module-level) and returns the given JSON body with status 200.
+ * Callers that need URL inspection use getLastUrl(); callers that only need
+ * call-count assertions use fn directly — no shared mutable state.
  */
-function okFetch(body: unknown): ReturnType<typeof vi.fn> {
-  return vi.fn().mockImplementation((url: string) => {
-    lastFetchedUrl = url;
+function okFetch(body: unknown): { fn: ReturnType<typeof vi.fn>; getLastUrl: () => string } {
+  let lastUrl = "";
+  const fn = vi.fn().mockImplementation((url: string) => {
+    lastUrl = url;
     return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
   });
+  return { fn, getLastUrl: () => lastUrl };
 }
 
 /** Create a fetch stub that returns a non-2xx response */
@@ -104,7 +105,7 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
 
   describe("unknown sourceId → immediate rejection, no network call", () => {
     it("returns {error} for an unknown sourceId", async () => {
-      const fetchFn = okFetch({});
+      const { fn: fetchFn } = okFetch({});
       const broker = makeBroker(fetchFn);
       const result = await broker.fetch("nonexistent-source", {});
       expect(result.data).toBeUndefined();
@@ -120,7 +121,7 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
     });
 
     it("returns {error} for empty string sourceId", async () => {
-      const broker = makeBroker(okFetch({}));
+      const broker = makeBroker(okFetch({}).fn);
       const result = await broker.fetch("", {});
       expect(result.error).toBeDefined();
     });
@@ -128,7 +129,7 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
 
   describe("TTL cache hit", () => {
     it("returns cached data on the second call without a second fetch", async () => {
-      const fetchFn = okFetch(GEOCODE_FIXTURE);
+      const { fn: fetchFn } = okFetch(GEOCODE_FIXTURE);
       const broker = makeBroker(fetchFn);
 
       // First call — populates cache
@@ -144,7 +145,7 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
     });
 
     it("uses a different cache key for different params", async () => {
-      const fetchFn = okFetch(GEOCODE_FIXTURE);
+      const { fn: fetchFn } = okFetch(GEOCODE_FIXTURE);
       const broker = makeBroker(fetchFn);
 
       await broker.fetch("weather-geocode", { name: "London" });
@@ -160,7 +161,7 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
       const clock = createStubClock(0);
       const limiter = new TokenBucket({ capacity: 10, refillPerSec: 10, maxConcurrent: 10, clock });
       const ttlCache = new TtlCache({ clock });
-      const fetchFn = okFetch(GEOCODE_FIXTURE);
+      const { fn: fetchFn } = okFetch(GEOCODE_FIXTURE);
 
       const broker = createDataBroker({
         clock,
@@ -184,10 +185,9 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
 
   describe("param injection guard (T-12-01-B)", () => {
     it("drops params not in allowedParams for weather-geocode", async () => {
-      const fetchFn = okFetch(GEOCODE_FIXTURE);
+      const { fn: fetchFn, getLastUrl } = okFetch(GEOCODE_FIXTURE);
       const broker = makeBroker(fetchFn);
 
-      lastFetchedUrl = "";
       await broker.fetch("weather-geocode", {
         name: "London",
         injectedKey: "evil",
@@ -195,94 +195,91 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
       });
 
       expect(fetchFn).toHaveBeenCalledTimes(1);
-      // Check via the captured URL
-      expect(lastFetchedUrl).toContain("name=London");
-      expect(lastFetchedUrl).not.toContain("injectedKey");
-      expect(lastFetchedUrl).not.toContain("evil.com");
+      // Check via the per-call captured URL
+      const url = getLastUrl();
+      expect(url).toContain("name=London");
+      expect(url).not.toContain("injectedKey");
+      expect(url).not.toContain("evil.com");
     });
 
     it("uses the manifest origin, not any caller-supplied origin", async () => {
-      const fetchFn = okFetch(GEOCODE_FIXTURE);
+      const { fn: fetchFn, getLastUrl } = okFetch(GEOCODE_FIXTURE);
       const broker = makeBroker(fetchFn);
 
-      lastFetchedUrl = "";
       await broker.fetch("weather-geocode", { name: "London" });
-      expect(lastFetchedUrl).toContain("https://geocoding-api.open-meteo.com");
+      expect(getLastUrl()).toContain("https://geocoding-api.open-meteo.com");
     });
 
     it("includes allowed params and drops unknown extras in the same call", async () => {
       // Verifies that allowed keys (name, count) ARE encoded and unknown keys
       // (injectedKey) are dropped — both conditions in one fetch call.
-      const fetchFn = okFetch(GEOCODE_FIXTURE);
+      const { fn: fetchFn, getLastUrl } = okFetch(GEOCODE_FIXTURE);
       const broker = makeBroker(fetchFn);
 
-      lastFetchedUrl = "";
       await broker.fetch("weather-geocode", {
         name: "London",
         injectedKey: "bad",
         count: 1,
       });
 
+      const url = getLastUrl();
       // Allowed params present in URL
-      expect(lastFetchedUrl).toContain("name=London");
-      expect(lastFetchedUrl).toContain("count=1");
+      expect(url).toContain("name=London");
+      expect(url).toContain("count=1");
       // Unknown param dropped
-      expect(lastFetchedUrl).not.toContain("injectedKey");
+      expect(url).not.toContain("injectedKey");
     });
 
     it("encodes only allowedParams for fx-latest", async () => {
-      const fetchFn = okFetch(FX_FIXTURE);
+      const { fn: fetchFn, getLastUrl } = okFetch(FX_FIXTURE);
       const broker = makeBroker(fetchFn);
 
-      lastFetchedUrl = "";
       await broker.fetch("fx-latest", { base: "USD", symbols: "EUR,GBP", apiKey: "secret" });
 
-      expect(lastFetchedUrl).toContain("base=USD");
-      expect(lastFetchedUrl).toContain("symbols=");
-      expect(lastFetchedUrl).not.toContain("apiKey");
-      expect(lastFetchedUrl).not.toContain("secret");
+      const url = getLastUrl();
+      expect(url).toContain("base=USD");
+      expect(url).toContain("symbols=");
+      expect(url).not.toContain("apiKey");
+      expect(url).not.toContain("secret");
     });
   });
 
   describe("URL construction from manifest", () => {
     it("builds the correct URL for weather-geocode", async () => {
-      const fetchFn = okFetch(GEOCODE_FIXTURE);
+      const { fn: fetchFn, getLastUrl } = okFetch(GEOCODE_FIXTURE);
       const broker = makeBroker(fetchFn);
 
-      lastFetchedUrl = "";
       await broker.fetch("weather-geocode", { name: "London" });
-      expect(lastFetchedUrl).toMatch(/^https:\/\/geocoding-api\.open-meteo\.com\/v1\/search/);
+      expect(getLastUrl()).toMatch(/^https:\/\/geocoding-api\.open-meteo\.com\/v1\/search/);
     });
 
     it("builds the correct URL for weather-forecast", async () => {
-      const fetchFn = okFetch(FORECAST_FIXTURE);
+      const { fn: fetchFn, getLastUrl } = okFetch(FORECAST_FIXTURE);
       const broker = makeBroker(fetchFn);
 
-      lastFetchedUrl = "";
       await broker.fetch("weather-forecast", { latitude: "51.5", longitude: "-0.12", current: "temperature_2m" });
-      expect(lastFetchedUrl).toMatch(/^https:\/\/api\.open-meteo\.com\/v1\/forecast/);
+      expect(getLastUrl()).toMatch(/^https:\/\/api\.open-meteo\.com\/v1\/forecast/);
     });
 
     it("builds the correct URL for fx-latest", async () => {
-      const fetchFn = okFetch(FX_FIXTURE);
+      const { fn: fetchFn, getLastUrl } = okFetch(FX_FIXTURE);
       const broker = makeBroker(fetchFn);
 
-      lastFetchedUrl = "";
       await broker.fetch("fx-latest", { base: "USD" });
-      expect(lastFetchedUrl).toMatch(/^https:\/\/api\.frankfurter\.dev\/v1\/latest/);
+      expect(getLastUrl()).toMatch(/^https:\/\/api\.frankfurter\.dev\/v1\/latest/);
     });
   });
 
   describe("successful fetch → {data}", () => {
     it("returns {data} with parsed JSON for a successful geocode request", async () => {
-      const broker = makeBroker(okFetch(GEOCODE_FIXTURE));
+      const broker = makeBroker(okFetch(GEOCODE_FIXTURE).fn);
       const result = await broker.fetch("weather-geocode", { name: "London" });
       expect(result.error).toBeUndefined();
       expect(result.data).toEqual(GEOCODE_FIXTURE);
     });
 
     it("returns {data} with parsed JSON for a successful FX request", async () => {
-      const broker = makeBroker(okFetch(FX_FIXTURE));
+      const broker = makeBroker(okFetch(FX_FIXTURE).fn);
       const result = await broker.fetch("fx-latest", { base: "USD" });
       expect(result.error).toBeUndefined();
       expect(result.data).toEqual(FX_FIXTURE);
@@ -329,7 +326,7 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
       const clock = createStubClock(0);
       const limiter = new TokenBucket({ capacity: 10, refillPerSec: 10, maxConcurrent: 10, clock });
       const ttlCache = new TtlCache({ clock });
-      const fetchFn = okFetch(FX_FIXTURE);
+      const { fn: fetchFn } = okFetch(FX_FIXTURE);
 
       const broker = createDataBroker({
         clock,
@@ -350,7 +347,7 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
 
   describe("stable cache key (deterministic for same inputs)", () => {
     it("uses same cache slot regardless of param key order", async () => {
-      const fetchFn = okFetch(FORECAST_FIXTURE);
+      const { fn: fetchFn } = okFetch(FORECAST_FIXTURE);
       const broker = makeBroker(fetchFn);
 
       // Call with params in different orders
