@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Real & Robust
-status: executing
-stopped_at: Autonomous run — Phase 9 complete (merged 7dd8b43, pushed). Proceeding to Phase 10.
-last_updated: "2026-06-26T10:25:00.000Z"
-last_activity: 2026-06-26 -- Phase 09 merged to develop (passed 9/9, UAT closed)
+status: completed
+stopped_at: Session resumed via /gsd-resume-work — clean checkpoint confirmed (develop synced with origin, no incomplete plans/handoff). Proceeding to plan Phase 9 (Richer Storefront).
+last_updated: "2026-06-26T11:02:25.986Z"
+last_activity: 2026-06-26 -- Phase 10 marked complete
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 20
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 5
+  percent: 40
 ---
 
 # Project State
@@ -21,18 +21,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v1.1 "Real & Robust" roadmapped (Phases 9–13). Next: plan Phase 9 (Richer Storefront) with `/gsd-plan-phase 9`. The dependency-driven build order is C → D-typing/key-audit → B → A → D-activation, with two hard constraints: RELY (Phase 11) before DATA (Phase 12), and WIDGET typing (Phase 10) before WIDGET activation (Phase 13).
+**Current focus:** Phase 10 — widget-schema-key
 
 ## Current Position
 
-Phase: 10 (Widget Schema & Key Correctness) — READY TO PLAN
-Plan: —
-Status: Phase 9 complete (merged 7dd8b43); planning Phase 10 next
-Last activity: 2026-06-26 -- Phase 09 merged to develop (passed 9/9, visual UAT closed)
+Phase: 10 — COMPLETE
+Plan: 1 of 2
+Status: Phase 10 complete
+Last activity: 2026-06-26 -- Phase 10 marked complete
 
 Progress: [██░░░░░░░░] 20% (1 of 5 v1.1 phases)
 
 ### Phase 9 — DONE (merged 7dd8b43)
+
 STORE-01/02 shipped: AppRecord persists displayName/prompt/createdAt (additive, DB v2 unchanged, read-tolerant); storefront cards show real names; "Your most-opened" popular row (rankPopular: useCount↓→updatedAt↓→cacheKey↑; cold-start hidden; truthful local-only copy). prompt stores user-intent only (hygiene-safe). 393 tests, tsc 0, build clean, hygiene green, code-review resolved, browser UAT 9/9.
 
 ### v1.1 Phase Map

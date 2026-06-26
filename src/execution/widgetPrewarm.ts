@@ -32,6 +32,7 @@ import { wrapWidget } from "../ui/widgetWrap";
 import { SEEDED_SOURCES } from "../apps/seeds";
 import { registryKey } from "../registry/cacheKey";
 import type { Services } from "../services/services";
+import type { WidgetRecord } from "../registry/db";
 import { logger } from "../lib/logger";
 
 /** The maximum number of widgets resolved concurrently (WIDGET-02). */
@@ -41,6 +42,31 @@ export const WIDGET_CONCURRENCY = 2;
 interface ResolvedWidget {
   source: string;
   transpiledJS: string;
+}
+
+/**
+ * Refresh a widget record's LRU bookkeeping after a cache HIT — bump `useCount`,
+ * stamp `updatedAt` — consistent with the handler path (touchHandler) and the
+ * loader's app path (touchRecord, Phase 7, RESIL-06). Best-effort: a write
+ * failure must never break a widget resolve, so it is swallowed to the gated
+ * logger.
+ */
+async function touchWidget(
+  services: Services,
+  key: string,
+  record: WidgetRecord,
+): Promise<void> {
+  try {
+    const useCount =
+      typeof record.useCount === "number" ? record.useCount + 1 : 1;
+    await services.registry.put(
+      "widgets",
+      { ...record, useCount, updatedAt: Date.now() },
+      key,
+    );
+  } catch (err) {
+    logger.error("Widget pre-warm: failed to refresh LRU bookkeeping: " + String(err));
+  }
 }
 
 /**
@@ -62,10 +88,14 @@ async function resolveWidget(
 
   // Registry hit — reuse both pieces, no recompile, no model call.
   const stored = await services.registry.get("widgets", key);
-  const storedSource = stored?.["source"];
-  const storedJS = stored?.["transpiledJS"];
-  if (typeof storedSource === "string" && typeof storedJS === "string") {
+  const storedSource = stored?.source;
+  const storedJS = stored?.transpiledJS;
+  if (stored && typeof storedSource === "string" && typeof storedJS === "string") {
     logger.info("Widget pre-warm: registry hit for " + widgetType);
+    // Cache HIT: refresh LRU bookkeeping (bump useCount, stamp updatedAt) so
+    // this entry is marked recently used and survives the next eviction sweep
+    // (RESIL-06 parity with the handler and app hit paths).
+    await touchWidget(services, key, stored);
     return { source: storedSource, transpiledJS: storedJS };
   }
 
@@ -96,9 +126,11 @@ async function resolveWidget(
   }
 
   // Persist both pieces so the next open is an instant registry hit (GEN-04 parity).
+  // Phase 10 (WIDGET-07d): include LRU bookkeeping fields on first write for parity
+  // with the handler and app write paths (useCount: 0 = no hits yet; updatedAt = now).
   await services.registry.put(
     "widgets",
-    { cacheKey: key, type: widgetType, source, transpiledJS },
+    { cacheKey: key, type: widgetType, source, transpiledJS, useCount: 0, updatedAt: Date.now() },
     key,
   );
   return { source, transpiledJS };
@@ -136,10 +168,14 @@ export async function resolveWidgetTweak(
   let transpiledJS: string;
   try {
     const stored = await services.registry.get("widgets", key);
-    const storedSource = stored?.["source"];
-    const storedJS = stored?.["transpiledJS"];
-    if (typeof storedSource === "string" && typeof storedJS === "string") {
+    const storedSource = stored?.source;
+    const storedJS = stored?.transpiledJS;
+    if (stored && typeof storedSource === "string" && typeof storedJS === "string") {
       logger.info("Widget tweak: registry hit for " + widgetType);
+      // Cache HIT: refresh LRU bookkeeping (bump useCount, stamp updatedAt) so
+      // this entry is marked recently used and survives the next eviction sweep
+      // (RESIL-06 parity with the handler and app hit paths).
+      await touchWidget(services, key, stored);
       source = storedSource;
       transpiledJS = storedJS;
     } else {
@@ -153,9 +189,11 @@ export async function resolveWidgetTweak(
       );
       source = produced.source;
       transpiledJS = produced.transpiledJS;
+      // Phase 10 (WIDGET-07d): include LRU bookkeeping fields on first write for parity
+      // with the handler and app write paths (useCount: 0 = no hits yet; updatedAt = now).
       await services.registry.put(
         "widgets",
-        { cacheKey: key, type: widgetType, source, transpiledJS },
+        { cacheKey: key, type: widgetType, source, transpiledJS, useCount: 0, updatedAt: Date.now() },
         key,
       );
     }

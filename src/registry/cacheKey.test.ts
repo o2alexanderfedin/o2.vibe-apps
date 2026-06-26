@@ -110,3 +110,41 @@ describe("registryKey — structured opaque key over (kind, type, prompt)", () =
     expect(await registryKey("widget", "天气 ☀️", "热")).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+describe("WIDGET-08 key-derivation audit — cross-kind collision prevention", () => {
+  it("an app and a widget sharing the same type slug get DISTINCT keys", async () => {
+    const app = await registryKey("app", "weather");
+    const widget = await registryKey("widget", "weather");
+    expect(app).not.toBe(widget);
+  });
+
+  it("an app and a handler sharing the same slug get DISTINCT keys", async () => {
+    const app = await registryKey("app", "weather");
+    const handler = await registryKey("handler", "weather");
+    expect(app).not.toBe(handler);
+  });
+
+  it("a widget and a handler sharing the same slug get DISTINCT keys", async () => {
+    const widget = await registryKey("widget", "weather");
+    const handler = await registryKey("handler", "weather");
+    expect(widget).not.toBe(handler);
+  });
+
+  it("apps derive via registryKey('app', type, prompt?) — baseline and prompted differ", async () => {
+    const base = await registryKey("app", "weather");
+    const prompted = await registryKey("app", "weather", "dark mode");
+    expect(base).not.toBe(prompted);
+  });
+
+  it("widgets derive via registryKey('widget', type, instruction?) — baseline and instructed differ", async () => {
+    const base = await registryKey("widget", "weather");
+    const instructed = await registryKey("widget", "weather", "compact layout");
+    expect(base).not.toBe(instructed);
+  });
+
+  it("handlers derive via registryKey('handler', intent) — distinct intents get distinct keys", async () => {
+    const getWeather = await registryKey("handler", "get weather data");
+    const getStock = await registryKey("handler", "get stock price");
+    expect(getWeather).not.toBe(getStock);
+  });
+});

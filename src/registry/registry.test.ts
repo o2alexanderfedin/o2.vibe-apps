@@ -70,7 +70,8 @@ describe("registry — happy path (IndexedDB available via fake-indexeddb)", () 
   it("put and get work for widgets store", async () => {
     const { dbReady, put, get } = await import("./registry");
     await dbReady;
-    const widget = { type: "counter" };
+    // Phase 10 (WIDGET-07): WidgetRecord now requires cacheKey/type/source/transpiledJS.
+    const widget = { cacheKey: "w-key", type: "counter", source: "// src", transpiledJS: "// js" };
     await put("widgets", widget, "w-key");
     const result = await get("widgets", "w-key");
     expect(result).toEqual(widget);
@@ -79,7 +80,8 @@ describe("registry — happy path (IndexedDB available via fake-indexeddb)", () 
   it("put and get work for handlers store", async () => {
     const { dbReady, put, get } = await import("./registry");
     await dbReady;
-    const handler = { route: "/data" };
+    // Phase 10 (WIDGET-07): HandlerRecord now requires cacheKey/intent/source/transpiledJS.
+    const handler = { cacheKey: "h-key", intent: "fetch-data", source: "// src", transpiledJS: "// js" };
     await put("handlers", handler, "h-key");
     const result = await get("handlers", "h-key");
     expect(result).toEqual(handler);

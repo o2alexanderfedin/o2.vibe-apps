@@ -53,8 +53,25 @@ export interface AppRecord extends LruMeta {
   createdAt?: number;
   [key: string]: unknown; // allow forward-compat extra fields
 }
-export type WidgetRecord = Record<string, unknown> & LruMeta;
-export type HandlerRecord = Record<string, unknown> & LruMeta;
+// Phase 10 (WIDGET-07): replace placeholder Record-alias types with explicit
+// interfaces that mirror the AppRecord pattern — named required fields for every
+// property actually written at the identity write sites, plus an index signature
+// for forward-compat extra fields (same pattern as AppRecord above).
+export interface WidgetRecord extends LruMeta {
+  cacheKey: string;
+  type: string;
+  source: string;
+  transpiledJS: string;
+  [key: string]: unknown; // allow forward-compat extra fields
+}
+export interface HandlerRecord extends LruMeta {
+  cacheKey: string;
+  /** The intent slug that produced this handler (mirrors handler write shape). */
+  intent: string;
+  source: string;
+  transpiledJS: string;
+  [key: string]: unknown; // allow forward-compat extra fields
+}
 
 export interface RegistrySchema extends DBSchema {
   apps: { key: string; value: AppRecord };

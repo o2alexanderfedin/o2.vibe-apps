@@ -40,6 +40,7 @@
 import { transpileHandler } from "./transpile";
 import { produceComponent } from "./producer";
 import type { Services } from "../services/services";
+import type { HandlerRecord } from "../registry/db";
 import { registryKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
 
@@ -156,7 +157,7 @@ async function executeHandler(
 async function touchHandler(
   services: Services,
   key: string,
-  record: Record<string, unknown>,
+  record: HandlerRecord,
 ): Promise<void> {
   try {
     const useCount =

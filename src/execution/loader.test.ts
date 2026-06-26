@@ -28,8 +28,8 @@ describe("loader — three-tier resolve and dual-cache", () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
 
-    const { cacheKey } = await import("../registry/cacheKey");
-    const key = await cacheKey("counter");
+    const { registryKey } = await import("../registry/cacheKey");
+    const key = await registryKey("app", "counter");
     const services = createTestServices();
     const Component = await resolveComponent("counter-1", "counter", key, services);
     expect(typeof Component).toBe("function");
@@ -39,8 +39,8 @@ describe("loader — three-tier resolve and dual-cache", () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
 
-    const { cacheKey } = await import("../registry/cacheKey");
-    const key = await cacheKey("notes");
+    const { registryKey } = await import("../registry/cacheKey");
+    const key = await registryKey("app", "notes");
     const services = createTestServices();
 
     // First call: full miss → compile + cache.
@@ -54,8 +54,8 @@ describe("loader — three-tier resolve and dual-cache", () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
 
-    const { cacheKey } = await import("../registry/cacheKey");
-    const key = await cacheKey("counter");
+    const { registryKey } = await import("../registry/cacheKey");
+    const key = await registryKey("app", "counter");
     const services = createTestServices();
 
     // First call: full miss.
@@ -69,8 +69,8 @@ describe("loader — three-tier resolve and dual-cache", () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
 
-    const { cacheKey } = await import("../registry/cacheKey");
-    const key = await cacheKey("counter");
+    const { registryKey } = await import("../registry/cacheKey");
+    const key = await registryKey("app", "counter");
     const services = createTestServices();
 
     await resolveComponent("counter-dual", "counter", key, services);
@@ -91,8 +91,8 @@ describe("loader — three-tier resolve and dual-cache", () => {
 
     // First: populate the registry.
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
-    const key = await cacheKey("notes");
+    const { registryKey } = await import("../registry/cacheKey");
+    const key = await registryKey("app", "notes");
     await resolveComponent("notes-seed", "notes", key, services);
 
     // Clear in-memory caches to force a registry read.
@@ -107,8 +107,8 @@ describe("loader — three-tier resolve and dual-cache", () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
 
-    const { cacheKey } = await import("../registry/cacheKey");
-    const key = await cacheKey("unknown-app-type-xyz");
+    const { registryKey } = await import("../registry/cacheKey");
+    const key = await registryKey("app", "unknown-app-type-xyz");
     // No key injected → ProduceError "No access key available".
     const services = createTestServices({ apiKey: null });
 
@@ -125,8 +125,8 @@ describe("loader — three-tier resolve and dual-cache", () => {
       transport: cannedTransport(CANNED_SOURCE),
     });
 
-    const { cacheKey } = await import("../registry/cacheKey");
-    const key = await cacheKey("weather-stub-type");
+    const { registryKey } = await import("../registry/cacheKey");
+    const key = await registryKey("app", "weather-stub-type");
 
     const Component = await resolveComponent(
       "weather-stub-1",
@@ -155,8 +155,8 @@ describe("loader — three-tier resolve and dual-cache", () => {
     };
     const services = createTestServices({ transport: trackingTransport });
 
-    const { cacheKey } = await import("../registry/cacheKey");
-    const key = await cacheKey("counter");
+    const { registryKey } = await import("../registry/cacheKey");
+    const key = await registryKey("app", "counter");
 
     await resolveComponent("counter-seeded", "counter", key, services);
     expect(transportCalled).toBe(false);
@@ -173,8 +173,8 @@ describe("loader — three-tier resolve and dual-cache", () => {
     const registry = createInMemoryRegistry();
     const services = createTestServices({ registry });
 
-    const { cacheKey } = await import("../registry/cacheKey");
-    const key = await cacheKey("notes");
+    const { registryKey } = await import("../registry/cacheKey");
+    const key = await registryKey("app", "notes");
 
     // First resolve: populates the registry with Phase-9 fields.
     _clearCachesForTesting();
