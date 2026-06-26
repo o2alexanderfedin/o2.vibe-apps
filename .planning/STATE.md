@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Vibe OS
-status: Phase 14 in progress — Plan 14-03 (VibeThemeProvider) complete
-stopped_at: "Completed 14-03-PLAN.md — VibeThemeProvider named-theme engine (VIBE_THEMES four-theme CSS-variable contract on document.documentElement, dual localStorage+IDB persistence via injected SettingsStore seam, nested inside the untouched light/dark ThemeProvider). TDD RED→GREEN; 566/566 tests green."
-last_updated: "2026-06-26T21:54:49.929Z"
-last_activity: 2026-06-26 — Completed Phase 14 Plan 03 (VibeThemeProvider)
+status: Phase 14 Wave 3 — FOUC script extended for named theme + CSP sha256 hash synced (14-04). First paint is now FOUC-safe for the named theme; ready for 14-05.
+stopped_at: Completed Phase 14 Plan 04 (FOUC script for named theme + CSP hash sync). Single atomic commit 963c782; index.html extended; csp.test.ts (7) + hygiene.test.ts (2) green; tsc clean.
+last_updated: "2026-06-26T22:00:00.000Z"
+last_activity: 2026-06-26 — Completed Phase 14 Plan 04 (FOUC script + CSP hash sync)
 progress:
   total_phases: 10
   completed_phases: 5
-  total_plans: 18
-  completed_plans: 16
-  percent: 89
+  total_plans: 19
+  completed_plans: 18
+  percent: 95
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation. Plan 14-03 (VibeThemeProvider) complete; Wave 2 named-theme engine landed.
+**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation. Plan 14-04 (FOUC script + CSP hash) complete; Wave 3 first-paint no-flash landed.
 
 ## Current Position
 
 Phase: 14 — Theme Foundation (In progress)
-Plan: 14-03 complete (VibeThemeProvider named-theme engine)
-Status: Phase 14 Wave 2 — VibeThemeProvider + SettingsStore seam landed; ready for 14-04 (ThemeSelector/AppBar) and 14-05 (FOUC script + CSP hash)
-Last activity: 2026-06-26 — Completed Phase 14 Plan 03 (VibeThemeProvider)
+Plan: 14-04 complete (FOUC script for named theme + CSP sha256 hash sync)
+Status: Phase 14 Wave 3 — FOUC script extended for named theme + CSP sha256 hash synced; first paint FOUC-safe; ready for 14-05 (ThemeSelector + AppBar)
+Last activity: 2026-06-26 — Completed Phase 14 Plan 04 (FOUC script + CSP hash sync)
 
 ### v2.0 Phase Map
 
@@ -56,7 +56,7 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 
 **Velocity:**
 
-- Total plans completed (v2.0): 3 (14-01, 14-02, 14-03)
+- Total plans completed (v2.0): 4 (14-01, 14-02, 14-03, 14-04)
 - Average duration: —
 - Total execution time: —
 
@@ -64,16 +64,17 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 14 | 3/5 | — | — |
+| Phase 14 | 4/5 | — | — |
 
 | Plan | Duration | Tasks | Files | Completed |
 |------|----------|-------|-------|-----------|
 | 14-03 | ~13min | 2 (TDD) | 6 | 2026-06-26 |
+| 14-04 | ~6min | 1 (atomic) | 1 | 2026-06-26 |
 
 **Recent Trend:**
 
-- Last 5 plans: 14-01, 14-02, 14-03
-- Trend: Phase 14 Theme Foundation progressing (3 of 5 plans done)
+- Last 5 plans: 14-01, 14-02, 14-03, 14-04
+- Trend: Phase 14 Theme Foundation progressing (4 of 5 plans done)
 
 *Updated after each plan completion*
 
@@ -94,6 +95,8 @@ Recent decisions affecting current work:
 - [14-03]: Settings store reaches IndexedDB via openRegistry() directly rather than widening the Registry StoreName union (apps|widgets|handlers) — the settings store sits outside the cache-eviction surface.
 - [14-03]: setTheme fires settingsStore.write(name) fire-and-forget (no await) — the UI switch + localStorage write are synchronous and authoritative; the IDB mirror is best-effort.
 - [14-03]: VibeThemeProvider is nested INSIDE the existing light/dark ThemeProvider (not replacing it) so the named-theme CSS-variable contract layers on top without disturbing the 552-test data-theme mechanism.
+- [14-04]: The inline FOUC script duplicates the VIBE_THEMES values verbatim from VibeThemeProvider.tsx rather than importing them — the script must run before any module load, so the runtime provider and first paint stay in sync by convention (copied values), not by shared import.
+- [14-04]: FOUC script edit + CSP sha256 hash regeneration land in ONE atomic commit (963c782) — csp.test.ts recomputes the hash from the live file, so any desync fails CI; the no-flash guarantee stays verifiable.
 - [Roadmap v2.0]: All v1.0/v1.1 cross-cutting constraints (HYGIENE-01..05, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, TDD with real captured-Haiku fixtures, additive DB migrations) are acceptance constraints on every v2.0 phase — not separate phases.
 
 ### Key Research Flags
@@ -132,10 +135,10 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-06-26T21:48:07.627Z
-Stopped at: Completed Phase 14 Plan 03 (VibeThemeProvider named-theme engine + SettingsStore seam). TDD RED→GREEN; commits bcaf6a7 (test) + 8ebfba0 (feat); 566/566 tests green; tsc clean; hygiene gate green.
-Resume with: continue Phase 14 — Plan 14-04 (ThemeSelector + AppBar) then 14-05 (FOUC script + CSP hash).
+Last session: 2026-06-26T22:00:00.000Z
+Stopped at: Completed Phase 14 Plan 04 (FOUC script for named theme + CSP sha256 hash sync). Single atomic commit 963c782; index.html FOUC script extended to read marketplace.osTheme and apply VIBE_THEMES vars on documentElement before React mounts; CSP script-src hash regenerated; csp.test.ts (7) + hygiene.test.ts (2) green; tsc clean.
+Resume with: continue Phase 14 — Plan 14-05 (ThemeSelector 4-pill switcher in AppBar + switch-path test).
 
 ## Operator Next Steps
 
-- Continue Phase 14: execute Plan 14-04 (ThemeSelector component + AppBar wiring) and Plan 14-05 (index.html FOUC script extension + CSP hash update, same commit).
+- Continue Phase 14: execute Plan 14-05 (ThemeSelector 4-pill switcher component + AppBar wiring + switch-path test) — the last plan of Phase 14.
