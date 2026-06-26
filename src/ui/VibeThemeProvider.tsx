@@ -144,14 +144,17 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback(
     (name: VibeThemeName) => {
-      setThemeState(() => {
-        try {
-          localStorage.setItem(STORAGE_KEY_OS_THEME, name);
-        } catch {
-          // Persisting is best-effort; the in-memory theme still updates.
-        }
-        return name;
-      });
+      // Keep the updater pure — React may invoke it more than once (double
+      // render under StrictMode, replays during concurrent/interrupted
+      // renders), so side effects must live outside it.
+      setThemeState(name);
+      // Persist authoritatively to localStorage (best-effort) after the state
+      // update is queued.
+      try {
+        localStorage.setItem(STORAGE_KEY_OS_THEME, name);
+      } catch {
+        // Persisting is best-effort; the in-memory theme still updates.
+      }
       // Fire-and-forget the durable mirror — never block the UI switch on the
       // async IDB write. localStorage already holds the authoritative value.
       void settingsStore.write(name);
