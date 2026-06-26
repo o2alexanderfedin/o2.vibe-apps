@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Real & Robust
 status: executing
-stopped_at: Autonomous run — Phases 9 & 10 complete (merged 7dd8b43, 3b83cf7). Proceeding to Phase 11.
-last_updated: "2026-06-26T11:05:00.000Z"
-last_activity: 2026-06-26 -- Phase 10 merged to develop (passed 4/4, 399 tests)
+stopped_at: Session resumed via /gsd-resume-work — clean checkpoint confirmed (develop synced with origin, no incomplete plans/handoff). Proceeding to plan Phase 9 (Richer Storefront).
+last_updated: "2026-06-26T11:35:23.903Z"
+last_activity: 2026-06-26 -- Phase 11 execution started
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 5
+  total_plans: 7
   completed_plans: 5
-  percent: 40
+  percent: 71
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 10 — widget-schema-key
+**Current focus:** Phase 11 — reliability-hardening
 
 ## Current Position
 
-Phase: 11 (Reliability Hardening) — READY TO PLAN
-Plan: —
-Status: Phases 9 & 10 complete (merged); planning Phase 11 next
-Last activity: 2026-06-26 -- Phase 10 merged to develop (passed 4/4, 399 tests)
+Phase: 11 (reliability-hardening) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 11
+Last activity: 2026-06-26 -- Phase 11 execution started
 
 Progress: [████░░░░░░] 40% (2 of 5 v1.1 phases)
 
