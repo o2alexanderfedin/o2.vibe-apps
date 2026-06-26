@@ -88,16 +88,16 @@ describe("Marketplace open flow (UI integration, injected deps)", () => {
   });
 
   it("opens an unseeded app whose transport returns `export default` TSX → its UI renders", async () => {
-    // Weather is NOT seeded — it routes through the transport. The canned
+    // Calculator is NOT seeded — it routes through the transport. The canned
     // transport returns a component shipped with `export default` (the shape
     // that silently failed to render before the transpile fix).
     const { user } = renderMarketplace({
       transport: cannedTransport(EXPORT_DEFAULT_TSX),
     });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     expect(within(region).getByText("Produced Component")).toBeInTheDocument();
     // The produced component is interactive end-to-end.
     const button = within(region).getByRole("button", { name: "Open Now" });
@@ -129,21 +129,21 @@ describe("Marketplace open flow (UI integration, injected deps)", () => {
       transport: cannedTransport(EXPORT_DEFAULT_TSX),
     });
 
-    // First open: produces + caches the unseeded Weather app.
-    await openApp(user, "Weather");
-    const region1 = await screen.findByRole("region", { name: "Weather" });
+    // First open: produces + caches the unseeded Calculator app.
+    await openApp(user, "Calculator");
+    const region1 = await screen.findByRole("region", { name: "Calculator" });
     expect(within(region1).getByText("Produced Component")).toBeInTheDocument();
 
     // Close it.
-    const closeButton = within(region1).getByRole("button", { name: "Close Weather" });
+    const closeButton = within(region1).getByRole("button", { name: "Close Calculator" });
     await user.click(closeButton);
     await waitFor(() =>
-      expect(screen.queryByRole("region", { name: "Weather" })).not.toBeInTheDocument(),
+      expect(screen.queryByRole("region", { name: "Calculator" })).not.toBeInTheDocument(),
     );
 
     // Re-open: served from the registry (tier-3 cache) — must render again.
-    await openApp(user, "Weather");
-    const region2 = await screen.findByRole("region", { name: "Weather" });
+    await openApp(user, "Calculator");
+    const region2 = await screen.findByRole("region", { name: "Calculator" });
     expect(within(region2).getByText("Produced Component")).toBeInTheDocument();
   });
 });
