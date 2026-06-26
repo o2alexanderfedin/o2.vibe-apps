@@ -43,6 +43,20 @@ import type { Services } from "../services/services";
 import type { HandlerRecord } from "../registry/db";
 import { registryKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
+import { WEATHER_HANDLER_SOURCES } from "../apps/weatherHandlers";
+import { CURRENCY_HANDLER_SOURCES } from "../apps/currencyHandlers";
+
+/**
+ * Aggregated seeded handler sources. The map keys are the exact intent strings
+ * buildActionIntent produces for each seeded app action. A match here short-circuits
+ * the registry lookup and the model call — these handlers are host-authored and always
+ * available with zero cost (DATA-03). To add more seeded handlers, spread their
+ * ReadonlyMap into this array.
+ */
+const SEEDED_HANDLER_SOURCES: ReadonlyMap<string, string> = new Map([
+  ...WEATHER_HANDLER_SOURCES,
+  ...CURRENCY_HANDLER_SOURCES,
+]);
 
 /**
  * The neutral result a handler returns. Exactly one of `data` / `error` is set
@@ -191,6 +205,16 @@ async function resolveHandlerJS(
   intent: string,
   services: Services,
 ): Promise<string> {
+  // Seeded-handler short-circuit: host-authored handler sources for known intents.
+  // Fires BEFORE the registry lookup and BEFORE any model call (DATA-03). The
+  // seeded source is transpiled locally on every call — no registry write needed,
+  // as seeded handlers are stateless and cost nothing to re-transpile.
+  const seededSource = SEEDED_HANDLER_SOURCES.get(intent);
+  if (seededSource) {
+    logger.info("Handler: seeded handler hit");
+    return transpileHandler(seededSource, { filename: "seeded-handler.ts" });
+  }
+
   const key = await registryKey("handler", intent);
 
   // Cache HIT: reuse the stored transpiled JS, no model call (HANDLER-02).

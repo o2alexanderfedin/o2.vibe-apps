@@ -71,16 +71,16 @@ describe("Marketplace — produce-cost cap surfaces neutral fallback on rapid op
       produceGate,
     });
 
-    // Two distinct UNSEEDED apps open successfully (each is a produce miss).
-    await openApp(user, "Weather");
+    // Two distinct unseeded apps open successfully (each is a produce miss).
     await openApp(user, "Calculator");
+    await openApp(user, "Timer");
     await waitFor(() =>
       expect(screen.getAllByText("opened").length).toBeGreaterThanOrEqual(2),
     );
 
     // The third rapid open exceeds the cap → neutral throttled fallback.
-    await openApp(user, "Timer");
-    const region = await screen.findByRole("region", { name: "Timer" });
+    await openApp(user, "Recipes");
+    const region = await screen.findByRole("region", { name: "Recipes" });
     expect(
       within(region).getByText(/give it a moment/i),
     ).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe("Marketplace — produce-cost cap surfaces neutral fallback on rapid op
 
     // The storefront is still browsable — the other cards remain clickable.
     expect(screen.getByRole("button", { name: /^Budget —/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Notes —/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Weather —/ })).toBeInTheDocument();
   });
 
   it("after the window advances (stub clock), a fresh open succeeds again", async () => {
@@ -104,12 +104,12 @@ describe("Marketplace — produce-cost cap surfaces neutral fallback on rapid op
     });
 
     // First open consumes the single slot.
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
     await waitFor(() => expect(screen.getByText("opened")).toBeInTheDocument());
 
     // Second rapid open is throttled.
-    await openApp(user, "Calculator");
-    const blocked = await screen.findByRole("region", { name: "Calculator" });
+    await openApp(user, "Timer");
+    const blocked = await screen.findByRole("region", { name: "Timer" });
     expect(within(blocked).getByText(/give it a moment/i)).toBeInTheDocument();
 
     // Advance virtual time past the window — capacity frees up (no real wait).
@@ -134,7 +134,7 @@ describe("Marketplace — produce-cost cap surfaces neutral fallback on rapid op
     });
 
     // Spend the single slot on an unseeded produce.
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
     await waitFor(() => expect(screen.getByText("opened")).toBeInTheDocument());
 
     // Notes is SEEDED → transpiled locally, no model call → never throttled.
