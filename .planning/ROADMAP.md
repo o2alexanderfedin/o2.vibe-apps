@@ -31,7 +31,7 @@ gap G1). See [BLUEPRINT-DELTA.md](./BLUEPRINT-DELTA.md).
 
 - [ ] **Phase 9: Richer Storefront** — Apps carry a real name and re-produce faithfully; a popular row surfaces the most-opened apps with honest local copy.
 - [x] **Phase 10: Widget Schema & Key Correctness** — Real typed widget/handler records and every cache-key call site folds kind+prompt, so activated widgets can't collide with apps on a shared type slug.
-- [ ] **Phase 11: Reliability Hardening** — Produced delegated behavior is correct more often: invalid state is rejected and prior state kept, unknown actions are no-ops, no extra model round-trips.
+- [x] **Phase 11: Reliability Hardening** — Produced delegated behavior is correct more often: invalid state is rejected and prior state kept, unknown actions are no-ops, no extra model round-trips. (completed 2026-06-26)
 - [ ] **Phase 12: Sanctioned Network-Data Path** — Weather and Currency apps fetch real data through a host-brokered, allowlisted, keyless egress; the API key never enters app scope.
 - [ ] **Phase 13: Activate Widget Composition** — Delegated apps can declare and render `@widget` sub-widgets, each isolated, with a bounded composition depth.
 
@@ -84,7 +84,7 @@ Plans:
 - [x] 11-01-PLAN.md — zod dep + stateSchema helper + wire validation into the merge step in delegated.tsx (RELY-01, RELY-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 11-02-PLAN.md — Full test suite: keep-prior / extra-keys / valid-partial / no-op paths / zero-round-trip (RELY-01, RELY-02, RELY-03 test coverage)
+- [x] 11-02-PLAN.md — Full test suite: keep-prior / extra-keys / valid-partial / no-op paths / zero-round-trip (RELY-01, RELY-02, RELY-03 test coverage)
 
 ### Phase 12: Sanctioned Network-Data Path
 **Goal**: A user opening the Weather app sees real current conditions and the Currency app shows real FX rates, fetched through a host-brokered allowlisted path — and nothing the user or devtools sees reveals the mechanic or exposes the API key.
@@ -126,7 +126,7 @@ v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 8. Backend-Style Handlers | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 9. Richer Storefront | v1.1 | 0/3 | Planned | - |
 | 10. Widget Schema & Key Correctness | v1.1 | 0/2 | Planned | - |
-| 11. Reliability Hardening | v1.1 | 1/2 | In Progress|  |
+| 11. Reliability Hardening | v1.1 | 2/2 | Complete   | 2026-06-26 |
 | 12. Sanctioned Network-Data Path | v1.1 | 0/TBD | Not started | - |
 | 13. Activate Widget Composition | v1.1 | 0/TBD | Not started | - |
 
