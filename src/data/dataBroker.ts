@@ -67,7 +67,7 @@ export function createDataBroker(opts: DataBrokerOptions = {}): DataFetchBroker 
     opts.limiter ??
     new TokenBucket({ capacity: 4, refillPerSec: 2, maxConcurrent: 4, clock });
   const ttlCache = opts.ttlCache ?? new TtlCache({ clock });
-  const fetchFn = opts.fetchFn ?? globalThis.fetch.bind(globalThis);
+  const fetchFn = opts.fetchFn ?? ((url: string, init?: RequestInit) => globalThis.fetch(url, init));
 
   return {
     async fetch(
