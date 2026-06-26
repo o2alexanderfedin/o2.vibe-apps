@@ -62,8 +62,8 @@ async function resolveWidget(
 
   // Registry hit — reuse both pieces, no recompile, no model call.
   const stored = await services.registry.get("widgets", key);
-  const storedSource = stored?.["source"];
-  const storedJS = stored?.["transpiledJS"];
+  const storedSource = stored?.source;
+  const storedJS = stored?.transpiledJS;
   if (typeof storedSource === "string" && typeof storedJS === "string") {
     logger.info("Widget pre-warm: registry hit for " + widgetType);
     return { source: storedSource, transpiledJS: storedJS };
@@ -138,8 +138,8 @@ export async function resolveWidgetTweak(
   let transpiledJS: string;
   try {
     const stored = await services.registry.get("widgets", key);
-    const storedSource = stored?.["source"];
-    const storedJS = stored?.["transpiledJS"];
+    const storedSource = stored?.source;
+    const storedJS = stored?.transpiledJS;
     if (typeof storedSource === "string" && typeof storedJS === "string") {
       logger.info("Widget tweak: registry hit for " + widgetType);
       source = storedSource;
