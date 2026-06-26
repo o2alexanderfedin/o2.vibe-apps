@@ -14,6 +14,18 @@ There is no application server. The user supplies their own Anthropic API key (s
 
 This still holds after v1.0. The v1.1 delegated thin-shell refined *how* the loop runs (behavior is attached on first action rather than produced whole up front), but it did not shift what the loop must deliver: an interactive app that betrays no on-demand mechanic.
 
+## Current Milestone: v1.1 Real & Robust
+
+**Goal:** Turn the working-but-shallow v1.0 marketplace into a real, robust one — apps that need live data actually get it, produced behavior is correct more often, the storefront has depth, and widget composition becomes a first-class path.
+
+**Target features:**
+- **Sanctioned network-data path** — a controlled, hygiene-safe egress so network-dependent apps (Weather / Currency) fetch real data instead of degrading to a fallback in the sandboxed handler scope.
+- **Reliability hardening** — reduce state-machine quirks in produced delegated reducers (stronger action-spec contracts, validation, self-heal on bad transitions) so produced behavior is correct more often.
+- **Richer storefront** — persist `displayName` / `prompt` for faithful re-produce (G5) and add a "popular on the platform" row driven by `useCount` (POP-01).
+- **Activate widget composition** — make the dormant `@widget` path first-class (delegated apps that declare/use sub-widgets), replace the placeholder `WidgetRecord` / `HandlerRecord` types with real schemas (G3), and fully fold `kind` + prompt into the cache key so activated widgets can't collide on a shared type slug (G1-followups).
+
+**Deferred out of v1.1** (in Active, not this milestone): HARD-01 `<iframe sandbox>` / SEC-01–03 (security still deferred per MVP-first); G2 unified `Intent` (internal refactor — defer unless it blocks the above).
+
 ## Requirements
 
 ### Validated
@@ -163,4 +175,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-26 after v1.0 milestone*
+*Last updated: 2026-06-26 — v1.1 Real & Robust milestone started*
