@@ -103,7 +103,7 @@ Plans:
 - [x] 12-02-PLAN.md — CSP + assertions: widen index.html connect-src to 4 allowlisted origins; add connectSrcDirective helper + 5-case DATA-02 describe block to csp.test.ts
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 12-03-PLAN.md — Services wiring + handler scope: add fetchDataBroker? to Services; wire real broker in createServices(); add cannedBroker/unusedBroker to testServices.ts; inject fetchData before input in handler constrained scope
+- [x] 12-03-PLAN.md — Services wiring + handler scope: add fetchDataBroker? to Services; wire real broker in createServices(); add cannedBroker/unusedBroker to testServices.ts; inject fetchData before input in handler constrained scope
 - [ ] 12-04-PLAN.md — Seeded Weather + Currency apps: delegated module seeds (initialState/view/actionSpec) + seeded handler sources (weatherHandlers.ts, currencyHandlers.ts) + seeded-handler short-circuit in resolveHandlerJS
 
 **Wave 3** *(blocked on Wave 2 completion)*
