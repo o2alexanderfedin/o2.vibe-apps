@@ -2,6 +2,26 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v1.1 — Real & Robust   (Shipped: 2026-06-26 | Phases: 5 | Plans: 13)
+
+**Verdict:** PASSED — 12/12 requirements satisfied, **552 tests** green (378→552), tsc 0, build clean (no source maps), hygiene + CSP green, tagged `v1.1`. Phases 9–13 each on a feature branch, `--no-ff` merged to develop.
+
+### What worked
+- **The visual-UAT discipline earned its keep.** The Phase 12 live browser smoke caught **two** integration bugs that all 542 unit tests passed over: seeded *delegated* apps were routed to the *monolithic* instantiator (ErrorBoundary in the live app), and the `DelegatedShell` never captured `[data-field]` inputs (so Weather could never search a location). Both got regression tests that fail pre-fix. Lesson reaffirmed: unit tests exercising a module in isolation do **not** prove the seeded→loader→instantiate→render path; smoke the real thing.
+- **CONTEXT-first + a focused codebase scout per phase** kept the planning subagents non-interactive and fast (`--skip-research` with the design pre-resolved), and made inline fallback possible when a subagent died.
+- **Dependency-ordered phases held:** RELY (11) before DATA (12) meant the validate-at-merge gate was already guarding state when live network data first flowed through it; WIDGET typing (10) before activation (13) meant widgets landed on real typed records.
+- **The reliability paradox steer** (lenient, not strict, validation) was load-bearing — partial + passthrough + type-check-known-fields catches corruption without over-rejecting the small model's valid-but-partial output.
+
+### What to improve
+- **Plan/execute overlap (Phase 9):** dispatching the execute delegate before the planning delegate's nested revision loop fully terminated caused the planner to overstep into implementation on a shared branch. Fix applied from Phase 10 on: **wait for the explicit `PLANS_READY` report before dispatching execute.** No recurrence.
+- **Subagent quota is a real constraint at this scale.** The Phase 13 planning subagent hit the account weekly limit; the orchestrator implemented + verified Phase 13 inline. Future large autonomous runs should budget for it (fewer, fatter delegations; or inline the cheaper phases).
+
+### Carried forward (deferred by design / user steer)
+- Anthropic-key-exfil hardening + `<iframe sandbox>` (HARD-01) — the user owns the key story post-v1.1; the host-brokered keyless broker sits behind the same seam for a contained later move.
+- A live seeded widget-composition demo app — capability is test-covered; demo out of v1.1 scope.
+
+---
+
 ## Milestone: v1.0 — MVP   (Shipped: 2026-06-26 | Phases: 8 | Plans: 4)
 
 **Shipped:** 2026-06-26

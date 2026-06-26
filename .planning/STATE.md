@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Real & Robust
-status: executing
-stopped_at: Session resumed via /gsd-resume-work — clean checkpoint confirmed (develop synced with origin, no incomplete plans/handoff). Proceeding to plan Phase 9 (Richer Storefront).
-last_updated: "2026-06-26T13:55:00.000Z"
-last_activity: 2026-06-26 -- Phase 12 merged to develop (passed, live smoke OK, 548 tests)
+status: milestone_complete
+stopped_at: v1.1 "Real & Robust" SHIPPED — all 5 phases (9–13) merged to develop; milestone audited (passed) + archived + tagged v1.1.
+last_updated: "2026-06-26T18:00:00.000Z"
+last_activity: 2026-06-26 -- v1.1 milestone complete (552 tests, tagged v1.1)
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 80
+  completed_phases: 5
+  total_plans: 13
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 13 — activate widget composition (FINAL phase; highest regression risk)
+**Current focus:** v1.1 SHIPPED. Next: `/gsd-new-milestone` for the next milestone (e.g. the deferred Anthropic-key/iframe security story), or `/gsd-quick` for ad-hoc work.
 
 ## Current Position
 
-Phase: 13 (Activate Widget Composition) — READY TO PLAN
-Plan: —
-Status: Phases 9–12 complete (merged); planning the final phase 13 next
-Last activity: 2026-06-26 -- Phase 12 merged to develop (passed, live browser smoke OK)
+Milestone v1.1 — COMPLETE (shipped 2026-06-26, tagged `v1.1`)
+Phase: all 5 (9–13) merged to develop
+Status: milestone audited (passed) + archived + tagged
 
-Progress: [████████░░] 80% (4 of 5 v1.1 phases)
+Progress: [██████████] 100% (5 of 5 v1.1 phases)
+
+### v1.1 phases — all DONE
+- Phase 9 Richer Storefront (STORE-01/02) — merged 7dd8b43
+- Phase 10 Widget Schema & Key Correctness (WIDGET-07/08) — merged 3b83cf7
+- Phase 11 Reliability Hardening (RELY-01/02/03) — merged 8e10317
+- Phase 12 Sanctioned Network-Data Path (DATA-01..04) — merged de9ce2b (live CORS smoke; 2 smoke-found bugs fixed)
+- Phase 13 Activate Widget Composition (WIDGET-06) — merged ab4f105 (implemented inline; subagent quota hit)
 
 ### Phase 12 — DONE (merged de9ce2b)
 
