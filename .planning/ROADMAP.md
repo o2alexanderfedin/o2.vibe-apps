@@ -153,7 +153,7 @@ Plans:
 Plans:
 - [x] 14-01-PLAN.md — Additive registry DB v2→v3 settings store (durable theme-name mirror foundation)
 - [x] 14-02-PLAN.md — Alias bridge CSS (pre-v2 apps keep colors) + osTheme storage key
-- [ ] 14-03-PLAN.md — VibeThemeProvider + VIBE_THEMES contract on document root, dual persistence via injected settings seam
+- [x] 14-03-PLAN.md — VibeThemeProvider + VIBE_THEMES contract on document root, dual persistence via injected settings seam
 - [ ] 14-04-PLAN.md — FOUC script extension + CSP sha256 hash sync (atomic, no-flash first paint)
 - [ ] 14-05-PLAN.md — ThemeSelector 4-pill switcher in AppBar + switch-path test (temporary home)
 **Research pitfalls defended**: Pitfall 5 (CSS vars on documentElement, not React context), Pitfall 6 (FOUC — localStorage sync read in index.html script), Pitfall 7 (theme transition jank — @property or opacity crossfade), Pitfall 11 (new surfaces extend hygiene gate)
@@ -231,7 +231,7 @@ v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 
 | 11. Reliability Hardening | v1.1 | 2/2 | Complete | 2026-06-26 |
 | 12. Sanctioned Network-Data Path | v1.1 | 5/5 | Complete | 2026-06-26 |
 | 13. Activate Widget Composition | v1.1 | TBD | Complete | 2026-06-26 |
-| 14. Theme Foundation | v2.0 | 2/5 | In Progress|  |
+| 14. Theme Foundation | v2.0 | 3/5 | In Progress|  |
 | 15. Window Manager | v2.0 | 0/TBD | Not started | - |
 | 16. Desktop Shell | v2.0 | 0/TBD | Not started | - |
 | 17. Search / Launcher Panel | v2.0 | 0/TBD | Not started | - |

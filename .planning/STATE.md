@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Vibe OS
-status: Roadmap created; awaiting first phase plan
-stopped_at: "v2.0 Vibe OS roadmap created. 5 phases defined (14–18), 21/21 requirements mapped, 100% coverage. Files written: ROADMAP.md, STATE.md, REQUIREMENTS.md traceability updated. Ready to begin Phase 14."
-last_updated: "2026-06-26T21:48:07.634Z"
-last_activity: 2026-06-26 — v2.0 Vibe OS roadmap created (Phases 14–18)
+status: Phase 14 in progress — Plan 14-03 (VibeThemeProvider) complete
+stopped_at: "Completed 14-03-PLAN.md — VibeThemeProvider named-theme engine (VIBE_THEMES four-theme CSS-variable contract on document.documentElement, dual localStorage+IDB persistence via injected SettingsStore seam, nested inside the untouched light/dark ThemeProvider). TDD RED→GREEN; 566/566 tests green."
+last_updated: "2026-06-26T21:54:49.929Z"
+last_activity: 2026-06-26 — Completed Phase 14 Plan 03 (VibeThemeProvider)
 progress:
   total_phases: 10
   completed_phases: 5
   total_plans: 18
-  completed_plans: 15
-  percent: 83
+  completed_plans: 16
+  percent: 89
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation. Roadmap created; ready for `/gsd-plan-phase 14`.
+**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation. Plan 14-03 (VibeThemeProvider) complete; Wave 2 named-theme engine landed.
 
 ## Current Position
 
-Phase: 14 — Theme Foundation (Not started)
-Plan: —
-Status: Roadmap created; awaiting first phase plan
-Last activity: 2026-06-26 — v2.0 Vibe OS roadmap created (Phases 14–18)
+Phase: 14 — Theme Foundation (In progress)
+Plan: 14-03 complete (VibeThemeProvider named-theme engine)
+Status: Phase 14 Wave 2 — VibeThemeProvider + SettingsStore seam landed; ready for 14-04 (ThemeSelector/AppBar) and 14-05 (FOUC script + CSP hash)
+Last activity: 2026-06-26 — Completed Phase 14 Plan 03 (VibeThemeProvider)
 
 ### v2.0 Phase Map
 
@@ -56,7 +56,7 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 
 **Velocity:**
 
-- Total plans completed (v2.0): 0
+- Total plans completed (v2.0): 3 (14-01, 14-02, 14-03)
 - Average duration: —
 - Total execution time: —
 
@@ -64,12 +64,16 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 14 | 0/TBD | — | — |
+| Phase 14 | 3/5 | — | — |
+
+| Plan | Duration | Tasks | Files | Completed |
+|------|----------|-------|-------|-----------|
+| 14-03 | ~13min | 2 (TDD) | 6 | 2026-06-26 |
 
 **Recent Trend:**
 
-- Last 5 plans: —
-- Trend: —
+- Last 5 plans: 14-01, 14-02, 14-03
+- Trend: Phase 14 Theme Foundation progressing (3 of 5 plans done)
 
 *Updated after each plan completion*
 
@@ -87,6 +91,9 @@ Recent decisions affecting current work:
 - [Roadmap v2.0]: Zero new npm dependencies — hand-roll useDrag (setPointerCapture + rAF + state-on-pointerup), VibeThemeProvider (documentElement.style.setProperty), and all windowing/dock/menu-bar components. Research verdict: react-draggable has React 19 findDOMNode breakage; framer-motion is 674KB–4.8MB.
 - [Roadmap v2.0]: Theme vars applied to document.documentElement (not React context) so CSS inheritance reaches all separately-createRoot'd generated app subtrees — this is the central theming mechanism.
 - [Roadmap v2.0]: FOUC prevention via synchronous localStorage read in index.html script before React mounts; IDB settings store (v3) is the authoritative persistence, localStorage is the FOUC guard.
+- [14-03]: Settings store reaches IndexedDB via openRegistry() directly rather than widening the Registry StoreName union (apps|widgets|handlers) — the settings store sits outside the cache-eviction surface.
+- [14-03]: setTheme fires settingsStore.write(name) fire-and-forget (no await) — the UI switch + localStorage write are synchronous and authoritative; the IDB mirror is best-effort.
+- [14-03]: VibeThemeProvider is nested INSIDE the existing light/dark ThemeProvider (not replacing it) so the named-theme CSS-variable contract layers on top without disturbing the 552-test data-theme mechanism.
 - [Roadmap v2.0]: All v1.0/v1.1 cross-cutting constraints (HYGIENE-01..05, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, TDD with real captured-Haiku fixtures, additive DB migrations) are acceptance constraints on every v2.0 phase — not separate phases.
 
 ### Key Research Flags
@@ -126,9 +133,9 @@ Items acknowledged and carried forward:
 ## Session Continuity
 
 Last session: 2026-06-26T21:48:07.627Z
-Stopped at: v2.0 Vibe OS roadmap created. 5 phases defined (14–18), 21/21 requirements mapped, 100% coverage. Files written: ROADMAP.md, STATE.md, REQUIREMENTS.md traceability updated. Ready to begin Phase 14.
-Resume with: `/gsd-plan-phase 14`
+Stopped at: Completed Phase 14 Plan 03 (VibeThemeProvider named-theme engine + SettingsStore seam). TDD RED→GREEN; commits bcaf6a7 (test) + 8ebfba0 (feat); 566/566 tests green; tsc clean; hygiene gate green.
+Resume with: continue Phase 14 — Plan 14-04 (ThemeSelector + AppBar) then 14-05 (FOUC script + CSP hash).
 
 ## Operator Next Steps
 
-- Plan the first v2.0 phase: `/gsd-plan-phase 14` (Theme Foundation — THEME-01..05).
+- Continue Phase 14: execute Plan 14-04 (ThemeSelector component + AppBar wiring) and Plan 14-05 (index.html FOUC script extension + CSP hash update, same commit).
