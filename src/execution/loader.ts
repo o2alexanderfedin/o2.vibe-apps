@@ -43,7 +43,8 @@ import { titleCase } from "../ui/marketplaceUtils";
  * [a-zA-Z0-9 ] only) — e.g. "Weather (show celsius)". If the stripped suffix is
  * empty after trimming, returns the base title only.
  */
-function deriveDisplayName(type: string, userPrompt?: string): string {
+// Exported for unit tests only — not part of the public loader API.
+export function deriveDisplayName(type: string, userPrompt?: string): string {
   const base = titleCase(type);
   if (userPrompt) {
     const suffix = userPrompt.trim().slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, "").trim();
