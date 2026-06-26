@@ -2,11 +2,10 @@
 //
 // The map key is the exact intent string buildActionIntent produces at runtime
 // for the currency "load" action. Any mismatch (even whitespace) causes the
-// short-circuit to miss and the handler to be produced on demand instead.
+// fallback cache path to be used.
 //
-// The handler source string calls fetchData (the host-brokered data accessor
-// injected into the constrained scope by Plan 03) to fetch live FX rates.
-// It needs ZERO model calls.
+// The handler source calls fetchData to fetch live FX rates and maps the
+// response to the view's state fields (base, rates, status).
 
 // Currency actionSpec — matches the string in seeds.ts exactly (whitespace matters).
 const CURRENCY_ACTION_SPEC =
