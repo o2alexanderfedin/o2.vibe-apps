@@ -28,7 +28,7 @@ import { instantiate, makeUseWidget, InstantiateError } from "./instantiate";
 import { instantiateDelegated, makeDelegatedComponent } from "./delegated";
 import { runHandler } from "./handler";
 import { prewarmWidgets } from "./widgetPrewarm";
-import { SEEDED_SOURCES } from "../apps/seeds";
+import { SEEDED_SOURCES, SEEDED_DELEGATED } from "../apps/seeds";
 import { produceComponent, type TransportFn as ProducerTransport } from "./producer";
 import type { Services } from "../services/services";
 import { evictUnderPressure } from "../registry/storagePressure";
@@ -170,7 +170,30 @@ async function instantiateApp(
       throw err;
     }
   }
-  return instantiateWithWidgets(source, transpiledJS, services);
+
+  // Monolith path. Symmetric reverse fallback: a record may carry mode:"app" while
+  // its payload is actually a delegated module — e.g. a stale record written before
+  // delegated seeds set mode:"delegated", or any future mode/shape drift. When the
+  // monolith instantiator rejects it for exporting no `App`, retry as a delegated
+  // module so the open self-heals instead of throwing into the ErrorBoundary.
+  try {
+    return await instantiateWithWidgets(source, transpiledJS, services);
+  } catch (err) {
+    if (err instanceof InstantiateError) {
+      try {
+        const module = instantiateDelegated(transpiledJS);
+        const boundRunHandler = (intent: string, input: unknown) =>
+          runHandler(intent, input, services);
+        logger.info("Loader: app payload is a delegated module — mounting via DelegatedShell");
+        return makeDelegatedComponent(appType, module, boundRunHandler);
+      } catch {
+        // Not a delegated module either — surface the original monolith error so the
+        // failure mode is unchanged for genuinely broken payloads.
+        throw err;
+      }
+    }
+    throw err;
+  }
 }
 
 /**
@@ -256,11 +279,16 @@ export async function resolveComponent(
   let mode: AppMode;
 
   if (seededSource) {
-    // Seeded path: transpile locally, no model call. Seeds are monolithic components.
+    // Seeded path: transpile locally, no model call. Most seeds are monolithic
+    // components, but some (weather, currency) are delegated modules (initialState
+    // + view + actionSpec) that must mount through the DelegatedShell. SEEDED_DELEGATED
+    // declares which types use the delegated shape so we route — and persist — the
+    // correct mode. The mode set here flows into BOTH the cached record write and the
+    // instantiate dispatch below.
     logger.info("Loader: cache miss — compiling seeded source for " + appType);
     source = seededSource;
     transpiledJS = transpile(source, { filename: appType + ".tsx" });
-    mode = "app";
+    mode = SEEDED_DELEGATED.has(appType) ? "delegated" : "app";
   } else {
     // Unseeded path: on-demand produce via model (GEN-01..03, GEN-05) in DELEGATED
     // mode — a behavior-free module (initialState + view + actionSpec) mounted through

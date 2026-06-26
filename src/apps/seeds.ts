@@ -7,6 +7,13 @@
 // Entries for weather and currency are delegated modules (initialState + view + actionSpec)
 // that work with the DelegatedShell runtime and seeded handler sources.
 
+// App types whose seeded source is a delegated module (initialState + view +
+// actionSpec) rather than a monolithic App component. The loader consults this to
+// route them to the DelegatedShell instantiator instead of the monolith path, and
+// to persist the correct mode on the cached record. Keep in sync with the entries
+// below that end in `module.exports = { initialState, view, actionSpec }`.
+export const SEEDED_DELEGATED: ReadonlySet<string> = new Set(["weather", "currency"]);
+
 export const SEEDED_SOURCES: ReadonlyMap<string, string> = new Map([
   [
     "counter",
