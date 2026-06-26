@@ -203,27 +203,18 @@ function deriveDisplayName(type: string, userPrompt?: string): string {
 
 1. **State:** `const [popularApps, setPopularApps] = useState<AppRecord[]>([]);` — loaded from registry on mount via `useEffect`.
 
-2. **Effect to load popular apps:**
+2. **Effect to load popular apps** — delegates ALL ranking to `rankPopular` (the SOLE owner of the `useCount >= 1` membership filter, the deterministic sort, and the top-N cap; defined in `marketplaceUtils.ts` per Plan 09-01). The component does NOT filter on `useCount` itself — its only narrowing is a presence type guard (`!!r`) to drop `undefined` records from deleted/missing keys:
 ```tsx
 useEffect(() => {
   void (async () => {
     try {
       const allKeys = await services.registry.keys("apps");
-      const records = await Promise.all(
+      const fetched = await Promise.all(
         allKeys.map((k) => services.registry.get("apps", k)),
       );
-      const ranked = records
-        .filter((r): r is AppRecord => !!r && typeof r.useCount === "number" && r.useCount >= 1)
-        .sort((a, b) => {
-          // useCount desc, then updatedAt desc, then cacheKey asc (deterministic)
-          const ucDiff = (b.useCount ?? 0) - (a.useCount ?? 0);
-          if (ucDiff !== 0) return ucDiff;
-          const uaDiff = (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
-          if (uaDiff !== 0) return uaDiff;
-          return a.cacheKey < b.cacheKey ? -1 : 1;
-        })
-        .slice(0, 5); // cap: planner's discretion, ~4–6
-      setPopularApps(ranked);
+      // presence guard ONLY — NOT a useCount filter. rankPopular owns membership.
+      const records = fetched.filter((r): r is AppRecord => !!r);
+      setPopularApps(rankPopular(records)); // rankPopular: filter useCount>=1, sort, cap topN
     } catch (err) {
       logger.error("Marketplace: failed to load popular apps: " + String(err));
     }
