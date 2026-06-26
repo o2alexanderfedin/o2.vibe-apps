@@ -74,12 +74,28 @@ Requirements continue the v1.0/v1.1 REQ-ID families. All v1.0/v1.1 cross-cutting
 
 ## Traceability
 
-| REQ-ID | Phase (proposed) | Status |
-|--------|------------------|--------|
-| THEME-01..05 | Phase 14 — Theme Foundation | Pending |
-| WIN-01..05 | Phase 15 — Window Manager | Pending |
-| WIN-06, WIN-07, WIN-08, PERF-01 | Phase 16 — Desktop Shell | Pending |
-| CREATE-01..03 | Phase 17 — Search / Launcher Panel | Pending |
-| TGEN-01..03, HYGIENE-06 | Phase 18 — Theme-Aware Generation | Pending |
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| THEME-01 | Phase 14 — Theme Foundation | Pending |
+| THEME-02 | Phase 14 — Theme Foundation | Pending |
+| THEME-03 | Phase 14 — Theme Foundation | Pending |
+| THEME-04 | Phase 14 — Theme Foundation | Pending |
+| THEME-05 | Phase 14 — Theme Foundation | Pending |
+| WIN-01 | Phase 15 — Window Manager | Pending |
+| WIN-02 | Phase 15 — Window Manager | Pending |
+| WIN-03 | Phase 15 — Window Manager | Pending |
+| WIN-04 | Phase 15 — Window Manager | Pending |
+| WIN-05 | Phase 15 — Window Manager | Pending |
+| WIN-06 | Phase 16 — Desktop Shell | Pending |
+| WIN-07 | Phase 16 — Desktop Shell | Pending |
+| WIN-08 | Phase 16 — Desktop Shell | Pending |
+| PERF-01 | Phase 16 — Desktop Shell | Pending |
+| CREATE-01 | Phase 17 — Search / Launcher Panel | Pending |
+| CREATE-02 | Phase 17 — Search / Launcher Panel | Pending |
+| CREATE-03 | Phase 17 — Search / Launcher Panel | Pending |
+| TGEN-01 | Phase 18 — Theme-Aware Generation | Pending |
+| TGEN-02 | Phase 18 — Theme-Aware Generation | Pending |
+| TGEN-03 | Phase 18 — Theme-Aware Generation | Pending |
+| HYGIENE-06 | Phase 18 — Theme-Aware Generation | Pending |
 
-**Coverage:** 21 requirements across 5 proposed phases (final mapping set by the roadmapper). Cross-cutting constraints apply to all.
+**Coverage:** 21/21 requirements mapped across 5 phases. Cross-cutting constraints (HYGIENE-01..05, single egress, sourcemaps-off, CSP, IoC/DI, TDD, additive DB migrations, FOUC-script/CSP-hash invariant) apply to all phases.

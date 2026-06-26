@@ -4,6 +4,7 @@
 
 - ✅ **v1.0 MVP** — Phases 1–8 (shipped 2026-06-26) — full detail archived in [milestones/v1.0-ROADMAP.md](./milestones/v1.0-ROADMAP.md)
 - ✅ **v1.1 Real & Robust** — Phases 9–13 (shipped 2026-06-26) — full detail archived in [milestones/v1.1-ROADMAP.md](./milestones/v1.1-ROADMAP.md)
+- 🚧 **v2.0 Vibe OS** — Phases 14–18 (in progress)
 
 ## Phases
 
@@ -27,15 +28,26 @@ gap G1). See [BLUEPRINT-DELTA.md](./BLUEPRINT-DELTA.md).
 
 </details>
 
-### ✅ v1.1 Real & Robust (Phases 9–13) — SHIPPED 2026-06-26
+<details>
+<summary>✅ v1.1 Real & Robust (Phases 9–13) — SHIPPED 2026-06-26</summary>
 
 All 5 phases complete and merged to `develop`; 12/12 requirements satisfied; 552 tests green. Full phase detail archived in [milestones/v1.1-ROADMAP.md](./milestones/v1.1-ROADMAP.md).
 
 - [x] **Phase 9: Richer Storefront** — Apps carry a real name and re-produce faithfully; a popular row surfaces the most-opened apps with honest local copy.
 - [x] **Phase 10: Widget Schema & Key Correctness** — Real typed widget/handler records and every cache-key call site folds kind+prompt, so activated widgets can't collide with apps on a shared type slug.
-- [x] **Phase 11: Reliability Hardening** — Produced delegated behavior is correct more often: invalid state is rejected and prior state kept, unknown actions are no-ops, no extra model round-trips. (completed 2026-06-26)
-- [ ] **Phase 12: Sanctioned Network-Data Path** — Weather and Currency apps fetch real data through a host-brokered, allowlisted, keyless egress; the API key never enters app scope.
-- [ ] **Phase 13: Activate Widget Composition** — Delegated apps can declare and render `@widget` sub-widgets, each isolated, with a bounded composition depth.
+- [x] **Phase 11: Reliability Hardening** — Produced delegated behavior is correct more often: invalid state is rejected and prior state kept, unknown actions are no-ops, no extra model round-trips.
+- [x] **Phase 12: Sanctioned Network-Data Path** — Weather and Currency apps fetch real data through a host-brokered, allowlisted, keyless egress; the API key never enters app scope.
+- [x] **Phase 13: Activate Widget Composition** — Delegated apps can declare and render `@widget` sub-widgets, each isolated, with a bounded composition depth.
+
+</details>
+
+### v2.0 Vibe OS (Phases 14–18)
+
+- [ ] **Phase 14: Theme Foundation** — The CSS-variable theme contract and FOUC-safe persistence are established; the alias bridge keeps pre-v2 cached apps rendering. Dependency root for all v2.0 phases.
+- [ ] **Phase 15: Window Manager** — Apps open as draggable glass windows with z-order, focus, minimize, close, and no React root leaks.
+- [ ] **Phase 16: Desktop Shell** — The desktop surface, animated wallpaper, dock (with running indicators and the launcher icon), and menu bar (wordmark, active-app name, clock) replace the flat storefront as the root UI.
+- [ ] **Phase 17: Search / Launcher Panel** — A dock-launched panel lets the user describe an app or pick a pre-installed one; results open as windows on the desktop via the real produce loop.
+- [ ] **Phase 18: Theme-Aware Generation** — All produce-prompt branches mandate the CSS-var contract; a post-compile static check feeds violations into the self-heal loop; model-supplied names are sanitized; the CI lexicon gate covers all new surfaces.
 
 ## Phase Details
 
@@ -123,10 +135,80 @@ Plans:
 **Plans**: TBD
 **UI hint**: yes
 
+---
+
+## v2.0 Vibe OS — Phase Details
+
+### Phase 14: Theme Foundation
+**Goal**: The Vibe OS theme contract is live — four named themes apply as CSS custom properties on the document root, the active theme persists with no flash on reload, and a backward-compat alias bridge keeps every pre-v2.0 cached app rendering correctly.
+**Depends on**: Phase 13 (v1.1 complete)
+**Requirements**: THEME-01, THEME-02, THEME-03, THEME-04, THEME-05
+**Success Criteria** (what must be TRUE):
+  1. A user clicks any of the four theme pills (Aurora / Aero / Aqua / Noir) and every visible element — host chrome, open app windows, the dock, the menu bar — re-skins instantly with no page reload and no component remount.
+  2. On a hard reload after switching to Noir (or any non-default theme), the page paints with the correct Noir palette from the very first frame — no flash of the default Aurora colors at any point during load.
+  3. An app that was cached before v2.0 (referencing `--color-surface`, `--color-text`, `--color-accent`) still renders and re-skins correctly after the new theme variables land, because the `:root` alias bridge forwards those old names to the new contract.
+  4. The active theme name is persisted in both `localStorage` (for the FOUC script) and the new IDB `settings` store (DB version bumped to 3, additive upgrade), so the choice survives tab close, hard reload, and browser restart.
+  5. The FOUC script SHA-256 hash in `csp.test.ts` is updated in the same commit as the script change, and all 552+ existing tests stay green (theme foundation is entirely additive).
+**Plans**: TBD
+**Research pitfalls defended**: Pitfall 5 (CSS vars on documentElement, not React context), Pitfall 6 (FOUC — localStorage sync read in index.html script), Pitfall 7 (theme transition jank — @property or opacity crossfade), Pitfall 11 (new surfaces extend hygiene gate)
+
+### Phase 15: Window Manager
+**Goal**: Apps open as independently draggable glass windows — each in its own React root, with z-order/focus/minimize/close lifecycle managed by a single hook — with no root leaks on close and no pointer-event jank during drag.
+**Depends on**: Phase 14 (theme CSS vars must be live so WindowFrame chrome can reference them)
+**Requirements**: WIN-01, WIN-02, WIN-03, WIN-04, WIN-05
+**Success Criteria** (what must be TRUE):
+  1. A user opens multiple apps concurrently and sees each as a distinct draggable window with a macOS-style glass chrome (traffic-light close/minimize controls, app icon, title) — windows are independent and do not affect each other's state.
+  2. A user drags a window by its titlebar across the desktop — including into the content area of another window and back — and the window tracks the pointer cleanly with no sticking, no text-selection, and no frame drops; the window stops at viewport edges.
+  3. Clicking a window's titlebar or body raises it to the front (z-order) and makes it active; a new window opens cascade-placed above and to the right of the previous one.
+  4. A user minimizes a window (traffic-light or dock click) and it disappears from the desktop; clicking the dock icon restores it to its prior position and size with its app state intact.
+  5. Closing a window fully tears down its React root — `mountedCount()` returns to the pre-open value, no timers or listeners from the closed app survive, and a subsequent open produces a fresh root with no `createRoot` warning.
+**Plans**: TBD
+**Research pitfalls defended**: Pitfall 1 (setPointerCapture on drag handle), Pitfall 2 (rAF + imperative style writes, state only on pointerup), Pitfall 3 (isolation:isolate container, bounded z-index), Pitfall 4 (display:none minimized windows), Pitfall 8 (three-step close teardown: evict→closeWin→unmountApp), Pitfall 9 (cancellation token on mid-flight close), Pitfall 12 (window raise separate from input focus)
+
+### Phase 16: Desktop Shell
+**Goal**: The flat storefront is replaced by the Vibe OS desktop — an animated themed wallpaper, a bottom dock with running indicators and a launcher icon, and a top menu bar with the wordmark, active-app name, and a live clock — all performing responsively even with several windows open.
+**Depends on**: Phase 15 (DesktopShell renders WindowFrame components; useWindowManager must exist)
+**Requirements**: WIN-06, WIN-07, WIN-08, PERF-01
+**Success Criteria** (what must be TRUE):
+  1. A user sees the Vibe OS desktop as the root UI — animated themed wallpaper behind open windows, a bottom dock showing an icon for each running app (with a running-indicator dot) plus a launcher (magnifier) icon, and a top menu bar displaying the OS wordmark, the active window's app name, and a live clock.
+  2. Clicking a running-app icon in the dock focuses or restores that window; clicking the launcher (magnifier) icon opens the search/launcher panel; hovering any dock icon shows a hover-scale animation.
+  3. With four or more windows open plus the animated wallpaper running, the desktop stays at or above 30 fps on integrated graphics — minimized windows do not composite (display:none), blob layers are merged, and blur/animation degrade automatically under `prefers-reduced-motion` or when frame time exceeds the performance budget.
+  4. Switching theme with multiple windows open produces no dropped frames (no full-page restyle cascade; @property declarations or opacity-crossfade strategy in place).
+**Plans**: TBD
+**UI hint**: yes
+**Research pitfalls defended**: Pitfall 3 (z-index stacking: dedicated window container with isolation:isolate, blobs in lower-z sibling), Pitfall 4 (backdrop-filter compositing cost — display:none, merged blob layer, prefers-reduced-motion), Pitfall 7 (theme transition jank), Pitfall 11 (neutral CSS class names, neutral IDB store keys, neutral data-* attributes on all new surfaces)
+
+### Phase 17: Search / Launcher Panel
+**Goal**: A user can describe any app or pick a pre-installed one from a dock-launched panel, and the result opens as a window on the desktop via the real produce loop — with genuine loading feedback and no surface naming the mechanic.
+**Depends on**: Phase 16 (CreatePanel receives onOpen from DesktopShell; the desktop must exist to place windows on it)
+**Requirements**: CREATE-01, CREATE-02, CREATE-03
+**Success Criteria** (what must be TRUE):
+  1. A user clicks the magnifier icon in the dock and a search/launcher panel opens, containing a text input with an action button and a list of pre-installed apps.
+  2. A user types a description (e.g. "a pomodoro timer") and submits — the panel enters a working state with branded, mechanic-free step copy ("Reading your vibe…", "Sketching the layout…") that reflects real production time on a cache miss, then transitions to a result state; the result opens as a window on the desktop.
+  3. On a cache hit for a previously-described app type, the panel's working state resolves immediately and the window opens — no redundant model call.
+  4. A user selects a pre-installed app from the panel's list and it opens as a window on the desktop and appears in the dock as running; no surface in the flow contains a banned lexicon token.
+**Plans**: TBD
+**UI hint**: yes
+**Research pitfalls defended**: Pitfall 11 (create panel copy is the highest new hygiene risk; name sanitization before display; CI gate covers CreatePanel.tsx), Pitfall 12 (create panel input does not steal focus from open app windows)
+
+### Phase 18: Theme-Aware Generation
+**Goal**: Every app produced after this phase references the theme CSS-variable contract in its inline styles, re-skins automatically on any theme switch, and never leaks a banned token through a model-supplied display string — with the CI hygiene gate extended to all new v2.0 surfaces.
+**Depends on**: Phase 14 (CSS-var contract must be live before prompt changes), Phase 17 (apps must be opening in windows so end-to-end re-skin is verifiable)
+**Requirements**: TGEN-01, TGEN-02, TGEN-03, HYGIENE-06
+**Success Criteria** (what must be TRUE):
+  1. A user produces a new app (cache miss) with the Aqua theme active, switches to Noir, and the generated app's colors update in real time alongside the host chrome — the app contains no hardcoded hex/rgb color literals in its source.
+  2. When the model returns generated code that contains a hardcoded hex color literal, the post-compile static check detects it and feeds the violation as a compiler-style error back into the existing self-heal loop (≤3 retries, no new round-trips beyond the shipped budget) — within those retries the app emerges using only CSS variables.
+  3. An app named "AI Weather" or "Generated Notes" by the model has its display name sanitized before reaching the titlebar, dock label, or menu bar — no banned token (`AI`, `llm`, `generate`, `fake`, `mock`, or the `synthesi*` family) is visible in any devtools-accessible surface.
+  4. The CI lexicon gate (`hygiene.test.ts`) is extended to cover all new v2.0 source files (DesktopShell, WindowFrame, Dock, MenuBar, CreatePanel, VibeThemeProvider, settings, createPanelUtils) and all existing tests remain green with `tsc` clean and the build emitting no source maps.
+**Plans**: TBD
+**Research pitfalls defended**: Pitfall 10 (generated apps hardcode colors — prompt contract + post-compile hex/rgb regex → self-heal), Pitfall 11 (model-generated names sanitized; CI gate extended to all new surfaces)
+
+---
+
 ## Progress
 
 **Execution Order:**
-v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
+v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 → 15 → 16 → 17 → 18
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -138,22 +220,30 @@ v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 6. API Error Degradation | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 7. Storage & Cost Guardrails | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 8. Backend-Style Handlers | v1.0 | 1/1 | Complete | 2026-06-24 |
-| 9. Richer Storefront | v1.1 | 0/3 | Planned | - |
-| 10. Widget Schema & Key Correctness | v1.1 | 0/2 | Planned | - |
-| 11. Reliability Hardening | v1.1 | 2/2 | Complete   | 2026-06-26 |
-| 12. Sanctioned Network-Data Path | v1.1 | 2/5 | In Progress|  |
-| 13. Activate Widget Composition | v1.1 | 0/TBD | Not started | - |
+| 9. Richer Storefront | v1.1 | 3/3 | Complete | 2026-06-26 |
+| 10. Widget Schema & Key Correctness | v1.1 | 2/2 | Complete | 2026-06-26 |
+| 11. Reliability Hardening | v1.1 | 2/2 | Complete | 2026-06-26 |
+| 12. Sanctioned Network-Data Path | v1.1 | 5/5 | Complete | 2026-06-26 |
+| 13. Activate Widget Composition | v1.1 | TBD | Complete | 2026-06-26 |
+| 14. Theme Foundation | v2.0 | 0/TBD | Not started | - |
+| 15. Window Manager | v2.0 | 0/TBD | Not started | - |
+| 16. Desktop Shell | v2.0 | 0/TBD | Not started | - |
+| 17. Search / Launcher Panel | v2.0 | 0/TBD | Not started | - |
+| 18. Theme-Aware Generation | v2.0 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
+**v1.1 Real & Robust shipped 2026-06-26 — 5 phases, 12/12 requirements satisfied, 552 tests green.**
 
 ---
 
-### v1.1 cross-cutting acceptance constraints (binding on every phase 9–13)
+### v2.0 cross-cutting acceptance constraints (binding on every phase 14–18)
 
-Carried forward from v1.0 — these are acceptance constraints, not separate phases:
+Carried forward from v1.0/v1.1 — these are acceptance constraints, not separate phases:
 
-- **HYGIENE-01..05** — no devtools-visible surface narrates the on-demand mechanic; the banned token family appears in no source surface (incl. comments); the CI lexicon gate (`hygiene.test.ts`) stays green across `src/**` + `index.html`.
-- **Single Anthropic egress** — the API key is sent only to `api.anthropic.com`, never logged, never proxied; new network egress (Phase 12) goes through the host data-broker chokepoint, not raw `fetch` in generated scope.
-- **Sourcemaps off** — production ships `build.sourcemap: false`; neutral naming for stores/keys/logs/CSS.
-- **IoC / DI** — new capabilities (e.g. `fetchData`) are wired through the injected `Services` bundle so the open→render flow stays testable offline.
+- **HYGIENE-01..05** — no devtools-visible surface narrates the on-demand mechanic; the banned token family (`synthesi*`, `AI`, `llm`, `generate`, `fake`, `mock`) appears in no source surface including comments; the CI lexicon gate (`hygiene.test.ts`) stays green across `src/**` + `index.html`. Extended in Phase 18 to all new v2.0 files (HYGIENE-06).
+- **Single Anthropic egress** — the API key is sent only to `api.anthropic.com`, never logged, never proxied; the v1.1 host data-broker chokepoint remains the only network-data egress path.
+- **Sourcemaps off** — production ships `build.sourcemap: false`; neutral naming for stores/keys/logs/CSS. New stores (`settings`), keys (`vibe.activetheme`), and CSS classes (`.window-chrome`, `.dock-item`, `.create-panel`) use neutral names with no banned tokens.
+- **IoC / DI** — new capabilities are wired through the injected `Services` bundle so the open→render flow stays testable offline.
 - **TDD with real captured-Haiku fixtures** — RED→GREEN, full suite runs offline with no live network; `tsc` 0 errors and a clean build on every phase exit.
+- **Additive DB migrations** — IDB version bump (v2→v3 for the `settings` store) uses the existing non-destructive additive-upgrade pattern; no data loss on upgrade.
+- **FOUC script / CSP hash invariant** — any change to the `index.html` FOUC script must be accompanied by a SHA-256 hash update in `csp.test.ts` in the same commit.

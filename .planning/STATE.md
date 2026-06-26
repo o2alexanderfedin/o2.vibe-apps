@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-06-26T19:30:02.177Z"
 last_activity: 2026-06-26
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,16 +20,26 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v1.1 SHIPPED. Next: `/gsd-new-milestone` for the next milestone (e.g. the deferred Anthropic-key/iframe security story), or `/gsd-quick` for ad-hoc work.
+**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation. Roadmap created; ready for `/gsd-plan-phase 14`.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 14 — Theme Foundation (Not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-26 — Milestone v2.0 started
+Status: Roadmap created; awaiting first phase plan
+Last activity: 2026-06-26 — v2.0 Vibe OS roadmap created (Phases 14–18)
 
-### v1.1 phases — all DONE
+### v2.0 Phase Map
+
+| Phase | Name | Requirements | Hard ordering constraint |
+|-------|------|--------------|--------------------------|
+| 14 | Theme Foundation | THEME-01..05 | Dependency root — must precede all v2.0 phases |
+| 15 | Window Manager | WIN-01..05 | Requires Phase 14 (chrome uses theme CSS vars) |
+| 16 | Desktop Shell | WIN-06, WIN-07, WIN-08, PERF-01 | Requires Phase 15 (renders WindowFrame) |
+| 17 | Search / Launcher Panel | CREATE-01..03 | Requires Phase 16 (receives onOpen from DesktopShell) |
+| 18 | Theme-Aware Generation | TGEN-01..03, HYGIENE-06 | Requires Phase 14 (var contract live) + Phase 17 (windows exist for end-to-end verify) |
+
+### v1.1 phases — all DONE (archived)
 
 - Phase 9 Richer Storefront (STORE-01/02) — merged 7dd8b43
 - Phase 10 Widget Schema & Key Correctness (WIDGET-07/08) — merged 3b83cf7
@@ -37,53 +47,15 @@ Last activity: 2026-06-26 — Milestone v2.0 started
 - Phase 12 Sanctioned Network-Data Path (DATA-01..04) — merged de9ce2b (live CORS smoke; 2 smoke-found bugs fixed)
 - Phase 13 Activate Widget Composition (WIDGET-06) — merged ab4f105 (implemented inline; subagent quota hit)
 
-### Phase 12 — DONE (merged de9ce2b)
+## Prior Position (Milestone v1.1 — SHIPPED 2026-06-26)
 
-DATA-01..04 shipped: host-brokered fetchData injected into handler scope (raw fetch/XHR/WebSocket shadowed); host builds URLs from a keyless-CORS manifest (Open-Meteo geocode+forecast, Frankfurter); CSP connect-src = exactly those 3 origins + api.anthropic.com (no *); in-memory TTL cache (Clock-DI). Seeded Weather + Currency delegated apps with deterministic seeded handlers (zero model calls). LIVE BROWSER SMOKE PASSED: real conditions for London + real USD FX, CORS 200 on all 3 origins. Two smoke-found bugs fixed w/ regression tests (seeded-delegated instantiation routing; DelegatedShell data-field input capture). 548 tests, tsc 0, build clean, hygiene+csp green.
-
-### Phase 11 — DONE (merged 8e10317)
-
-RELY-01/02/03 shipped: lenient validate-at-merge in DelegatedShell — deriveStateSchema(initialState) (zod/mini, built once) gates the merge; wrong-typed known field → keep prior; extra keys + partial updates allowed (reliability paradox); unknown actions no-op; failures silent (gated logger); zero extra round-trips. 422 tests, tsc 0, build clean, hygiene green, code-review clean. Added zod ^4.4.3.
-
-### Phase 9 — DONE (merged 7dd8b43)
-
-STORE-01/02 shipped: AppRecord persists displayName/prompt/createdAt (additive, DB v2 unchanged, read-tolerant); storefront cards show real names; "Your most-opened" popular row (rankPopular: useCount↓→updatedAt↓→cacheKey↑; cold-start hidden; truthful local-only copy). prompt stores user-intent only (hygiene-safe). 393 tests, tsc 0, build clean, hygiene green, code-review resolved, browser UAT 9/9.
-
-### Phase 10 — DONE (merged 3b83cf7)
-
-WIDGET-07/08 shipped: WidgetRecord/HandlerRecord now explicit interfaces extending LruMeta (replacing Record<string,unknown>); widget writes have LRU parity + touchWidget on hit; every identity site derives via registryKey(kind,type,prompt?); WIDGET-08 collision-distinctness audit (app vs widget vs handler same slug). 399 tests, tsc 0, build clean, hygiene green, code-review resolved.
-
-### v1.1 Phase Map
-
-| Phase | Name | Requirements | Notes |
-|-------|------|--------------|-------|
-| 9 | Richer Storefront | STORE-01, STORE-02 | Independent, cheapest visible win; builds the additive-schema muscle |
-| 10 | Widget Schema & Key Correctness | WIDGET-07, WIDGET-08 | Gate for activation; must precede Phase 13 (hard) |
-| 11 | Reliability Hardening | RELY-01, RELY-02, RELY-03 | Validate-and-keep-prior at merge; must precede Phase 12 (hard) |
-| 12 | Sanctioned Network-Data Path | DATA-01..04 | Highest judgment; host-brokered allowlist, key never in app scope |
-| 13 | Activate Widget Composition | WIDGET-06 | Highest regression risk; touches delegated render path — do last |
-
-## Prior Position (Milestone v1.0 — SHIPPED 2026-06-26)
-
-v1.0 MVP shipped and archived: 8 phases, 42/42 active requirements satisfied, 378 tests
-green, released `v0.1.0`, validated live in-browser. Post-v1.0 the **delegated thin-shell**
-pivot landed (now the default for unseeded apps — behavior-free module + per-action
-handlers produced on demand and cached) and quick task **260625-q08** closed gap G1 (the
-`registryKey` cache-key contract that folds kind+prompt for the shipped surface).
-
-Known limits carried into v1.1 (the v1.1 work addresses these):
-
-- Network-dependent apps (Weather/Currency) can't `fetch` in the sandboxed handler scope →
-  Phase 12.
-
-- Produced delegated reducers can have state-machine quirks → Phase 11.
-- The bare `SHA-256(type)` collision risk is latent until widgets activate → Phases 10 + 13.
+v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements satisfied, 552 tests green. Key deliveries: richer storefront (displayName/prompt/createdAt/useCount), typed widget/handler records + symmetric registryKey, validate-at-merge reliability (zod/mini), host-brokered network-data path (real Weather/Currency), delegated widget composition (`useWidget` wired into view scope).
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed (v1.1): 0
+- Total plans completed (v2.0): 0
 - Average duration: —
 - Total execution time: —
 
@@ -91,7 +63,7 @@ Known limits carried into v1.1 (the v1.1 work addresses these):
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 09 | 0/TBD | — | — |
+| Phase 14 | 0/TBD | — | — |
 
 **Recent Trend:**
 
@@ -107,33 +79,28 @@ Known limits carried into v1.1 (the v1.1 work addresses these):
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap v1.1]: Phase order follows the research dependency-driven build order — C (storefront) → D-typing/key-audit → B (reliability) → A (network data) → D-activation. Mapped to Phases 9 → 10 → 11 → 12 → 13.
-- [Roadmap v1.1]: HARD ordering constraint — RELY (Phase 11) must precede DATA (Phase 12) so the merge step already validates produced state before live network-derived data flows through it.
-- [Roadmap v1.1]: HARD ordering constraint — WIDGET typing/key-audit (Phase 10) must precede WIDGET activation (Phase 13) so activated widgets land on real typed records + audited symmetric cache keys.
-- [Roadmap v1.1]: Phase 13 (widget activation) sequenced after Phase 12 (soft constraint) because both touch the delegated render path (`delegated.tsx`/`producer.ts`); serializing avoids merge churn and compounds the prompt edits.
-- [Roadmap v1.1]: All v1.0 cross-cutting constraints (HYGIENE-01..05, single Anthropic egress, sourcemaps-off, IoC/DI, TDD with real captured-Haiku fixtures) are acceptance constraints on every v1.1 phase — not separate phases.
-- [Roadmap v1.0]: Devtools hygiene (HYGIENE-01..05) and CSP/source-maps-off (SEC-04) enforced as cross-cutting acceptance constraints on every phase.
+- [Roadmap v2.0]: 5-phase structure (14–18) validated by research. Phase order is strictly dependency-driven: Theme Foundation → Window Manager → Desktop Shell → Create Panel → Theme-Aware Generation.
+- [Roadmap v2.0]: HARD ordering constraint — Theme Foundation (14) must precede Window Manager (15) because WindowFrame chrome references theme CSS vars; the alias bridge must land before any produce-prompt change or pre-v2 cached apps lose their colors.
+- [Roadmap v2.0]: HARD ordering constraint — Window Manager (15) before Desktop Shell (16) before Search/Launcher Panel (17) — consumer chain: useWindowManager → WindowFrame → DesktopShell → CreatePanel onOpen prop.
+- [Roadmap v2.0]: HARD ordering constraint — Theme-Aware Generation (18) is last because it needs the var contract live (Phase 14) and apps opening in windows (Phases 15–17) to verify end-to-end re-skin; it is the highest-novelty/risk phase.
+- [Roadmap v2.0]: Zero new npm dependencies — hand-roll useDrag (setPointerCapture + rAF + state-on-pointerup), VibeThemeProvider (documentElement.style.setProperty), and all windowing/dock/menu-bar components. Research verdict: react-draggable has React 19 findDOMNode breakage; framer-motion is 674KB–4.8MB.
+- [Roadmap v2.0]: Theme vars applied to document.documentElement (not React context) so CSS inheritance reaches all separately-createRoot'd generated app subtrees — this is the central theming mechanism.
+- [Roadmap v2.0]: FOUC prevention via synchronous localStorage read in index.html script before React mounts; IDB settings store (v3) is the authoritative persistence, localStorage is the FOUC guard.
+- [Roadmap v2.0]: All v1.0/v1.1 cross-cutting constraints (HYGIENE-01..05, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, TDD with real captured-Haiku fixtures, additive DB migrations) are acceptance constraints on every v2.0 phase — not separate phases.
+
+### Key Research Flags
+
+- **Phase 18 (Theme-Aware Generation):** prompt-engineering + post-compile check is the most novel piece of the milestone — needs a prompt test proving generated apps actually emit the CSS vars and the self-heal catch works. Plan with a focused design pass.
+- **Phase 15 (Window Manager):** pointer-capture/rAF/root-lifecycle has subtle correctness edges — worth careful test design (drag across app root boundary, close-while-producing cancellation, mountedCount===0 after all closes).
+- **Phases 14, 16, 17:** standard composition/integration patterns — lighter research need but Phase 14 has the FOUC-script/CSP-hash same-commit invariant to respect.
 
 ### Pending Todos
-
-[From .planning/todos/pending/ — ideas captured during sessions]
 
 None yet.
 
 ### Blockers/Concerns
 
-[Issues that affect future work]
-
-- [Phase 12 — RESEARCH FLAG]: The network-data path is the highest-judgment phase. The broker design, the manifest shape, the param-validation/URL-build contract, the broker throttle, and the mount-`load`-action pattern warrant a focused design pass during planning — though the core decision (host-brokered keyless allowlist: Open-Meteo + geocoding + Frankfurter) is already settled and CORS-verified live.
-- [Phase 12 — GAP]: Live keyless-CORS holds only verified via `curl`, not the real browser. Add a documented manual browser smoke-check per allowlisted source during Phase 12, plus an integration test parsing a real-shape response.
-- [Phase 13 — RESEARCH FLAG / regression risk]: Highest regression risk. The "which scope composes widgets" decision and extending the delegated instantiation to inject a pre-warmed `useWidget` map need an explicit design step + an end-to-end `@widget` test plan before touching the load-bearing runtime. The dormant widget pre-warm/instantiate/isolate path goes live on real model output for the first time.
-- [Phase 11 — CONCERN]: Reliability paradox — over-constraining the prompt or over-strict validation makes the small model fail MORE often. Ship merge-step validate-and-keep-prior first and measure produce-success against real-Haiku fixtures before adding any runtime self-heal round-trip.
-
-### Resolved (v1.0)
-
-- [Phase 4 — RESOLVED]: Static widgets only (declared via `@widget`); `useWidget` is fully synchronous (a pure `Map.get`).
-- [Phase 7 — RESOLVED]: Cost soft-cap hooks the produce path (loader, immediately before `produceComponent`); N=10 produce misses per 5-minute sliding window.
-- [Phase 8 — RESOLVED]: Handler denylist = `[fetch, XMLHttpRequest, localStorage, sessionStorage, indexedDB, window, document]` shadowed to `undefined`, plus a hostile `require`. A targeted denylist (handlers need local compute), NOT general sandboxing (HARD-01 iframe deferred). This is the seam Phase 12's `fetchData` broker plugs into.
+None at roadmap creation.
 
 ### Quick Tasks Completed
 
@@ -141,7 +108,7 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260625-q08 | Fix G1 cacheKey contract (fold kind+prompt) + reconcile blueprint doc | 2026-06-25 | 0f9a7d4 | [260625-q08-cachekey-contract-doc-reconcile](./quick/260625-q08-cachekey-contract-doc-reconcile/) |
 
-Last activity: 2026-06-26 — v1.1 roadmap created (Phases 9–13).
+Last activity: 2026-06-26 — v2.0 Vibe OS roadmap created (Phases 14–18).
 
 ## Deferred Items
 
@@ -149,17 +116,18 @@ Items acknowledged and carried forward:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Security | `<iframe sandbox>` isolation of generated code (HARD-01) + SEC-01/02/03 — the DATA-* broker sits behind the same seam so the iframe move stays contained | Deferred beyond v1.1 | Requirements |
-| Refactor | G2 unified `Intent` contract — internal refactor, no user-facing value | Deferred (unless it blocks v1.1) | Requirements |
-| Polish | POP-01 cross-session/cross-device popularity — would need a backend | Deferred (out of client-only model) | Requirements |
-| Verification (UAT) | Phase 01 human-UAT — F12 devtools sweep + theme-persist re-confirm | Acknowledged non-blocking | v1.0 close |
+| Security | `<iframe sandbox>` isolation of generated code (HARD-01) + SEC-01/02/03 — windowing layer designed so iframe move stays a contained change | Deferred beyond v2.0 | v2.0 Requirements |
+| Refactor | G2 unified `Intent` contract — internal refactor, no user-facing value | Deferred beyond v2.0 | v2.0 Requirements |
+| Theming | User-created / custom themes — built-in four only this milestone; a theme editor is a v2.x follow-up | Deferred to v2.x | v2.0 Requirements |
+| Persistence | Window-position / desktop-layout persistence — restoring window geometry and installed[] dock across reloads | Deferred to v2.x | v2.0 Requirements |
+| Security | Cancellation token (AbortController) per window open — guards mid-flight close; acceptable for alpha | Deferred to polish | v2.0 Roadmap |
 
 ## Session Continuity
 
 Last session: 2026-06-26
-Stopped at: Session resumed via /gsd-resume-work — clean checkpoint confirmed. v1.1 "Real & Robust" SHIPPED (milestone_complete): all 5 phases (9–13) merged to develop, audited + archived + tagged v1.1, pushed. No incomplete plans, no handoff, no interrupted agents. Awaiting user direction: next milestone (/gsd-new-milestone) or develop→main release — both user-owned.
-Resume file: .continue-here.md (pause-work handoff, 2026-06-26)
+Stopped at: v2.0 Vibe OS roadmap created. 5 phases defined (14–18), 21/21 requirements mapped, 100% coverage. Files written: ROADMAP.md, STATE.md, REQUIREMENTS.md traceability updated. Ready to begin Phase 14.
+Resume with: `/gsd-plan-phase 14`
 
 ## Operator Next Steps
 
-- Plan the first v1.1 phase: `/gsd-plan-phase 9` (Richer Storefront — STORE-01, STORE-02).
+- Plan the first v2.0 phase: `/gsd-plan-phase 14` (Theme Foundation — THEME-01..05).
