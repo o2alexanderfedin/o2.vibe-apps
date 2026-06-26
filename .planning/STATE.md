@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: Real & Robust
 status: executing
 stopped_at: Session resumed via /gsd-resume-work — clean checkpoint confirmed (develop synced with origin, no incomplete plans/handoff). Proceeding to plan Phase 9 (Richer Storefront).
-last_updated: "2026-06-26T12:40:59.573Z"
-last_activity: 2026-06-26 -- Phase 12 planning complete
+last_updated: "2026-06-26T12:43:10.907Z"
+last_activity: 2026-06-26 -- Phase 12 execution started
 progress:
   total_phases: 5
   completed_phases: 3
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 12 — sanctioned network-data path (highest-judgment phase)
+**Current focus:** Phase 12 — network-data-path
 
 ## Current Position
 
-Phase: 12 (Sanctioned Network-Data Path) — READY TO PLAN
-Plan: —
-Status: Ready to execute
-Last activity: 2026-06-26 -- Phase 12 planning complete
+Phase: 12 (network-data-path) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 12
+Last activity: 2026-06-26 -- Phase 12 execution started
 
 Progress: [██████░░░░] 60% (3 of 5 v1.1 phases)
 
