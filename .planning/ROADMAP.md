@@ -99,8 +99,8 @@ Plans:
 
 Plans:
 **Wave 1** *(independent — run in parallel)*
-- [ ] 12-01-PLAN.md — Data infrastructure: sourceManifest.ts (3-entry curated allowlist) + ttlCache.ts (Clock-DI in-memory cache) + dataBroker.ts (host-side fetch with manifest URL build, param filter, TTL cache, rate-limit wrap, neutral errors)
-- [ ] 12-02-PLAN.md — CSP + assertions: widen index.html connect-src to 4 allowlisted origins; add connectSrcDirective helper + 5-case DATA-02 describe block to csp.test.ts
+- [x] 12-01-PLAN.md — Data infrastructure: sourceManifest.ts (3-entry curated allowlist) + ttlCache.ts (Clock-DI in-memory cache) + dataBroker.ts (host-side fetch with manifest URL build, param filter, TTL cache, rate-limit wrap, neutral errors)
+- [x] 12-02-PLAN.md — CSP + assertions: widen index.html connect-src to 4 allowlisted origins; add connectSrcDirective helper + 5-case DATA-02 describe block to csp.test.ts
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 12-03-PLAN.md — Services wiring + handler scope: add fetchDataBroker? to Services; wire real broker in createServices(); add cannedBroker/unusedBroker to testServices.ts; inject fetchData before input in handler constrained scope
@@ -139,7 +139,7 @@ v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 9. Richer Storefront | v1.1 | 0/3 | Planned | - |
 | 10. Widget Schema & Key Correctness | v1.1 | 0/2 | Planned | - |
 | 11. Reliability Hardening | v1.1 | 2/2 | Complete   | 2026-06-26 |
-| 12. Sanctioned Network-Data Path | v1.1 | 0/5 | Planned | - |
+| 12. Sanctioned Network-Data Path | v1.1 | 2/5 | In Progress|  |
 | 13. Activate Widget Composition | v1.1 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
