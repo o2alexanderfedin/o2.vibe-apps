@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Real & Robust
-status: completed
-stopped_at: Session resumed via /gsd-resume-work — clean checkpoint confirmed (develop synced with origin, no incomplete plans/handoff). Proceeding to plan Phase 9 (Richer Storefront).
-last_updated: "2026-06-26T11:02:25.986Z"
-last_activity: 2026-06-26 -- Phase 10 marked complete
+status: executing
+stopped_at: Autonomous run — Phases 9 & 10 complete (merged 7dd8b43, 3b83cf7). Proceeding to Phase 11.
+last_updated: "2026-06-26T11:05:00.000Z"
+last_activity: 2026-06-26 -- Phase 10 merged to develop (passed 4/4, 399 tests)
 progress:
   total_phases: 5
   completed_phases: 2
@@ -25,16 +25,20 @@ See: .planning/PROJECT.md (updated 2026-06-26)
 
 ## Current Position
 
-Phase: 10 — COMPLETE
-Plan: 1 of 2
-Status: Phase 10 complete
-Last activity: 2026-06-26 -- Phase 10 marked complete
+Phase: 11 (Reliability Hardening) — READY TO PLAN
+Plan: —
+Status: Phases 9 & 10 complete (merged); planning Phase 11 next
+Last activity: 2026-06-26 -- Phase 10 merged to develop (passed 4/4, 399 tests)
 
-Progress: [██░░░░░░░░] 20% (1 of 5 v1.1 phases)
+Progress: [████░░░░░░] 40% (2 of 5 v1.1 phases)
 
 ### Phase 9 — DONE (merged 7dd8b43)
 
 STORE-01/02 shipped: AppRecord persists displayName/prompt/createdAt (additive, DB v2 unchanged, read-tolerant); storefront cards show real names; "Your most-opened" popular row (rankPopular: useCount↓→updatedAt↓→cacheKey↑; cold-start hidden; truthful local-only copy). prompt stores user-intent only (hygiene-safe). 393 tests, tsc 0, build clean, hygiene green, code-review resolved, browser UAT 9/9.
+
+### Phase 10 — DONE (merged 3b83cf7)
+
+WIDGET-07/08 shipped: WidgetRecord/HandlerRecord now explicit interfaces extending LruMeta (replacing Record<string,unknown>); widget writes have LRU parity + touchWidget on hit; every identity site derives via registryKey(kind,type,prompt?); WIDGET-08 collision-distinctness audit (app vs widget vs handler same slug). 399 tests, tsc 0, build clean, hygiene green, code-review resolved.
 
 ### v1.1 Phase Map
 
