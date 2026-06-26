@@ -1,469 +1,505 @@
-# Architecture Research
+# Architecture Research: v2.0 Vibe OS Integration
 
-**Domain:** Client-side generative-UI app marketplace (no-build, in-browser React runtime that produces, compiles, caches, and renders LLM-authored components on demand)
-**Researched:** 2026-06-24
-**Confidence:** HIGH for the runtime/React/Babel mechanics (verified against current React + Babel + Anthropic docs); MEDIUM for build-order and devtools-hygiene trade-offs (reasoned from blueprint + verified constraints, not externally benchmarked)
-
----
-
-## Executive Verdict
-
-The blueprint's layered pipeline (Intent → Registry → Generation → Execution → UI Surface → optional Handlers) is **sound and buildable as described**, with five refinements that are load-bearing and should be locked before phase 1:
-
-1. **Classic JSX runtime is mandatory, not optional.** `new Function()` instantiation only works because classic-runtime Babel emits `React.createElement(...)`, which resolves to the injected `React` arg. Automatic runtime emits `import { jsx } from "react/jsx-runtime"` — an unresolvable import inside `new Function()`. This single config choice is what makes the whole scope-injection model work.
-2. **The mounted-roots map stores roots and re-renders them; it does not create a new root per tweak.** `createRoot()` must run **once per container lifetime**; in-place tweaks call `root.render()` on the stored root; removal calls `root.unmount()`. Calling `createRoot` twice on a live container is a React-warned error.
-3. **Single React instance is the safety property that makes hooks work** across all generated components — and it is satisfied for free because nothing imports React except the host. This must be *protected*, not engineered: never let a second React load.
-4. **`useWidget` synchronicity is achieved entirely by pre-warm**, and pre-warm must be a *transitive* resolve (a widget can itself declare `@widget` deps) feeding a single in-memory `Map` that `useWidget` reads with zero async.
-5. **Devtools hygiene forces concrete structural choices** — opaque keys, a host-call boundary that must carry the (visible) `anthropic-dangerous-direct-browser-access` header, neutral module/store/CSS naming, and a single gated logger — that are cheaper to bake in at phase 0 than to retrofit.
+**Domain:** Multi-window desktop OS shell layered over an existing React 19 generative app marketplace
+**Researched:** 2026-06-26
+**Confidence:** HIGH (based on direct inspection of all named source files)
 
 ---
 
-## Standard Architecture
+## System Overview — Current vs Target
 
-### System Overview
+### Current (v1.1)
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  L0  USER INTERACTION SURFACE  (Marketplace shell, AppBar, ⋮ popover)  │
-│  ┌────────────┐  ┌──────────┐  ┌──────────────┐  ┌─────────────────┐   │
-│  │Marketplace │  │ AppShell │  │ WidgetShell  │  │ ContextualPrompt│   │
-│  │   (grid)   │  │  (⋮ app) │  │  (⋮ widget)  │  │   (shared)      │   │
-│  └─────┬──────┘  └────┬─────┘  └──────┬───────┘  └────────┬────────┘   │
-│        │              │               │                   │            │
-├────────┴──────────────┴───────────────┴───────────────────┴───────────┤
-│  L1  INTENT RESOLVER     resolver · classifier · prompt-router         │
-│        action ─────────────────► Intent{op,kind,type,cacheKey,context} │
-├────────────────────────────────────┬───────────────────────────────────┤
-│  L2  REGISTRY (async boundary)      │  L4  EXECUTION ENGINE (sync core) │
-│  ┌──────────────────────────────┐   │  ┌────────────────────────────┐  │
-│  │ IndexedDB  MarketplaceDB v1  │   │  │ transpile (Babel, classic) │  │
-│  │  ┌──────┐┌───────┐┌────────┐ │   │  │ instantiate (new Function) │  │
-│  │  │ apps ││widgets││handlers│ │   │  │ mount (createRoot map)     │  │
-│  │  └──────┘└───────┘└────────┘ │   │  │ useWidget (sync, prewarmed)│  │
-│  └──────────────────────────────┘   │  │ ErrorBoundary (per shell)  │  │
-│  in-mem: registryCache + transpiledCache  └────────────────────────────┘ │
-├────────────────────────────────────┴───────────────────────────────────┤
-│  L3  GENERATION   buildPrompt · callModel(host) · selfHeal · clean      │
-│        cache MISS ─► host fetch ─► raw JSX ─► clean ─► transpile ─► store│
-├──────────────────────────────────────────────────────────────────────────┤
-│  L6  HANDLERS (optional)   runHandler(intent,input) → cached/produced fn │
-└──────────────────────────────────────────────────────────────────────────┘
-                          │ (only outbound network edge)
-                          ▼
-                  api.anthropic.com /v1/messages   (Haiku, user key)
+App.tsx
+  ThemeProvider (localStorage: "marketplace.theme")
+    AppBar  (wordmark | Account | light/dark/system toggle)
+    main
+      Marketplace
+        .storefront-grid  (app cards)
+        .opened-apps      ([AppShell > Component] — vertical list, no z-order)
+
+Data stores: IndexedDB "MarketplaceRegistry"  apps | widgets | handlers
+Mount layer: mount.ts  Map<instanceId, Root>  (one createRoot per instance, already supports N)
+App open:    Marketplace.handleOpen → resolveComponent → mountApp
 ```
 
-### Component Responsibilities
+Current AppShell is a thin chrome wrapper (title + menu + close). Apps render in a vertical
+`opened-apps` div — one-at-a-time in practice; the mount layer already supports N concurrent
+roots but the UX never leveraged z-order, drag, or minimize.
 
-| Component | Owns | Talks to | Notes |
-|-----------|------|----------|-------|
-| **Marketplace / AppBar** (L0) | Storefront grid, open-app lifecycle, API-key + theme config | Intent Resolver, mount map | The only place that holds the list of "open apps" |
-| **AppShell / WidgetShell** (L0) | One framed instance + its `⋮`, hosts the ErrorBoundary, owns the container `<div>` | Execution Engine (mount), ContextualPrompt | Shell owns the DOM node passed to `createRoot` |
-| **ContextualPrompt** (L0) | Free-text capture, routes to remove/clone/mutate | Prompt Router (L1) | Shared by app + widget; target passed in |
-| **Intent Resolver** (L1) | action → `Intent`, cacheKey derivation, prompt normalization | Registry (L2) | Pure/cheap; classifier's Haiku fallback is the one async path here |
-| **Prompt Router** (L1) | Keyword routing: remove/clone client-side, else mutate | Registry, Generation | remove + clone never call the model |
-| **Registry** (L2) | IndexedDB CRUD, opaque keys, schema/version, in-mem caches | Execution, Generation | The async boundary; everything below it is sync |
-| **Generation** (L3) | Prompt assembly, host model call, clean, transpile-on-miss, self-heal, `@widget` dep parse | Registry (store), Execution (transpile) | Only component that touches the network |
-| **Execution Engine** (L4) | transpile → instantiate → mount, `useWidget` factory, mounted-roots map, ErrorBoundary | Registry (read caches), DOM | Synchronous core; never awaits during render |
-| **Handlers** (L6) | `runHandler` resolve-or-produce-then-exec for data ops | Registry, Generation | Transparent to apps/widgets |
-| **Host Boundary** (cross-cutting) | The single `fetch` to `api.anthropic.com`, header assembly, gated logger | Generation, Classifier | Isolating this one function localizes every network-hygiene rule |
+### Target (v2.0 Vibe OS)
 
-**The two boundaries that define the system:**
-- **Async/sync boundary** sits at the top of L4. Everything above (resolve, registry read, generation, pre-warm) is async and `await`-heavy. Everything inside a React render (instantiate, `useWidget`, mount) is synchronous. *No `await` may cross into a render cycle.*
-- **Network boundary** is a single host-call function. It is the only outbound edge, and therefore the only place that must satisfy network-tab hygiene.
+```
+App.tsx (MODIFIED)
+  VibeThemeProvider  (IndexedDB "settings" → activetheme: string)
+    DesktopShell  (NEW — owns window manager state + OS chrome)
+      MenuBar  (MODIFIED AppBar — wordmark, active-app, theme pills, clock, account)
+      .vibe-desktop
+        CreatePanel  (NEW — describe-then-open, wired to real produce)
+        WindowFrame  (NEW, × N — macOS-style chrome, drag, z-order, traffic lights)
+          AppShell   (KEPT — contextual prompt popover, unchanged)
+            Component (mounted via mountApp as before)
+      Dock  (NEW — store icon + running-app icons, hover-scale)
+
+Data stores: IndexedDB "MarketplaceRegistry"  apps | widgets | handlers | settings (NEW)
+Mount layer: mount.ts UNCHANGED — roots Map already supports N concurrent roots
+App open:    DesktopShell.handleOpen → resolveComponent → WindowFrame.mountApp
+```
 
 ---
 
-## Recommended Project Structure
+## New vs Modified Component Inventory
 
-The blueprint's structure is good. The refinements below add the three modules the blueprint implies but does not name as files, and rename for the async/sync and network boundaries.
+### NEW Components / Modules
+
+| File | Type | Responsibility |
+|------|------|----------------|
+| `src/ui/DesktopShell.tsx` | React component | OS chrome root: owns `WindowEntry[]` state, `handleOpen/Close/Modify`, clock tick, dock state, delegates to MenuBar + desktop surface + Dock. Replaces `Marketplace` as the top-level page component. |
+| `src/ui/useWindowManager.ts` | Custom hook | Encapsulates `WindowEntry[]` state: `openApp`, `focusWin`, `closeWin`, `minWin`, drag logic (pointer events). Returned from `DesktopShell` to pass down as props. |
+| `src/ui/DesktopContext.ts` | React context | `{ openApp, activeWindowName }` — narrow context so Dock and MenuBar can call `openApp` and show the active name without consuming the full window array (avoids re-rendering on drag ticks). |
+| `src/ui/WindowFrame.tsx` | React component | Per-window chrome: macOS traffic lights (close/min/placeholder-max), drag handle (pointer events), title + icon. Renders `<div ref={containerRef}>` as app content area; mounts via `mountApp` on effect, unmounts on cleanup. Wraps `AppShell` as its inner content region. |
+| `src/ui/Dock.tsx` | React component | Bottom dock bar: store icon always present; per-running-window icons (derived from `windows` array, memoized); running-indicator dot; hover-scale CSS transform; click → focus/restore. |
+| `src/ui/CreatePanel.tsx` | React component | Centered describe-then-open panel: text input + "Vibe it" button → vibing state (step text + progress bar, cosmetic timer) → result card (Open / Discard). Calls `DesktopShell.handleOpen` prop. |
+| `src/ui/VibeThemeProvider.tsx` | React component | Replaces `ThemeProvider`. Loads active theme name from IDB `settings` on mount; applies the named theme's CSS variable set via `document.documentElement.style.setProperty`; exposes `{ themeName, setTheme }` via context; also writes to `localStorage` on every switch for the FOUC script. |
+| `src/ui/VibeThemeContext.ts` | React context | `{ themeName: string; setTheme: (name: string) => void; themes: Record<string, ThemeVars> }` |
+| `src/ui/MenuBar.tsx` | React component | Evolved from `AppBar.tsx`: "Vibe OS" wordmark, active-window-name display, Aurora/Aero/Aqua/Noir theme pills, live clock (`setInterval`), Account key icon. Reads from `VibeThemeContext` and `DesktopContext`. |
+| `src/registry/settings.ts` | Module | `getActivetheme(): Promise<string>`, `setActivetheme(name: string): Promise<void>`, `DesktopSettings` interface. Uses IDB `settings` store. |
+
+### MODIFIED Components / Modules
+
+| File | Change | Why |
+|------|--------|-----|
+| `src/App.tsx` | Replace `ThemeProvider` with `VibeThemeProvider`; replace `AppBar + main > Marketplace` with `DesktopShell`. `ServicesProvider` stays. | New OS layout tree. |
+| `src/registry/db.ts` | Add `settings` object store to `RegistrySchema`; add `SettingsRecord` interface; bump `REGISTRY_DB_VERSION` to 3; additive upgrade (create `settings` store if absent — same pattern as v1→v2). | Persist active theme name and future desktop prefs. |
+| `src/execution/producer.ts` `buildPrompt()` | Replace `var(--color-surface), var(--color-text), var(--color-accent)` with `var(--accentA), var(--accentB), var(--text), var(--glass), var(--bord)` in ALL 4 branches (`"delegated"`, `"app"`, `"shell"`, `"widget"`). | Theme-aware generation — apps must reference the v2.0 variable contract to re-skin on theme switch. |
+| `index.html` FOUC script | Read `localStorage.getItem("vibe.activetheme")`; map the name to the full CSS variable block for that theme; set each via `document.documentElement.style.setProperty` — synchronously before React loads. Update `csp.test.ts` SHA-256 hash after the script changes. | Named themes require the full var block on first paint, not just `data-theme="dark"`. |
+| `src/index.css` | Add `:root` alias bridge: `--color-surface: var(--glass); --color-text: var(--text); --color-accent: var(--accentA)`. | Cached apps still reference `--color-*`; the bridge forwards to the new vars so they re-skin correctly until their LRU entry evicts naturally. |
+
+### RETIRED Components
+
+| File | Disposition |
+|------|-------------|
+| `src/ui/Marketplace.tsx` | Logic moves to `DesktopShell.tsx` (handleOpen/Close/Modify) and `CreatePanel.tsx` (storefront UI). Keep as dead file until tests are ported, then delete. |
+| `src/ui/ThemeProvider.tsx` | Superseded by `VibeThemeProvider`. `useTheme` hook becomes `useVibeTheme`. Keep until all imports updated. |
+| `src/ui/AppBar.tsx` | Superseded by `MenuBar.tsx`. |
+
+`AppShell.tsx` is KEPT unchanged — `WindowFrame` renders `<AppShell>` as its inner content region. The contextual-prompt wiring (⋮ menu → `ContextualPrompt` → `onModify`) remains in `AppShell`.
+
+---
+
+## Integration Point Detail
+
+### 1. Window Manager — Where State Lives
+
+**Decision: new `useWindowManager` hook owns state. Do NOT extend `mount.ts`.**
+
+`mount.ts` is a pure DOM-layer utility (`Map<instanceId, Root>`). Mixing UI state (x/y/z/min/drag) into it would turn a pure utility into a stateful UI concern. Two parallel Maps is the right model:
 
 ```
-src/
-├── host/
-│   └── modelClient.ts        # THE single fetch() to api.anthropic.com; header
-│                             #   assembly incl. anthropic-dangerous-direct-
-│                             #   browser-access; gated logger lives here
-├── db/
-│   ├── index.ts              # openDB(), version+upgrade, typed get/put/delete
-│   ├── apps.ts               # apps store CRUD
-│   ├── widgets.ts            # widgets store CRUD
-│   └── handlers.ts           # handlers store CRUD
-├── registry/
-│   ├── cacheKey.ts           # opaque stable key (normalize → hash)
-│   ├── registry.ts           # resolve(): registryCache → IndexedDB → generate
-│   └── caches.ts             # in-mem Map registries: components + transpiledJS
-├── intent/
-│   ├── resolver.ts           # action → Intent (app + widget aware)
-│   ├── classifier.ts         # static map + Haiku fallback (cached)
-│   └── router.ts             # remove/clone/mutate keyword routing
-├── generation/
-│   ├── app.ts                # buildAppPrompt(), parseWidgetDeps()
-│   ├── widget.ts             # buildWidgetPrompt()
-│   ├── handler.ts            # handler generation
-│   ├── transpile.ts          # Babel wrapper (CLASSIC runtime) + in-mem cache
-│   └── selfHeal.ts           # retry loop, BABEL error fed back
-├── execution/
-│   ├── instantiate.ts        # new Function() → React component (scope-injected)
-│   ├── mount.ts              # mounted-roots Map; createRoot once, render/unmount
-│   ├── useWidget.ts          # sync hook factory, reads pre-warmed component Map
-│   ├── prewarm.ts            # transitive @widget resolve before mount
-│   └── ErrorBoundary.tsx     # per-shell isolation boundary
-├── ui/
-│   ├── Marketplace.tsx · AppShell.tsx · WidgetShell.tsx
-│   ├── ContextualPrompt.tsx · AppBar.tsx
-├── store/
-│   ├── apiKey.ts · theme.ts  # localStorage (neutral keys)
-└── app.tsx                   # root: eager Babel load, DB init, theme init, shell
+useWindowManager state:          mount.ts module:
+WindowEntry[]                    Map<instanceId, Root>
+  id / appType / displayName     (keyed by same instanceId)
+  Component / x / y / z / min
+  needsAuth / throttled
 ```
 
-### Structure Rationale
+**WindowEntry shape:**
 
-- **`host/modelClient.ts` is new and deliberate.** Collapsing every model call into one function makes the network-hygiene rule a one-file invariant (header set once, prompt is the only body, logger gated here) and gives self-heal/classifier a single seam to call.
-- **`registry/` is split out from `db/`.** `db/` is raw IndexedDB; `registry/` is the resolve-or-produce policy plus the two in-memory caches. This keeps the "compile-once / read-sync" caches next to the lookup logic that populates them, away from storage plumbing.
-- **`execution/prewarm.ts` is named explicitly** because pre-warm is the mechanism that makes `useWidget` synchronous — it deserves to be a first-class, testable unit, not a method buried in AppShell.
-- **`execution/` is the synchronous island.** Everything in it must be callable from inside a render with no `await`. Keeping it physically separate from `generation/` (which is all async) enforces the boundary by directory.
+```typescript
+interface WindowEntry {
+  id: string;                 // "appType-N" — matches instanceId in mount.ts
+  appType: string;
+  displayName: string;
+  Component: ComponentType | null;
+  x: number;                  // px from desktop left
+  y: number;                  // px from desktop top; min 44 (below MenuBar)
+  z: number;                  // z-index; monotonically increasing per focus
+  min: boolean;               // minimized to dock
+  needsAuth?: boolean;
+  throttled?: boolean;
+}
+```
+
+**z-order rule**: module-level `let ztop = 200` counter in `useWindowManager.ts`; `++ztop` on every `openApp` or `focusWin`. `focusWin(id)` sets `w.z = ztop, w.min = false` for the target only. `openApp(appType, ...)`: if a window for that appType already exists (by `appType` match), focus it instead of opening a second — prevents duplicate windows for the same app type (matches design reference `openApp` behavior).
+
+**Drag**: `onPointerDown` on the title bar records `drag = { id, ox, oy }` in a `useRef` (NOT `useState` — avoids re-rendering on every pointer move). `window.addEventListener("pointermove"/"pointerup")` added on drag start, removed on end. Only `pointerup` commits the final x/y to `setState`. Y-floor = 44px so windows cannot drag behind MenuBar.
+
+**React root lifecycle in WindowFrame:**
+
+```typescript
+// WindowFrame.tsx (simplified)
+const containerRef = useRef<HTMLDivElement>(null);
+useEffect(() => {
+  if (containerRef.current && entry.Component) {
+    mountApp(entry.id, containerRef.current, entry.Component);
+  }
+  return () => unmountApp(entry.id);  // cleanup on window close
+}, [entry.Component]);
+```
+
+On `closeWin(id)` in `DesktopShell.handleClose`:
+1. `evictLiveComponent(id)` — clears `liveComponents` Map in `loader.ts`
+2. `closeWin(id)` — removes `WindowEntry` from React state, unmounting `WindowFrame`
+3. `WindowFrame` cleanup effect — calls `unmountApp(id)`, clears `roots` Map in `mount.ts`
+
+This three-step teardown matches the existing `Marketplace.handleClose` exactly. No new leak surface.
+
+### 2. Theming — CSS Variable Inheritance Through `new Function`-Mounted Subtrees
+
+**Does CSS inheritance reach generated app windows? YES — unconditionally.**
+
+CSS custom properties are inherited through the DOM tree regardless of React root boundaries. They flow from `document.documentElement` (where `VibeThemeProvider` sets them via `style.setProperty`) through all descendants, including `<div>` containers that host independent React roots created by `createRoot()`. The `new Function` scope is a JavaScript execution boundary, not a CSS one. As long as the container `<div>` is a DOM descendant of `<html>`, all custom properties propagate.
+
+**VibeThemeProvider applies themes by setting properties directly on `document.documentElement`:**
+
+```typescript
+function applyNamedTheme(vars: ThemeVars): void {
+  const root = document.documentElement;
+  for (const [prop, value] of Object.entries(vars)) {
+    root.style.setProperty(prop, value);
+  }
+}
+```
+
+This replaces the `data-theme` attribute + CSS rule approach. No CSS file needed for the named-theme vars — they are all set inline on `:root` via JS, which overrides any stylesheet rule (inline styles win the cascade on the element where they are set).
+
+**Named theme registry** (from design reference `THEMES` object):
+
+```typescript
+export const VIBE_THEMES: Record<string, ThemeVars> = {
+  aurora: {
+    "--text": "#f3f1ff", "--accentA": "#9b7cff", "--accentB": "#36d6f0",
+    "--glass": "rgba(255,255,255,0.10)", "--glass2": "rgba(255,255,255,0.035)",
+    "--bord": "rgba(255,255,255,0.22)", "--hi": "rgba(255,255,255,0.5)",
+    "--wall": "radial-gradient(130% 110% at 18% 8%, #1b1636 0%, #0c0a18 62%)",
+    "--b1": "#7c5cff", "--b2": "#22d3ee", "--b3": "#ff6ec4", "--b4": "#34d399",
+  },
+  aero: { "--text": "#eef6ff", "--accentA": "#4aa3ff", "--accentB": "#67e8f9",
+    "--glass": "rgba(180,220,255,0.16)", "--glass2": "rgba(120,180,255,0.05)",
+    "--bord": "rgba(180,220,255,0.34)", "--hi": "rgba(255,255,255,0.6)",
+    "--wall": "radial-gradient(130% 120% at 50% -20%, #15406e 0%, #0a1f3a 55%, #06101f 100%)",
+    "--b1": "#4aa3ff", "--b2": "#6ad0ff", "--b3": "#67e8f9", "--b4": "#3b82f6" },
+  aqua: { /* ... */ },
+  noir: { /* ... */ },
+};
+```
+
+**Live update on theme switch**: `style.setProperty` on `document.documentElement` instantly updates the CSS cascade for every element in the page — MenuBar, WindowFrame chrome, Dock, and every generated app's inline styles that reference `var(--accentA)` etc. No component remounting, no React re-render triggered by the theme switch itself.
+
+**Coexistence with legacy `--color-*` variables**: The old `ThemeProvider` set `data-theme` and the CSS file had `[data-theme="dark"]` rules for `--color-surface`, `--color-text`, `--color-accent`. Generated apps cached before this milestone reference those vars. The `:root` alias bridge in `index.css` forwards them to the new vars:
+
+```css
+:root {
+  --color-surface: var(--glass);
+  --color-text: var(--text);
+  --color-accent: var(--accentA);
+}
+```
+
+This must be in place BEFORE `buildPrompt()` is updated. New produces use `--accentA/--text/--glass`; old cached apps use `--color-*` which cascade through the alias. Seamless during the transition period.
+
+### 3. Theme Persistence and No-FOUC
+
+**Persistence: new `settings` object store in the existing `MarketplaceRegistry` IDB (version 3).**
+
+```typescript
+// db.ts additions
+export interface SettingsRecord {
+  key: string;    // e.g. "activetheme"
+  value: unknown;
+}
+// RegistrySchema:
+settings: { key: string; value: SettingsRecord };
+// REGISTRY_DB_VERSION = 3
+// upgrade: if (!db.objectStoreNames.contains("settings")) db.createObjectStore("settings");
+```
+
+**No-FOUC strategy**: IDB reads are async; `VibeThemeProvider.useEffect` fires after first paint. Solution (same pattern as the existing FOUC fix):
+
+1. `VibeThemeProvider` writes `localStorage.setItem("vibe.activetheme", name)` on every theme switch.
+2. The inline FOUC script in `index.html` reads `localStorage.getItem("vibe.activetheme")`, maps the name to the full CSS variable block (all vars for that theme inlined in the script), and sets them via `document.documentElement.style.setProperty(...)` — synchronously, before the React module loads.
+3. `VibeThemeProvider` reads from IDB on mount (async), confirms / corrects any discrepancy.
+
+The FOUC script in `index.html` must be updated to embed all 4 theme variable maps (as a plain JS object literal — no imports). The SHA-256 hash in the CSP `meta` tag and `csp.test.ts` must be recomputed after the script changes.
+
+**Cold start default**: `"aurora"`. Both the FOUC script and `VibeThemeProvider` fall back to `"aurora"` when `localStorage` has no `vibe.activetheme` entry.
+
+### 4. Theme-Aware Generation — Produce Prompt Change
+
+**Location**: `src/execution/producer.ts` → `buildPrompt()` — 4 branches.
+
+**Current** (all 4 branches contain a variant of):
+```
+- Uses CSS variables for theming: var(--color-surface), var(--color-text), var(--color-accent)
+```
+or (delegated branch):
+```
+Theme using the host's EXISTING variables var(--color-surface), var(--color-text), var(--color-accent) inside the inline styles
+```
+
+**Replace with** (same in all 4 branches):
+```
+- STYLING: style EVERYTHING with inline style={{ ... }}. Theme using the host's EXISTING CSS
+  variables: var(--accentA) for primary/accent elements, var(--accentB) for secondary accents
+  and highlights, var(--text) for all body text, var(--glass) for panel/card backgrounds,
+  var(--bord) for borders. These are always defined — do NOT hardcode colors.
+```
+
+**Why `buildPrompt()` and not a wrapper**: the prompt string is the single place that establishes the CSS variable contract visible to the model. No runtime mechanism can retroactively change what a cached compiled string references. The prompt is the only lever.
+
+**Impact on cached records**: existing cached `AppRecord.transpiledJS` entries reference `--color-*`. With the alias bridge in place they still render correctly. New produces reference `--accentA/--text/--glass`. Mixed state is acceptable — apps look correct on either variable set because the alias forwards `--color-*` → `--accentA/--glass`. Remove the alias bridge only after a milestone that invalidates cached entries (e.g. forced re-generation), or after LRU natural eviction.
+
+**WindowFrame palette**: `WindowFrame` chrome uses the same vars in its own inline styles (`--glass`, `--glass2`, `--bord`, `--hi`, `--accentA`) — matching the design reference window style exactly. App content inside `WindowFrame` inherits these via CSS cascade. No prop-passing needed.
+
+### 5. Create Panel — Wiring Describe→Open to the Real Produce Path
+
+**`CreatePanel` calls `DesktopShell.handleOpen(appType, displayName)` via a prop. No new IoC seam.**
+
+```typescript
+// CreatePanel props
+interface CreatePanelProps {
+  onOpen: (appType: string, displayName: string) => Promise<void>;
+  // onOpen is DesktopShell.handleOpen — same signature as Marketplace.handleOpen
+}
+```
+
+**`appType` from free-form text** (`src/ui/createPanelUtils.ts`):
+1. Keyword match table: "pomodoro/timer/focus/countdown" → `"pomodoro"`, "calc/math/bill/split/tip" → `"calculator"`, "weather/forecast/temp" → `"weather"`, "note/todo/write/jot/memo" → `"notes"`, "music/song/radio/lofi/audio" → `"music"`.
+2. Fallback: sanitize the raw query to `[a-z0-9-]` and truncate to 30 chars. This becomes the `appType` slug, cached under `registryKey("app", slug)`. Re-describing with slightly different words produces a different slug → new cache entry; exact-same description → instant cache hit. Acceptable for v2.0.
+
+**Progress affordance vs real produce latency**:
+- `CreatePanel` has local state: `phase: "idle" | "vibing" | "result"`.
+- "Vibe it" clicked: `phase = "vibing"`, start cosmetic `setInterval` cycling step text.
+- `onOpen(appType, displayName)` called concurrently (returns a Promise).
+- On Promise resolve: stop interval, `phase = "result"` (show result card with Open/Discard).
+- On Promise reject: stop interval, surface the same auth/throttled/generic fallback copy as `Marketplace`.
+- "Open app" in result card: `phase = "idle"`, window is already in `DesktopShell` state (was added on resolve), so it is visible. "Discard": `phase = "idle"`, call `closeWin` on the just-opened instance.
+
+The key insight: `handleOpen` in `DesktopShell` adds the window to state when the component resolves — before the user clicks "Open app." The window is in `min: true` state until the user explicitly opens it, OR it opens immediately (UX decision — the design reference shows an "Open app" confirmation step which is recommended for v2.0).
+
+---
+
+## Data Flows
+
+### Window Open (from CreatePanel or Dock click)
+
+```
+CreatePanel: user types → "Vibe it"
+  → createPanelUtils.deriveAppType(query)  → appType slug
+  → props.onOpen(appType, displayName)     → DesktopShell.handleOpen
+      → resolveOpenApp(appType)            [intent/resolver.ts — UNCHANGED]
+      → resolveComponent(instanceId, ...)  [execution/loader.ts — UNCHANGED]
+          → tier 1/2/3 hit → Component
+          → full miss → produceComponent   [producer.ts — prompt MODIFIED]
+      → useWindowManager.addWindow({ ..., Component })
+          → WindowEntry pushed, ztop++, x/y positioned
+  → Promise resolves → CreatePanel: phase = "result"
+  → User clicks "Open app" → window visible (or already visible with min:false)
+  → WindowFrame mounts: useEffect → mountApp(instanceId, containerRef, Component)
+```
+
+### Theme Switch
+
+```
+User clicks theme pill in MenuBar ("Aero")
+  → VibeThemeContext.setTheme("aero")
+  → VibeThemeProvider: applyNamedTheme(VIBE_THEMES["aero"])
+      → document.documentElement.style.setProperty("--accentA", "#4aa3ff")
+      → ... (all vars for "aero")
+  → localStorage.setItem("vibe.activetheme", "aero")   ← FOUC guard
+  → await settings.setActivetheme("aero")              ← IDB persist
+  → CSS cascade updates instantly across ALL elements:
+      MenuBar chrome (--accentA/--glass/--bord)
+      WindowFrame chrome (--glass/--glass2/--bord/--hi)
+      Generated app inline styles (var(--accentA)/var(--text)/var(--glass))
+      Dock (--accentA running dots)
+      Desktop background (--wall gradient applied to .vibe-desktop)
+  → No component remount, no React re-render triggered by CSS cascade
+```
+
+### Window Close (three-step teardown)
+
+```
+User clicks traffic-light close in WindowFrame → DesktopShell.handleClose(instanceId)
+  1. evictLiveComponent(instanceId)   [loader.ts liveComponents Map]
+  2. closeWin(id) in useWindowManager → removes WindowEntry from React state
+  3. WindowFrame unmounts → cleanup effect: unmountApp(instanceId) [mount.ts roots Map]
+  → Dock running indicator disappears (appType no longer in windows array)
+```
+
+### IDB Settings Boot
+
+```
+App boots → VibeThemeProvider mounts
+  → settings.getActivetheme()    → IDB get("settings", "activetheme")
+  → if found: applyNamedTheme(VIBE_THEMES[name])
+  → if not: applyNamedTheme(VIBE_THEMES["aurora"])  (cold-start default)
+  [FOUC already applied synchronously before React loaded — IDB call is correction only]
+```
 
 ---
 
 ## Architectural Patterns
 
-### Pattern 1: Resolve-or-Produce (one engine for apps, widgets, handlers)
+### Pattern 1: CSS Custom Property Inheritance as the Theme Bridge
 
-**What:** A single `resolve(intent)` function: check in-mem registry → check IndexedDB → on miss, generate + store. Apps, widgets, and handlers differ only by store name and prompt template.
+**What:** `document.documentElement.style.setProperty(prop, val)` at `VibeThemeProvider` mount/switch. Every DOM descendant inherits these values — including independent React roots inside window frame `<div>` containers. Generated app inline styles referencing `var(--accentA)` etc. re-skin for free with zero React work on theme switch.
 
-**When:** Every meaningful action and every dependency edge.
+**Why it works for `new Function` roots:** CSS custom property inheritance is a DOM property, not a React property. The `new Function` boundary is a JS execution scope; the mounted DOM subtree is a CSS descendant of `<html>` regardless.
 
-**Trade-offs:** One mental model and one tested path (huge for a small team); cost is that the three slightly different schemas share a code path and need care to not over-couple (handlers have no `transpiledJS`, only `sourceCode`).
+**Implication:** theme switching is O(1) — CSS cascade, no component unmount/remount.
 
-```typescript
-async function resolve(intent: Intent): Promise<Resolved> {
-  const hit = registryCache.get(intent.cacheKey);      // in-mem, sync
-  if (hit) return hit;
-  const stored = await db.get(storeFor(intent.kind), intent.cacheKey);
-  if (stored) return hydrate(stored);                  // populates caches
-  const produced = await generate(intent);             // model + transpile + store
-  return produced;
-}
-```
+### Pattern 2: Two Parallel Maps — React State + DOM Roots
 
-### Pattern 2: Classic-runtime transpile + named-scope instantiation
+**What:** `useWindowManager` owns `WindowEntry[]` (React state, drives UI re-renders). `mount.ts` `roots` Map (module-level, not React) owns `Map<instanceId, Root>` for safe `unmount()`. Same `instanceId` key; different concerns.
 
-**What:** Babel `preset react` (classic runtime → `React.createElement`) produces a CommonJS-shaped string; `new Function("module","exports","React", ...extras, code)` runs it and returns `module.exports.default`.
+**Why separate:** mixing x/y/z/min/title into `mount.ts` would turn a pure utility into a stateful UI concern. Module-level React state creates stale closure bugs. The split is clean and already established by the v1.1 codebase.
 
-**When to use:** Every instantiation. This is the core trick of the whole system.
+**Invariant:** `handleClose(id)` calls all three cleanup steps in order. Never split them across call sites.
 
-**Trade-offs:** Classic runtime is required so the only free identifier the code needs is `React` (which we inject). The price: generated code must never `import`/`require` anything; the prompt enforces "no imports other than React" and the scope provides no resolver, so a stray import throws at instantiation (caught by self-heal or ErrorBoundary). **Lock the Babel config to classic runtime explicitly — do not rely on the default, which flips to automatic in Babel 8.**
+### Pattern 3: AppShell as Inner Contextual-Prompt Region
 
-```typescript
-// transpile.ts — pin runtime so a Babel major bump can't break instantiation
-Babel.transform(sourceJSX, {
-  presets: [["react", { runtime: "classic" }]],
-  filename: "component.jsx",
-}).code;
+**What:** `WindowFrame` adds the OS window chrome (traffic lights, drag handle, title). It renders `<AppShell>` as its content region. `AppShell` retains the ⋮ menu → `ContextualPrompt` → `onModify` wiring, unchanged.
 
-// instantiate.ts
-const argNames  = ["module", "exports", "React", ...Object.keys(extras)];
-const argValues = [mod, mod.exports, React, ...Object.values(extras)];
-new Function(...argNames, code)(...argValues);
-return mod.exports.default ?? mod.exports;
-```
+**Why keep AppShell:** avoids duplicating the contextual-prompt wiring inside `WindowFrame`. `WindowFrame` knows only about window-manager concerns; `AppShell` knows about app modification. Layered chrome.
 
-### Pattern 3: Single shared React via reference injection (no globals)
+### Pattern 4: CreatePanel Progress as Cosmetic, Produce as Parallel
 
-**What:** Hooks require that the `React` a component uses is the *same module object* as the one whose dispatcher is active during render. Passing the host's imported `React` as a `new Function()` argument satisfies this by identity — no `window.React`, no global pollution.
+**What:** `setInterval` in `CreatePanel` cycles step text cosmetically. `handleOpen` (real produce) runs in parallel. `CreatePanel` just awaits the Promise; the interval stops on resolution.
 
-**When:** Always. It is the safety property behind every generated hook.
-
-**Trade-offs:** Free and clean *as long as exactly one React copy exists in the page*. The risk is not "how do I share it" but "how do I avoid a second one." Concretely: do not load React from a second `<script>`/CDN, do not let a generated app import React (the prompt forbids it and the scope can't resolve it anyway), and dedupe React/react-dom in the bundle. A second instance manifests as the "Invalid hook call / dispatcher is null" failure, isolated to that widget by its ErrorBoundary but confusing to debug — so make "one React, injected by reference" an explicit invariant in code comments (written neutrally, per hygiene).
-
-```typescript
-import * as React from "react";   // the one and only instance
-// ...passed by reference into every generated component's scope
-makeUseWidget(appId);             // closure also closes over the same React
-```
-
-### Pattern 4: Transitive pre-warm → synchronous `useWidget`
-
-**What:** Before mounting an app, parse its `@widget` declarations, resolve each (cache or produce), and — because a widget may itself declare `@widget` deps — recurse until the dependency closure is fully in the in-memory component `Map`. Only then mount. `useWidget(type)` is a pure `Map.get` returning the component synchronously.
-
-**When to use:** Every app mount and every widget mount that has its own deps.
-
-**Trade-offs:** Eliminates render waterfalls and keeps `useWidget` sync (the blueprint's hard requirement). Cost: pre-warm is a serial-or-parallel async phase before first paint; parallelize sibling resolves (`Promise.all`) and guard against cycles with a visited-set. A widget requested *dynamically* (not declared) legitimately can't be pre-warmed — for that case `useWidget` returns a neutral skeleton and kicks off background resolution + re-render, which is acceptable as a documented fallback, not the main path.
-
-```typescript
-async function prewarm(deps: string[], seen = new Set<string>()) {
-  await Promise.all(deps.map(async (type) => {
-    if (seen.has(type)) return;
-    seen.add(type);
-    const w = await resolve(widgetIntent(type));   // cache or produce
-    componentMap.set(componentKey("widget", type), instantiate(w.transpiledJS, { /* React only */ }));
-    if (w.widgetDeps?.length) await prewarm(w.widgetDeps, seen);  // transitive
-  }));
-}
-// useWidget — synchronous, render-safe
-const useWidget = (type) => componentMap.get(componentKey("widget", type)) ?? Skeleton;
-```
-
-### Pattern 5: Mounted-roots map — create once, render-to-update, unmount-to-remove
-
-**What:** `Map<containerId, Root>`. First mount: `createRoot(container)`, store, `root.render(tree)`. In-place tweak: look up the existing root, call `root.render(newTree)` — **do not** create a new root. Removal: `root.unmount()` then drop the map entry (and only then remove the DOM node).
-
-**When to use:** Every mount, every tweak, every removal.
-
-**Trade-offs:** Matches React's contract (calling `createRoot` twice on a live container is a warned error and double-manages reconciliation). The discipline cost is real: tweak-in-place must reuse the root, and removal must unmount before DOM detach to avoid leaks/zombie roots. Keying the map by the stable instance id (not cacheKey — two instances of the same app type can coexist) is essential.
-
-```typescript
-const roots = new Map<string, Root>();
-function mountInstance(id: string, container: HTMLElement, tree: ReactNode) {
-  let root = roots.get(id);
-  if (!root) { root = ReactDOM.createRoot(container); roots.set(id, root); }
-  root.render(<ErrorBoundary>{tree}</ErrorBoundary>);   // re-render reuses root
-}
-function unmountInstance(id: string) {
-  roots.get(id)?.unmount();
-  roots.delete(id);
-}
-```
-
-### Pattern 6: Layered cache (component Map ▸ transpiled Map ▸ IndexedDB ▸ model)
-
-**What:** Three read tiers in front of the model. Tier 0: instantiated-component `Map` (skips even `new Function()`). Tier 1: `transpiledJS` `Map` (skips Babel). Tier 2: IndexedDB (`sourceJSX` + `transpiledJS`, survives reload). Tier 3: model call (last resort).
-
-**When to use:** Every resolve.
-
-**Trade-offs:** Guarantees "compile once per session" and "never re-run Babel from storage twice." Cost: cache-key discipline must be airtight — same type + normalized prompt → same key, or you silently duplicate. Storage rule: **never persist the instantiated function** (not serializable); persist the `transpiledJS` string and re-instantiate on load. The component `Map` is the only tier holding live functions and it is session-scoped.
+**Why:** the real produce loop is a single POST to Haiku returning a complete response. The step text ("Reading your vibe…", "Sketching the layout…") is UX theater. Never wire the UI steps to actual model/compile phases — that would require threading callbacks through the produce loop, adding complexity and leaking the mechanic.
 
 ---
 
-## Data Flow
+## Anti-Patterns to Avoid
 
-### Request Flow (cache miss, app with widget deps)
+### Anti-Pattern 1: Window x/y State in App-Root Context
 
-```
-open app
-   ↓
-Intent Resolver ─► Intent{ op:render, kind:app, type, cacheKey, context }
-   ↓
-registryCache.get → MISS
-   ↓
-db.get("apps", cacheKey) → MISS
-   ↓
-Generation: buildAppPrompt → host.modelClient(prompt) ─► raw JSX
-   ↓                                  │ (only network edge)
-clean → transpile(classic) → self-heal if Babel error (≤3, Babel err fed back)
-   ↓
-store {sourceJSX, transpiledJS, widgetDeps} → apps; populate transpiledCache
-   ↓
-parseWidgetDeps → prewarm(deps)  ⟳ transitive, fills componentMap   [async]
-   ════════════════ async/sync boundary ════════════════
-   ↓
-instantiate(transpiledJS, { React, useWidget:makeUseWidget(appId) })  [sync]
-   ↓
-mount: createRoot(container) once → root.render(<ErrorBoundary><App/></ErrorBoundary>)
-   ↓
-App renders → useWidget("line-chart") → componentMap.get → <Widget/> (sync)
-   ↓
-UI Surface: AppShell frame + ⋮  (widget in own WidgetShell + own ErrorBoundary)
-```
+**What people do:** lift `WindowEntry[]` into a context at `App.tsx` so any component can call `openApp`.
 
-### Mutation / tweak Flow (in-place)
+**Why wrong:** every drag move is `setState` → context re-render → all consumers re-render. At N open windows + a running drag, this is O(N) re-renders per pointer move.
 
-```
-⋮ → ContextualPrompt → router.route(text, target)
-   ├─ /remove|delete|close/  → unmountInstance(id) → drop DOM        (no model)
-   ├─ /clone|duplicate|copy/ → new id, same cacheKey, mount again    (no model)
-   └─ else (mutate)          → newCacheKey(kind,type,mutationPrompt)
-                                → resolve (cache or produce)
-                                → roots.get(id).render(newTree)   ← reuse root
-```
+**Do this instead:** `useWindowManager` lives in `DesktopShell` (not App root). Drag deltas go to `useRef` (not state); only `pointerup` commits to state. `DesktopContext` exposes only `openApp` and `activeWindowName` — never the full `windows` array — so Dock and MenuBar don't re-render on drag ticks.
 
-### State Management
+### Anti-Pattern 2: Remounting App Components on Theme Switch
 
-There is no global app-state store and the architecture is better for it. Three explicit state locations:
+**What people do:** pass `themeName` as a prop to `WindowFrame` or as a key, causing `Component` to unmount/remount when theme changes.
 
-```
-localStorage          marketplace.apiKey, marketplace.theme        (config)
-IndexedDB MarketplaceDB   apps · widgets · handlers                (durable registry)
-in-memory               registryCache · transpiledCache · roots    (session)
-React component state    inside each generated app/widget          (isolated, ephemeral)
-```
+**Why wrong:** remounting destroys component state — a running pomodoro timer, unsaved notes, mid-edit calculator state.
 
-Generated apps own their own `useState`; they **cannot** reach marketplace state (the `new Function()` scope gives them only `React` + `useWidget`). This isolation is a security property, not just tidiness.
+**Do this instead:** CSS custom property cascade (Pattern 1). Generated app state is untouched because the React tree inside the generated root never changes on theme switch — only the inherited CSS vars change.
 
-### Key Data Flows
+### Anti-Pattern 3: Updating `buildPrompt()` Without the CSS Alias Bridge
 
-1. **Compile-once:** `sourceJSX` is transpiled exactly once (on miss), the `transpiledJS` string is persisted, and Babel never runs again for that key — the transpiled `Map` serves it for the rest of the session, IndexedDB across reloads.
-2. **Pre-warm closure:** an app's declared widget set (transitively) is fully resolved into live components *before* first paint, so the render pass never awaits.
-3. **Single network egress:** every model interaction (classify fallback, app/widget/handler generation, self-heal) funnels through one host function — the only place a prompt leaves the browser.
+**What people do:** change the prompt vars first, assume old cached apps still look fine.
+
+**Why wrong:** old cached `transpiledJS` references `--color-surface/text/accent`. With the new theme providing only `--accentA/--text/--glass`, old apps render with browser-default colors (black on white) until their cache entry evicts.
+
+**Do this instead:** add the `:root` alias bridge in `index.css` before updating `buildPrompt()`. The alias makes old and new variable names resolve to the same runtime value simultaneously.
+
+### Anti-Pattern 4: Blocking First Paint on IDB Theme Read
+
+**What people do:** `await settings.getActivetheme()` in a `useLayoutEffect` before rendering children.
+
+**Why wrong:** IDB is async; blocking first paint causes a visible unstyled flash longer than the current FOUC fix.
+
+**Do this instead:** the inline FOUC script reads `localStorage` synchronously before React loads. `VibeThemeProvider` reads from IDB asynchronously and corrects any discrepancy — but first paint is always styled.
+
+### Anti-Pattern 5: Opening Multiple Windows for the Same App Type
+
+**What people do:** every "Vibe it" call creates a new window even if one is already open for that app type.
+
+**Why wrong:** duplicate windows for the same component share a `liveComponents` Tier-1 entry by appType but have different instanceIds, creating confusion and unnecessary produce calls.
+
+**Do this instead:** `useWindowManager.openApp` checks `windows.find(w => w.appType === appType)`. If found: `focusWin(existing.id)` instead of opening a new window. The `CreatePanel` result card shows an "Open" button only once; re-clicking "Vibe it" for the same type just focuses the existing window.
 
 ---
 
-## Build Order — Vertical-MVP Slices
+## Build Order with Hard Ordering Constraints
 
-Each slice ships an **end-to-end, user-visible capability**. Earlier slices are dependencies of later ones; nothing below is a horizontal "build all of layer N" phase.
+### Constraints
 
-> Dependency legend: a slice may only use components delivered in itself or an earlier slice.
+- **[C1] Theme contract before theme-aware generation**: `VIBE_THEMES` vars must be defined, applied by `VibeThemeProvider`, and proven working in the host before `buildPrompt()` is updated to reference them. Otherwise newly-produced apps reference vars that aren't set until `VibeThemeProvider` mounts — a race condition on cold start or IDB-miss.
+- **[C2] IDB schema before VibeThemeProvider**: `settings` store must exist before `settings.ts` can read/write. IDB version bump goes in the same phase as `settings.ts`.
+- **[C3] CSS alias bridge before prompt update**: `:root { --color-surface: var(--glass); ... }` must be in `index.css` before any `buildPrompt()` change, so old cached apps keep rendering correctly during the transition.
+- **[C4] `useWindowManager` before `WindowFrame`**: `WindowFrame` consumes `WindowEntry`; the shape must be final.
+- **[C5] `WindowFrame` before `DesktopShell`**: `DesktopShell` renders `WindowFrame` components.
+- **[C6] `DesktopShell` before `CreatePanel`**: `CreatePanel` receives `onOpen` from `DesktopShell`.
+- **[C7] FOUC script update in same phase as `VibeThemeProvider`**: shipping the new provider without updating the FOUC script causes a flash between the old `data-theme` application and the new CSS var application on first load.
+- **[C8] `csp.test.ts` hash update in same commit as FOUC script**: the test guards the exact hash; a stale hash causes CI failure.
 
-**Slice 0 — Hygiene + shell skeleton (foundation, thin but user-visible).**
-Deliver: marketplace page renders, AppBar with API-key config + theme toggle, neutral CSS variables on `:root`, the gated logger, opaque `cacheKey()`, and the single `host/modelClient.ts` stub (header assembly incl. `anthropic-dangerous-direct-browser-access`).
-*Why first:* the devtools-hygiene constraints (naming, opaque keys, log gating, the mandatory browser-access header) are **cheaper to bake in than retrofit**, and every later slice depends on the host boundary and cacheKey. User sees a real storefront and can save a key.
-Depends on: nothing.
+### Recommended Phase Order
 
-**Slice 1 — Open-one-static-app end to end (the loop, minus the model).**
-Deliver: IndexedDB init (`apps` store), Intent Resolver (static map), registry resolve, transpile (classic), instantiate, mount via the roots map inside AppShell, ErrorBoundary. Seed one app's `sourceJSX` locally (no model yet).
-*Why here:* proves the **resolve→compile→instantiate→render** core — the product's whole reason for being — with model risk removed. First slice where a user opens an app and it works.
-Depends on: Slice 0 (shell, cacheKey, mount container).
+**Phase 1 — Theme Foundation** (satisfies C2, C3, C7, C8; unblocks all remaining phases)
 
-**Slice 2 — Cache-miss generation (the model joins the loop).**
-Deliver: `widgets`-less app generation via `host.modelClient`, clean, store, self-heal loop (≤3, Babel error fed back). Now an app the user opens that isn't seeded gets produced, compiled, cached, rendered.
-*Why here:* turns the static loop of Slice 1 into the real on-demand loop. The illusion (`hit = instant, miss = seamless`) becomes demonstrable.
-Depends on: Slice 1 (compile/mount path), Slice 0 (host boundary).
+- `src/registry/db.ts`: add `SettingsRecord`, add `settings` store, bump `REGISTRY_DB_VERSION` to 3
+- `src/registry/settings.ts`: `getActivetheme` / `setActivetheme`
+- `src/ui/VibeThemeContext.ts` + `src/ui/VibeThemeProvider.tsx`: `VIBE_THEMES` constant, `applyNamedTheme`, IDB load, `style.setProperty` on switch, `localStorage` write on switch
+- `src/index.css`: add `:root` alias bridge (`--color-surface: var(--glass)` etc.)
+- `index.html`: update FOUC script (read `vibe.activetheme`, inline theme var maps, `style.setProperty` loop)
+- `src/csp.test.ts`: recompute SHA-256 hash for updated FOUC script
+- `src/App.tsx`: wrap with `VibeThemeProvider` (can coexist with old `ThemeProvider` briefly)
+- Gate: all 552 existing tests still green. `VibeThemeProvider` is additive. New `settings` store is additive (IDB upgrade is non-destructive). Verify theme switching re-skins host chrome visually.
 
-**Slice 3 — Composition: widgets + pre-warm + sync `useWidget`.**
-Deliver: `widgets` store, `@widget` dep parser, transitive `prewarm`, `makeUseWidget` injection, WidgetShell with its own ErrorBoundary and `⋮`. Apps now render sub-widgets, each isolated.
-*Why here:* this is the slice where the three hard concerns (sync `useWidget`, pre-warm-before-mount, per-widget isolation) all land together — they are meaningless individually and must ship as one capability.
-Depends on: Slice 2 (generation can now produce widgets too), Slice 1 (mount/ErrorBoundary).
+**Phase 2 — Window Manager** (requires Phase 1 for CSS vars on WindowFrame chrome; satisfies C4)
 
-**Slice 4 — Contextual modification: remove / clone / tweak.**
-Deliver: ContextualPrompt popover, prompt router, in-place re-render via the roots map (reuse root), new-cacheKey-on-tweak. Remove/clone are client-only; tweak re-enters resolve.
-*Why here:* needs live instances (Slices 1–3) to act upon and the roots map to mutate in place. First slice where the user *shapes* apps, not just opens them.
-Depends on: Slice 3 (instances + roots map + shells with `⋮`).
+- `src/ui/useWindowManager.ts`: `WindowEntry` type, `openApp`, `focusWin`, `closeWin`, `minWin`, `startDrag/onMove/onUp` (pointer event wiring), `ztop` counter
+- `src/ui/DesktopContext.ts`: narrow context (`openApp`, `activeWindowName`)
+- `src/ui/WindowFrame.tsx`: traffic lights, drag handle, `containerRef`, `mountApp`/`unmountApp` effects, renders `<AppShell>` as content wrapper
+- Unit tests: `useWindowManager` state transitions (open/close/focus/min/drag); `WindowFrame` mount/unmount (verify `mountApp`/`unmountApp` called correctly, no root leaks); `isMounted`/`mountedCount` invariants
+- Gate: `mount.ts` root-lifecycle tests still pass; no roots leaked after close
 
-**Slice 5 — Resilience hardening + graceful degradation.**
-Deliver: missing/invalid key, 401, 429 backoff, IndexedDB-unavailable → in-memory fallback, neutral non-revealing error copy everywhere. (ErrorBoundary already exists from Slice 1; this slice completes the *generation*-error matrix and the messaging.)
-*Why here:* you can only harden paths that exist; doing it as its own slice forces the neutral-copy hygiene review across the whole surface at once.
-Depends on: Slices 2–4 (the error sources).
+**Phase 3 — Desktop Shell + Dock + MenuBar** (requires Phase 2; satisfies C5)
 
-**Slice 6 — Backend-style handlers (optional layer).**
-Deliver: `handlers` store, `runHandler(intent,input)` resolve-or-produce-then-exec, handler prompt template.
-*Why last:* fully independent of the UI loop; nothing above depends on it; it reuses the resolve-or-produce engine wholesale. Pure additive capability.
-Depends on: Slice 2's generation engine + Slice 0's host boundary.
+- `src/ui/MenuBar.tsx`: evolved from `AppBar.tsx` (OS wordmark, active-window name, theme pills reading `VibeThemeContext`, clock, account icon)
+- `src/ui/Dock.tsx`: store icon + running-app icons (memoized from `windows` array), hover-scale, click → `focusWin`
+- `src/ui/DesktopShell.tsx`: replaces `Marketplace` as top-level page; owns `handleOpen`/`handleClose`/`handleModify` (ported from `Marketplace.tsx`); renders `MenuBar` + desktop surface + `WindowFrame` per entry + `Dock`
+- `src/App.tsx`: swap `main > Marketplace` → `DesktopShell`; retire `AppBar`
+- Port `Marketplace.test.tsx` → `DesktopShell.test.tsx` (open flow, close flow, auth/throttled/generic fallback, modify routing — same logic, new component home)
+- Gate: all ported tests pass; manual verify multiple windows open concurrently with correct z-order and drag
 
-**Ordering rationale (dependencies made explicit):**
-- The **host boundary + cacheKey + hygiene scaffolding (Slice 0)** must precede every model call and every stored key — retrofitting opaque keys or the mandatory CORS header after data exists is painful.
-- **Compile/mount (Slice 1) before generation (Slice 2):** de-risk the novel runtime mechanics with seeded source before adding model nondeterminism.
-- **Generation (Slice 2) before composition (Slice 3):** widgets are *produced* the same way apps are; composition can't exist until the generation engine does.
-- **Composition (Slice 3) before modification (Slice 4):** tweak/clone/remove operate on live, possibly-composed instances and the roots map.
-- **Resilience (Slice 5) after the happy paths exist**, and **handlers (Slice 6) last** as an isolated additive layer.
+**Phase 4 — Create Panel** (requires Phase 3; satisfies C6)
 
-**First end-to-end slice the product can ship on:** Slice 1 (open one app, it renders and works) is the minimum demonstrable loop; Slice 2 makes it the *real* product (apps that don't exist yet appear on demand). The PROJECT.md core value ("opens an app and it works, instant on hit, seamless on miss") is met at the end of Slice 2.
+- `src/ui/createPanelUtils.ts`: `deriveAppType(query: string): string` (keyword map + sanitized-slug fallback)
+- `src/ui/CreatePanel.tsx`: idle / vibing / result state machine, cosmetic step-text timer, `props.onOpen` call, result card (Open / Discard)
+- Render `CreatePanel` in `DesktopShell` desktop surface (centered, above desktop blobs, below windows at `z-index: 120`)
+- `src/ui/CreatePanel.test.tsx`: state transitions (idle→vibing→result→idle), `deriveAppType` unit tests, hygiene check (no banned tokens in copy), integration test (describe → `onOpen` called with correct appType)
+- Gate: `hygiene.test.ts` still green (CreatePanel copy must not contain `synthesi*` / `AI` / `llm` / `generate` / `fake` / `mock`)
 
----
+**Phase 5 — Theme-Aware Generation** (requires Phase 1 for var contract, Phase 3 for windows being visible; satisfies C1)
 
-## Scaling Considerations
-
-This is a single-user, client-only app; "scale" means data growth and produced-asset volume per browser, not concurrent users.
-
-| Scale | Adjustments |
-|-------|-------------|
-| 1 user, tens of apps | Nothing. IndexedDB + in-mem maps are ample. |
-| Hundreds of cached apps/widgets | Add `useCount`/`updatedAt`-based eviction (already in schema) before IndexedDB bloat hurts open time; lazy-hydrate the registry rather than loading all rows at init. |
-| Heavy session (many distinct types) | Cap the in-memory component `Map` (LRU) so live functions don't accumulate; transpiled strings can stay in IndexedDB and re-instantiate on demand. |
-
-### Scaling Priorities
-
-1. **First bottleneck — first cache miss latency:** dominated by the model round-trip + the eager ~450KB Babel load. Babel must load at init (not lazily) so the first miss doesn't also pay the download. This is a correctness-of-feel issue, not a user-count issue.
-2. **Second bottleneck — registry hydration on reload:** loading every stored row at startup grows linearly with cached assets. Hydrate lazily (load a row when its key is first resolved) and keep only an index in memory at boot.
+- `src/execution/producer.ts` `buildPrompt()`: update 4 branches (`"delegated"`, `"app"`, `"shell"`, `"widget"`) — replace `--color-surface/text/accent` with `--accentA/--accentB/--text/--glass/--bord`
+- Update/replace any `producer.test.ts` prompt-content fixture assertions to expect new var names
+- Verify: produce a new app, open in a window, switch theme → inline styles re-skin correctly
+- Gate: `buildPrompt()` unit test that output contains `--accentA` and does NOT contain `--color-surface`; existing instantiation tests still pass (prompt change doesn't affect compile/mount path)
 
 ---
 
-## Anti-Patterns
+## Confidence Assessment
 
-### Anti-Pattern 1: New `createRoot()` per render/tweak
-**What people do:** Call `ReactDOM.createRoot(container)` again to re-render after a tweak.
-**Why it's wrong:** React warns "container has already been passed to createRoot," double-manages the node, and leaks the old root.
-**Do this instead:** Create once, store in the roots map, call `root.render()` to update, `root.unmount()` to remove.
-
-### Anti-Pattern 2: Automatic JSX runtime (or relying on the Babel default)
-**What people do:** Use `preset react` defaults, or set automatic runtime.
-**Why it's wrong:** Automatic runtime emits `import { jsx } from "react/jsx-runtime"` — an unresolvable import inside `new Function()`. Babel 8 will default to automatic, so even "do nothing" eventually breaks.
-**Do this instead:** Pin `["react", { runtime: "classic" }]` so JSX → `React.createElement`, resolved by the injected `React`.
-
-### Anti-Pattern 3: A second React (global/CDN) for generated code
-**What people do:** Expose `window.React` or load React from a CDN for generated apps "to be safe."
-**Why it's wrong:** Two React instances → "Invalid hook call / dispatcher is null." It also re-introduces the global pollution the security model forbids.
-**Do this instead:** One imported React, injected by reference into every scope; generated code never imports React (prompt-enforced and scope-unresolvable).
-
-### Anti-Pattern 4: Async work inside `useWidget` / during render
-**What people do:** `useWidget` triggers a generate/await when the widget isn't ready.
-**Why it's wrong:** Violates the synchronous-render contract, causes waterfalls and flicker, and can loop.
-**Do this instead:** Pre-warm the transitive dep closure before mount so `useWidget` is a pure `Map.get`; reserve async only for the documented dynamic-widget fallback (skeleton + background resolve + re-render).
-
-### Anti-Pattern 5: Persisting instantiated functions
-**What people do:** Store the `new Function()` result (or a memoized component) in IndexedDB.
-**Why it's wrong:** Functions aren't structured-cloneable; recompilation becomes uncontrolled.
-**Do this instead:** Persist only the `transpiledJS` string; re-instantiate on load; keep live functions in the session-scoped component map.
-
-### Anti-Pattern 6: Leaking the mechanic into a devtools-visible surface
-**What people do:** Name a store `synthesizedApps`, log `"generating widget…"`, attach `data-generated`, or put the type slug in a readable IndexedDB key.
-**Why it's wrong:** Any one leak breaks the entire product premise (apps "just exist").
-**Do this instead:** Opaque hashed keys; neutral store/CSS/symbol names; a single logger gated behind `localStorage.debug` emitting neutral copy; neutral prompt phrasing in the request body. See the dedicated section below.
+| Area | Confidence | Basis |
+|------|------------|-------|
+| Window manager state design | HIGH | Direct inspection of `mount.ts`, `Marketplace.tsx`, design reference `openApp/focusWin/closeWin/minWin` |
+| CSS var inheritance through `new Function` roots | HIGH | CSS custom property inheritance is a DOM spec property; `new Function` is a JS boundary only |
+| Theme persistence + no-FOUC | HIGH | Existing FOUC script pattern confirmed in `index.html`; IDB additive-upgrade pattern confirmed in `db.ts` |
+| IDB schema extension | HIGH | v1→v2 additive-upgrade precedent in `db.ts` is directly reusable |
+| Produce prompt change | HIGH | `buildPrompt()` source read; change is a string substitution in 4 named branches |
+| CreatePanel wiring | HIGH | `handleOpen` signature in `Marketplace.tsx` is directly reusable as a prop; no new seam needed |
+| DelegatedShell inside WindowFrame | HIGH | `makeDelegatedComponent` returns a plain `ComponentType`; `WindowFrame` is type-agnostic |
+| AppShell reuse inside WindowFrame | HIGH | `AppShell` props (`displayName`, `onClose`, `onModify`, `children`) map directly to WindowFrame needs |
 
 ---
-
-## Architectural Decisions Forced by Constraints
-
-### Forced by "no backend"
-- **Single network egress to `api.anthropic.com` only**, carrying the user's key — so the host boundary is one file and the CORS/header handling lives in exactly one place.
-- **Handlers run in-browser** against mock/local data; "backend" is a generation target, not a server. `runHandler` is just resolve-or-produce-then-exec.
-- **No server-side cache/registry** → IndexedDB is the durable tier and the in-memory maps are the fast tier; there is no third place to fall back to except an in-memory `Map` when IndexedDB is unavailable.
-
-### Forced by direct-browser Anthropic calls (verified)
-- Calls to `api.anthropic.com/v1/messages` from the browser **require the `anthropic-dangerous-direct-browser-access: true` request header**, plus `x-api-key` and `anthropic-version`. This is mandatory for CORS to succeed.
-- **Tension with network-tab hygiene, and its resolution:** the header name and the `api.anthropic.com` host are themselves visible in the Network tab and *cannot* be hidden in a no-backend design. Hygiene therefore targets what *is* controllable — the request **body** (neutral prompt phrasing: "Generate a React component for a weather app," never anything that names the mechanic) and **not** the unavoidable host/header. This is a real, documented limitation of the client-only model: a sufficiently determined observer sees an Anthropic call; the defense is that the *content* never narrates "this app was produced on demand," and the product never exposes a generate button. Flag for the roadmap: the hygiene requirement should be scoped to "no surface *narrates the mechanic*," not "no evidence of an LLM call exists," which is unachievable without the explicitly-out-of-scope proxy.
-
-### Forced by devtools-hygiene (structural, not cosmetic)
-- **Opaque cache keys** (hash of normalized `kind::type::prompt`, no readable slug) → IndexedDB key names reveal nothing. This shapes `cacheKey.ts` and means keys must be derivable identically every time (normalize before hashing).
-- **Neutral module/store/CSS/symbol naming throughout** (`apps`/`widgets`/`handlers`, `.app-shell`/`.widget-frame`, `resolveApp`/`AppRegistry`). Internal terms (`synthesize`/`generate`) may appear *only* where source maps can't expose them — and since source maps can, the safest rule is: **the token "synthesize/synthesized/synthesis" appears in zero source files**, comments included. This is a lint-enforceable invariant worth a CI check in Slice 0.
-- **A single gated logger** (`host/` or a tiny `log.ts`): off by default, enabled via `localStorage.debug`, neutral copy only. Centralizing it prevents stray `console.log` leaks and is why the logger ships in Slice 0.
-- **Neutral error copy** ("Couldn't load this app. Try again.") wherever errors reach UI or console — handled as a cross-cutting rule completed in Slice 5's messaging pass.
-- **No `data-*` mechanic attributes** on rendered apps/widgets; shells use structural attributes only.
-
-These hygiene choices are concentrated in Slice 0 precisely because keys, naming, and the logger are foundational and expensive to change once data and modules exist.
-
----
-
-## Integration Points
-
-### External Services
-
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| `api.anthropic.com/v1/messages` | Single `fetch` in `host/modelClient.ts`; `x-api-key` (user's), `anthropic-version`, **`anthropic-dangerous-direct-browser-access: true`** (mandatory for CORS), neutral prompt body | Host + header are unavoidably visible; only the body is hygiene-controllable. Key never logged/proxied. |
-| `@babel/standalone` (CDN/npm) | Loaded **eagerly at init**; `Babel.transform` with pinned classic runtime | ~450KB — must not block first cache miss. |
-| IndexedDB (`idb` optional) | Async CRUD behind `db/`; structured-clone-safe rows only (strings, never functions) | Degrade to in-memory `Map` if unavailable. |
-| `localStorage` | `store/` for neutral `marketplace.apiKey` / `marketplace.theme` | Keys are neutral and product-branded. |
-
-### Internal Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Intent ↔ Registry | direct async call (`resolve(intent)`) | cacheKey is the contract |
-| Registry ↔ Generation | direct async call on miss | Generation writes back to Registry |
-| Registry/Generation ↔ Execution | **async → sync handoff** | The defining boundary: no `await` crosses into render |
-| Execution ↔ generated component | `new Function()` named scope (`React`, `useWidget`) | The only channel into untrusted code; no globals cross it |
-| App ↔ its widgets | `useWidget` returns pre-resolved components | Widgets can't reach app/marketplace state |
-| Everything ↔ network | the one `host.modelClient` function | Single egress; single hygiene chokepoint |
-
----
-
-## Open Questions / Flags for Roadmap
-
-- **Dynamic (undeclared) widgets:** the skeleton-then-async fallback is sound but is the one place `useWidget` touches async — confirm in Slice 3 whether the product needs it at all, or whether all widgets are statically declared (simpler, fully sync).
-- **Instance identity vs cache identity:** the roots map must key on instance id, not cacheKey, so two instances of the same app type can coexist. Worth an explicit decision when Slice 1's mount map is designed.
-- **Hygiene scope reality check (Slice 0/5):** agree explicitly that "no surface narrates the mechanic" is the achievable bar, since the Anthropic host/header are visible by construction in a no-proxy design.
-- **Babel-version pin:** treat the classic-runtime pin as a hard dependency constraint; a Babel 8 default flip would silently break instantiation if unpinned.
 
 ## Sources
 
-- React — `createRoot` (create-once / render-to-update / unmount contract; double-call warning): https://react.dev/reference/react-dom/client/createRoot — HIGH
-- React — Invalid Hook Call (single-instance requirement; dispatcher mismatch): https://legacy.reactjs.org/warnings/invalid-hook-call-warning.html — HIGH
-- Babel — `@babel/preset-react` (classic vs automatic runtime; classic → `React.createElement`, Babel 8 default flips to automatic): https://babeljs.io/docs/babel-preset-react/ — HIGH
-- Babel — `@babel/standalone` (browser transform API, no config-file access, presets passed inline): https://babeljs.io/docs/babel-standalone/ — HIGH
-- Anthropic direct-browser CORS — mandatory `anthropic-dangerous-direct-browser-access` header: https://simonwillison.net/2024/Aug/23/anthropic-dangerous-direct-browser-access/ — HIGH
-- Project blueprint: `docs/vibeappstore.md`; project context: `.planning/PROJECT.md` — HIGH (primary source)
+- Direct source inspection (all files read): `src/execution/mount.ts`, `src/execution/delegated.tsx`, `src/execution/loader.ts`, `src/execution/producer.ts` (full `buildPrompt()` source), `src/ui/AppShell.tsx`, `src/ui/Marketplace.tsx`, `src/ui/ThemeProvider.tsx`, `src/ui/AppBar.tsx`, `src/App.tsx`, `src/registry/db.ts`, `src/services/services.ts`, `src/lib/storage.ts`, `index.html` — HIGH confidence, current codebase state as of 2026-06-26.
+- `design/VibeOS.dc.html` — window chrome spec, `THEMES` map (all 4 themes with exact CSS var names and values), `openApp`/`focusWin`/`closeWin`/`minWin` logic, dock, create panel UX, `renderVals` CSS var usage in inline styles — HIGH.
+- `.planning/PROJECT.md` — v2.0 milestone feature spec, active constraints, deferred items — HIGH.
+- CSS Custom Properties MDN spec: properties are inherited by default through all elements including those with independent formatting contexts — HIGH.
+- React 19 `createRoot` multiple-roots-per-page: each `createRoot` call is independent; React does not coordinate across roots; CSS inheritance flows through the DOM regardless — HIGH.
 
 ---
-*Architecture research for: client-side generative-UI app marketplace (no-build in-browser React runtime)*
-*Researched: 2026-06-24*
+
+*Architecture research for: v2.0 Vibe OS desktop integration*
+*Researched: 2026-06-26*

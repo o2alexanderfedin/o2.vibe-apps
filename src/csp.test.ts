@@ -54,6 +54,21 @@ function scriptSrcDirective(html: string): string {
   return directive;
 }
 
+// Pull the connect-src directive out of the CSP meta tag's content attribute.
+// Mirrors the scriptSrcDirective helper exactly, looking for "connect-src".
+function connectSrcDirective(html: string): string {
+  const meta = html.match(
+    /http-equiv="Content-Security-Policy"[\s\S]*?content="([^"]*)"/,
+  );
+  if (!meta?.[1]) throw new Error("No Content-Security-Policy meta tag found");
+  const directive = meta[1]
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("connect-src"));
+  if (!directive) throw new Error("No connect-src directive in the CSP");
+  return directive;
+}
+
 describe("CSP inline-script hash guard (CR-01)", () => {
   it("script-src contains the sha256 source matching the inline first-paint script", () => {
     const html = readIndexHtml();
@@ -68,5 +83,31 @@ describe("CSP inline-script hash guard (CR-01)", () => {
     expect(directive).not.toContain("'unsafe-inline'");
     // 'unsafe-eval' is intentionally retained for the later runtime compile path.
     expect(directive).toContain("'unsafe-eval'");
+  });
+});
+
+describe("CSP connect-src allowlist (DATA-02)", () => {
+  it("contains the Anthropic platform origin", () => {
+    expect(connectSrcDirective(readIndexHtml())).toContain(
+      "https://api.anthropic.com",
+    );
+  });
+  it("contains the forecast API origin", () => {
+    expect(connectSrcDirective(readIndexHtml())).toContain(
+      "https://api.open-meteo.com",
+    );
+  });
+  it("contains the geocoding API origin", () => {
+    expect(connectSrcDirective(readIndexHtml())).toContain(
+      "https://geocoding-api.open-meteo.com",
+    );
+  });
+  it("contains the FX rate origin", () => {
+    expect(connectSrcDirective(readIndexHtml())).toContain(
+      "https://api.frankfurter.dev",
+    );
+  });
+  it("does not contain a wildcard origin", () => {
+    expect(connectSrcDirective(readIndexHtml())).not.toContain("*");
   });
 });

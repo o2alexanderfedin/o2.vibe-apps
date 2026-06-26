@@ -11,6 +11,8 @@ import type { ApiKeyGetter, Services } from "./services";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
 import type { ProduceGate } from "../host/produceGate";
 import type { StoragePressureSeam } from "../host/storageEstimate";
+import type { DataFetchBroker } from "../data/dataBroker";
+import type { SettingsStore } from "../host/settingsStore";
 
 /** Build an in-memory Registry backed by a Map per store. */
 export function createInMemoryRegistry(): Registry {
@@ -51,6 +53,41 @@ export const noPressureStorageSeam: StoragePressureSeam = {
   estimate: () => Promise.resolve({ usage: 0, quota: 1_000_000 }),
 };
 
+/**
+ * An in-memory settings store that records every write — the test double for
+ * the IDB-backed `realSettingsStore`. It keeps the last written value in memory
+ * (so `read` round-trips) and exposes a `writes` log + `writeCount` so IoC tests
+ * can assert exactly how many times, and with what value, the provider mirrored
+ * the choice — all offline, with no real IndexedDB.
+ */
+export interface RecordingSettingsStore extends SettingsStore {
+  /** Every value passed to `write`, in call order. */
+  readonly writes: string[];
+  /** Convenience: number of `write` calls so far. */
+  readonly writeCount: number;
+}
+
+export function createRecordingSettingsStore(): RecordingSettingsStore {
+  const writes: string[] = [];
+  let current: string | null = null;
+  return {
+    write(value: string): Promise<void> {
+      writes.push(value);
+      current = value;
+      return Promise.resolve();
+    },
+    read(): Promise<string | null> {
+      return Promise.resolve(current);
+    },
+    get writes() {
+      return writes;
+    },
+    get writeCount() {
+      return writes.length;
+    },
+  };
+}
+
 /** A transport that returns the given component text on every call. */
 export function cannedTransport(text: string): TransportFn {
   return (_url, _init) =>
@@ -73,6 +110,10 @@ export interface TestServicesOverrides {
   produceGate?: ProduceGate;
   /** Inject a stub storage seam to exercise LRU eviction / pressure. */
   storage?: StoragePressureSeam;
+  /** Inject a canned broker for handler integration tests. */
+  fetchDataBroker?: DataFetchBroker;
+  /** Inject a recording settings store to assert the theme-mirror seam. */
+  settingsStore?: SettingsStore;
 }
 
 /**
@@ -91,5 +132,30 @@ export function createTestServices(overrides: TestServicesOverrides = {}): Servi
     getApiKey,
     produceGate: overrides.produceGate ?? passthroughProduceGate,
     storage: overrides.storage ?? noPressureStorageSeam,
+    fetchDataBroker: overrides.fetchDataBroker,
+    settingsStore: overrides.settingsStore ?? createRecordingSettingsStore(),
   };
 }
+
+/**
+ * A broker that returns a fixed response — for handler integration tests.
+ * Mirrors the cannedTransport pattern.
+ */
+export function cannedBroker(response: {
+  data?: unknown;
+  error?: string;
+}): DataFetchBroker {
+  return {
+    fetch: (_sourceId: string, _params: unknown) => Promise.resolve(response),
+  };
+}
+
+/**
+ * A broker that should never be called — mirrors unusedTransport.
+ * Use in tests that do not exercise the data-fetch path.
+ */
+export const unusedBroker: DataFetchBroker = {
+  fetch: () => {
+    throw new Error("DataFetchBroker was invoked unexpectedly");
+  },
+};

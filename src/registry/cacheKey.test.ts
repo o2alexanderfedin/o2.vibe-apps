@@ -4,7 +4,7 @@
 // cacheKey is a pure function with no DOM dependency, so Node is the correct env.
 import { describe, expect, it } from "vitest";
 
-import { cacheKey } from "./cacheKey";
+import { cacheKey, registryKey } from "./cacheKey";
 
 describe("cacheKey — opaque SHA-256 over normalized input", () => {
   it("is deterministic: the same input twice yields the identical key", async () => {
@@ -46,5 +46,105 @@ describe("cacheKey — opaque SHA-256 over normalized input", () => {
     const weather = await cacheKey("weather");
     const calculator = await cacheKey("calculator");
     expect(weather).not.toBe(calculator);
+  });
+});
+
+describe("registryKey — structured opaque key over (kind, type, prompt)", () => {
+  it("is deterministic for the same parts", async () => {
+    expect(await registryKey("app", "weather")).toBe(
+      await registryKey("app", "weather"),
+    );
+  });
+
+  it("folds in kind: app, widget, and handler with the same type slug all differ", async () => {
+    const app = await registryKey("app", "weather");
+    const widget = await registryKey("widget", "weather");
+    const handler = await registryKey("handler", "weather");
+    expect(app).not.toBe(widget);
+    expect(app).not.toBe(handler);
+    expect(widget).not.toBe(handler);
+  });
+
+  it("folds in prompt: a prompted variant keys separately from the baseline", async () => {
+    const base = await registryKey("app", "weather");
+    const tweaked = await registryKey("app", "weather", "make it dark");
+    expect(tweaked).not.toBe(base);
+  });
+
+  it("normalizes the prompt: case + leading/trailing/inner whitespace are equivalent", async () => {
+    const messy = await registryKey("app", "weather", "  Make It   Dark  ");
+    const clean = await registryKey("app", "weather", "make it dark");
+    expect(messy).toBe(clean);
+  });
+
+  it("normalizes the type the same way the single-arg key does", async () => {
+    expect(await registryKey("app", "Weather ")).toBe(
+      await registryKey("app", "weather"),
+    );
+  });
+
+  it("an absent prompt equals an empty-string prompt", async () => {
+    expect(await registryKey("app", "weather")).toBe(
+      await registryKey("app", "weather", ""),
+    );
+  });
+
+  it("no field-boundary blur: (type='a', prompt='b') differs from (type='a b')", async () => {
+    const split = await registryKey("app", "a", "b");
+    const joined = await registryKey("app", "a b");
+    expect(split).not.toBe(joined);
+  });
+
+  it("output is a 64-char lowercase hex string", async () => {
+    expect(await registryKey("app", "weather", "x")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("output is opaque: kind, type slug, and prompt never appear in the key", async () => {
+    const key = await registryKey("app", "weather", "humidity");
+    expect(key.includes("app")).toBe(false);
+    expect(key.includes("weather")).toBe(false);
+    expect(key.includes("humidity")).toBe(false);
+  });
+
+  it("is unicode/emoji safe across every part", async () => {
+    expect(await registryKey("widget", "天气 ☀️", "热")).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("WIDGET-08 key-derivation audit — cross-kind collision prevention", () => {
+  it("an app and a widget sharing the same type slug get DISTINCT keys", async () => {
+    const app = await registryKey("app", "weather");
+    const widget = await registryKey("widget", "weather");
+    expect(app).not.toBe(widget);
+  });
+
+  it("an app and a handler sharing the same slug get DISTINCT keys", async () => {
+    const app = await registryKey("app", "weather");
+    const handler = await registryKey("handler", "weather");
+    expect(app).not.toBe(handler);
+  });
+
+  it("a widget and a handler sharing the same slug get DISTINCT keys", async () => {
+    const widget = await registryKey("widget", "weather");
+    const handler = await registryKey("handler", "weather");
+    expect(widget).not.toBe(handler);
+  });
+
+  it("apps derive via registryKey('app', type, prompt?) — baseline and prompted differ", async () => {
+    const base = await registryKey("app", "weather");
+    const prompted = await registryKey("app", "weather", "dark mode");
+    expect(base).not.toBe(prompted);
+  });
+
+  it("widgets derive via registryKey('widget', type, instruction?) — baseline and instructed differ", async () => {
+    const base = await registryKey("widget", "weather");
+    const instructed = await registryKey("widget", "weather", "compact layout");
+    expect(base).not.toBe(instructed);
+  });
+
+  it("handlers derive via registryKey('handler', intent) — distinct intents get distinct keys", async () => {
+    const getWeather = await registryKey("handler", "get weather data");
+    const getStock = await registryKey("handler", "get stock price");
+    expect(getWeather).not.toBe(getStock);
   });
 });

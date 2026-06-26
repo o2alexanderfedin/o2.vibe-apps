@@ -57,10 +57,16 @@ describe("buildPrompt — widget kind (WIDGET-02)", () => {
     expect(prompt).toContain("onAction?");
   });
 
-  it("the app prompt is unchanged (default kind) — no props contract leaked into it", () => {
+  it("the app prompt keeps the App() signature even though it now describes sub-widget props", () => {
+    // The app prompt now activates the optional sub-widget affordance (so it DOES
+    // reference the widget props contract and useWidget — see
+    // producerAffordances.test.ts), but the app's OWN component still takes no
+    // props: App(), not App(props). That distinction must hold.
     const prompt = buildPrompt("weather");
     expect(prompt).toContain('"weather" app');
-    expect(prompt).not.toContain("onAction?");
+    expect(prompt).toContain("function App()");
+    expect(prompt).not.toContain("function App(props)");
+    expect(prompt).toContain("useWidget"); // affordance is present (deliberate change)
   });
 
   it("widget repair + length prompts keep the widget framing and stay hygiene-safe", () => {

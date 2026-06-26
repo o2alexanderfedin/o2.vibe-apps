@@ -11,7 +11,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { createElement, type ComponentType } from "react";
+import type { AppRecord } from "../registry/db";
 import { APP_REGISTRY } from "../data/appRegistry";
+import { rankPopular, titleCase } from "./marketplaceUtils";
 import { AppShell } from "./AppShell";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { KeyDialog } from "./KeyDialog";
@@ -21,7 +23,7 @@ import { ProduceAuthError } from "../execution/producer";
 import { ProduceThrottledError } from "../host/produceGate";
 import { useServices } from "../services/ServicesProvider";
 import { routeModification } from "../intent/routeModification";
-import { cacheKey } from "../registry/cacheKey";
+import { registryKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
 
 // Map the neutral icon key (data layer) to a concrete glyph (render layer)
@@ -137,6 +139,7 @@ export function Marketplace() {
   // the page or blocks the rest of the storefront.
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [popularApps, setPopularApps] = useState<AppRecord[]>([]);
   // A ref mirror of openedApps so handleModify can read the current list (e.g.
   // the target's appType/Component) without re-creating on every list change.
   const openedAppsRef = useRef<OpenedApp[]>(openedApps);
@@ -237,7 +240,7 @@ export function Marketplace() {
       // Tweak — re-resolve and replace this entry's Component in place.
       logger.info("Tweaking " + target.appType);
       try {
-        const tweakKey = await cacheKey(target.appType + "\n" + routed.instruction);
+        const tweakKey = await registryKey("app", target.appType, routed.instruction);
         const Component = await resolveComponent(
           instanceId + "-tweak-" + tweakKey.slice(0, 8),
           target.appType,
@@ -271,6 +274,26 @@ export function Marketplace() {
     };
   }, []);
 
+  // Load popular apps from the registry on mount. rankPopular owns the
+  // useCount >= 1 membership filter and the top-N cap — the component does
+  // not pre-filter or post-filter on useCount. The presence guard (!!r) only
+  // drops undefined results from missing keys; it is NOT a useCount filter.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const allKeys = await services.registry.keys("apps");
+        const fetched = await Promise.all(
+          allKeys.map((k) => services.registry.get("apps", k)),
+        );
+        // Presence guard only — NOT a useCount filter. rankPopular owns membership.
+        const records = fetched.filter((r): r is AppRecord => !!r);
+        setPopularApps(rankPopular(records));
+      } catch (err) {
+        logger.error("Marketplace: failed to load popular apps: " + String(err));
+      }
+    })();
+  }, [services]);
+
   return (
     <>
       <div className="storefront-grid">
@@ -298,6 +321,41 @@ export function Marketplace() {
           );
         })}
       </div>
+
+      {/* Popular row — hidden on cold start (rankPopular returns [] when no app
+          has useCount >= 1). The length guard is the single visibility gate;
+          no separate useCount filter is applied here. */}
+      {popularApps.length > 0 && (
+        <section aria-label="Frequently opened">
+          <h2 className="storefront-section__heading">Your most-opened</h2>
+          <div className="storefront-grid">
+            {popularApps.map((record) => {
+              const entry = APP_REGISTRY.find((a) => a.id === record.type);
+              const name =
+                record.displayName ?? entry?.displayName ?? titleCase(record.type);
+              const description = entry?.description ?? "";
+              const Icon = (entry ? ICONS[entry.icon] : undefined) ?? Cloud;
+              return (
+                <button
+                  key={record.cacheKey}
+                  type="button"
+                  className="app-card"
+                  aria-label={`${name}${description ? " — " + description : ""}`}
+                  onClick={() => void handleOpen(record.type, name)}
+                >
+                  <span className="app-card__icon">
+                    <Icon size={32} aria-hidden="true" />
+                  </span>
+                  <span className="app-card__name">{name}</span>
+                  {description && (
+                    <span className="app-card__description">{description}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Opened apps — each in an AppShell, wrapped in ErrorBoundary */}
       <div className="opened-apps">

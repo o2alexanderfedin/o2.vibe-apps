@@ -259,9 +259,12 @@ describe("produceComponent", () => {
     expect(result.transpiledJS).toContain("handler");
   });
 
-  it("handler prompt is hygiene-safe and asks for handler(input) + { data }/{ error }", () => {
+  it("handler prompt is hygiene-safe and asks for a TYPED handler(input) + { data }/{ error }", () => {
     const prompt = buildPrompt("filter a list", "handler");
     expect(prompt).toContain("handler(input)");
+    // Handlers are produced as TypeScript with explicit types (the contract).
+    expect(prompt).toContain("TypeScript");
+    expect(prompt.toLowerCase()).toContain("types");
     expect(prompt.toLowerCase()).toMatch(/\{ data \}|\{ error \}/);
     expect(prompt).not.toMatch(/synthesi[sz]/i);
     expect(prompt).not.toMatch(new RegExp("\\bgenerat(e|ed|ing)\\b", "i"));

@@ -25,6 +25,13 @@
   --color-destructive:          #FF6B6B;
 }
 
+/* Backward-compat alias bridge — keeps pre-v2.0 cached apps rendering; maps prior style variables to the current theme contract (THEME-05) */
+:root {
+  --color-surface: var(--glass);
+  --color-text: var(--text);
+  --color-accent: var(--accentA);
+}
+
 /* Base styles — font stack and body defaults */
 :root {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -103,6 +110,49 @@ body {
 
 .app-bar__icon-btn--active:hover {
   color: var(--color-accent-primary);
+}
+
+/* Inline row of named-theme pills. Temporary AppBar home (Phase 16 restyles
+   and relocates it). Kept minimal; the active pill is visually distinguished. */
+.theme-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.theme-selector__pill {
+  padding: 4px 10px;
+  /* --bord is set at runtime by the named-theme engine; fall back to the
+     statically-defined border var so the pill keeps a border if those vars
+     are ever absent (e.g. the inline first-paint script is blocked). */
+  border: 1px solid var(--bord, var(--color-border-secondary));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.theme-selector__pill:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-primary);
+}
+
+.theme-selector__pill:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+/* Active pill marks the current theme selection. */
+.theme-selector__pill--active {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-primary);
+  background: var(--color-background-tertiary);
 }
 
 /* ─────────────────────── Storefront grid (UI-SPEC §1) ─────────────────── */
@@ -632,4 +682,92 @@ body {
 .contextual-prompt__apply:focus-visible {
   outline: 2px solid var(--color-accent-primary);
   outline-offset: 2px;
+}
+
+/* --- Desktop + window chrome (Phase 15) ------------------------------------ */
+
+.desktop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  isolation: isolate;
+  pointer-events: none;
+}
+
+.window-chrome {
+  pointer-events: auto;
+  position: absolute;
+  min-width: 320px;
+  min-height: 240px;
+  background: var(--glass, var(--color-background-secondary));
+  border: 1px solid var(--bord, var(--color-border-secondary));
+  border-radius: 12px;
+  backdrop-filter: blur(32px) saturate(195%);
+  overflow: hidden;
+  will-change: transform;
+}
+
+.window-chrome--minimized {
+  display: none;
+}
+
+.window-chrome__titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.window-chrome__titlebar:active {
+  cursor: grabbing;
+}
+
+.window-chrome__traffic-lights {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.window-chrome__traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.window-chrome__traffic-light--close {
+  background: #ff5f57;
+}
+
+.window-chrome__traffic-light--min {
+  background: #ffbd2e;
+}
+
+.window-chrome__traffic-light--max {
+  background: #28c840;
+}
+
+.window-chrome__title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, var(--color-text-primary));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-chrome__body {
+  height: calc(100% - 36px);
+  overflow: auto;
+}
+
+.desktop--dragging {
+  user-select: none;
+  -webkit-user-select: none;
 }

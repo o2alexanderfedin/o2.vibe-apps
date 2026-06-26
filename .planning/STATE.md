@@ -1,144 +1,84 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: feature-complete
-stopped_at: Phase 8 (Backend-Style Handlers) completed — milestone v1.0 feature-complete
-last_updated: "2026-06-24T00:00:00.000Z"
-last_activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed; milestone v1.0 feature-complete (45/45 requirements, all 8 phases)
+milestone: v2.0
+milestone_name: Vibe OS
+status: executing
+stopped_at: "Completed Phase 14 Plan 05 (ThemeSelector 4-pill switcher + AppBar mount + switch-path test). Commits 6b53bf5 (component+styles+test) and bfce87b (AppBar mount); switch-path test clicks Noir and asserts documentElement --text becomes #f5eeff (THEME-02 live re-skin); ThemeSelector.test.tsx (3) + src/ui (59) + hygiene (2) green; tsc clean. Phase 14 — all 5 plans complete."
+last_updated: "2026-06-26T23:12:36.196Z"
+last_activity: 2026-06-26 -- Phase 15 planning complete
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 6
-  completed_plans: 5
-  percent: 100
+  total_phases: 10
+  completed_phases: 6
+  total_plans: 22
+  completed_plans: 21
+  percent: 95
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-24)
+See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Milestone v1.0 — FEATURE-COMPLETE. All 8 phases done; 45/45 requirements implemented.
+**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation COMPLETE (all 5 plans). ThemeSelector switcher live in AppBar; named-theme capability visible and interactive. Ready for Phase 15 (Window Manager).
 
 ## Current Position
 
-Phase: 08 (Backend-Style Handlers) — COMPLETE
-Status: Phases 1–8 complete — milestone v1.0 feature-complete. Phase 8 layered
-transparent backend-style data handlers (HANDLER-01..03) as a fully additive
-capability that never reaches the network or the API key.
+Phase: 14 — Theme Foundation (COMPLETE — all 5 plans)
+Plan: 14-05 complete (ThemeSelector 4-pill switcher + AppBar mount + switch-path test)
+Status: Ready to execute
+Last activity: 2026-06-26 -- Phase 15 planning complete
 
-HANDLER-01..03 — Backend-Style Handlers: `runHandler(intent, input, services)`
-(`src/execution/handler.ts`) is resolve-or-produce-then-exec. It hashes the intent
-into an opaque key (`cacheKey("handler\n" + intent)`), reads the `handlers` store;
-a HIT reuses the stored transpiledJS (no model call) and bumps `useCount`/refreshes
-`updatedAt` (consistent with the loader's apps path, RESIL-06). A MISS calls
-`services.produceGate.tryAcquire()` (the SAME sliding-window cost cap as apps,
-RESIL-05) BEFORE producing via the SHARED `produceComponent` machinery on a new
-`kind:"handler"` path — handler prompt (hygiene-safe, asks for a plain
-`handler(input)` returning `{data}`/`{error}`) + `transpileHandler` (TS-strip only,
-NO react preset / NO JSX) — then dual-caches source + transpiledJS with
-`useCount:0`/`updatedAt:now`. So produced handlers participate in LRU eviction
-for free (`evictUnderPressure` already sweeps `handlers`).
+### v2.0 Phase Map
 
-HANDLER-03 constrained scope: the handler runs via `new Function(<denied…>, "input",
-body)` with the denylist `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage,
-sessionStorage, indexedDB, window, document]` SHADOWED TO `undefined` in the
-parameter list (each reference binds the undefined parameter, never the real
-global), a HOSTILE `require` (throws on any specifier), and NO key parameter in
-scope. Pure language built-ins (Math/JSON/Date/…) stay reachable for local compute.
-Any throw (produce/compile/throttle/exec) maps to a neutral `{ error: "This
-operation could not be completed." }` — the mechanic is never revealed.
+| Phase | Name | Requirements | Hard ordering constraint |
+|-------|------|--------------|--------------------------|
+| 14 | Theme Foundation | THEME-01..05 | Dependency root — must precede all v2.0 phases |
+| 15 | Window Manager | WIN-01..05 | Requires Phase 14 (chrome uses theme CSS vars) |
+| 16 | Desktop Shell | WIN-06, WIN-07, WIN-08, PERF-01 | Requires Phase 15 (renders WindowFrame) |
+| 17 | Search / Launcher Panel | CREATE-01..03 | Requires Phase 16 (receives onOpen from DesktopShell) |
+| 18 | Theme-Aware Generation | TGEN-01..03, HYGIENE-06 | Requires Phase 14 (var contract live) + Phase 17 (windows exist for end-to-end verify) |
 
-Wiring: `runHandler` is injected into the produced-app `new Function` scope
-alongside `useWidget` (`instantiate.ts` adds a `runHandler` param; the loader's
-`instantiateWithWidgets` binds it to the app's services as a 2-arg
-`runHandler(intent, input)`). Apps never see registry/transport/key. Apps that
-never call it pay nothing.
+### v1.1 phases — all DONE (archived)
 
-DI: every dep injected via `Services` (transport, registry, getApiKey,
-produceGate). Tests substitute a canned transport (handler source, no network), an
-in-memory registry (no IndexedDB), a fixed key getter (no localStorage), and a real
-produce gate + stub clock for the cost cap (no real waits). Real captured Haiku
-handler fixtures (`src/test/fixtures/handler-{filter-tasks,summarize-list}.{raw,code}.txt`)
-prove the path against real output: filter-tasks → `{data}`; summarize-list (which
-reached for an external module) → blocked → `{error}`.
+- Phase 9 Richer Storefront (STORE-01/02) — merged 7dd8b43
+- Phase 10 Widget Schema & Key Correctness (WIDGET-07/08) — merged 3b83cf7
+- Phase 11 Reliability Hardening (RELY-01/02/03) — merged 8e10317
+- Phase 12 Sanctioned Network-Data Path (DATA-01..04) — merged de9ce2b (live CORS smoke; 2 smoke-found bugs fixed)
+- Phase 13 Activate Widget Composition (WIDGET-06) — merged ab4f105 (implemented inline; subagent quota hit)
 
-tsc 0 errors, build OK (no .map in dist), 333/333 tests pass (295 baseline + 38 new:
-handler DI/unit + constrained-scope denylist + cost-gate + real-fixture, transpileHandler,
-producer handler-kind, and the produced-app wiring integration), hygiene gate green.
-Last activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed on branch
-feature/phase-8-backend-handlers; milestone v1.0 feature-complete.
+## Prior Position (Milestone v1.1 — SHIPPED 2026-06-26)
 
-Progress: [██████████] 100% (8 of 8 phases)
-
-## Prior Position (Phase 7)
-
-Phase: 07 (Storage & Cost Guardrails) — COMPLETE
-Status: Phase 7 bounded runaway produce-cost (RESIL-05) and storage pressure
-(RESIL-06) with neutral messaging.
-
-RESIL-05 — Cost guardrail: `createProduceGate` (`src/host/produceGate.ts`) is a
-sliding-window soft cap (N=10 produce misses per 5-min window; named constants
-`DEFAULT_PRODUCE_CAP`/`DEFAULT_PRODUCE_WINDOW_MS`, overridable). It keeps a list of
-recent produce timestamps, prunes those outside the window on each `tryAcquire()`,
-and either records `now` (under cap) or throws the neutral `ProduceThrottledError`
-("You're opening a lot of apps quickly — give it a moment."). It is injected via
-`Services.produceGate` and called in the loader IMMEDIATELY before the
-`produceComponent` model call — i.e. only on a cache MISS. Cache hits (tier 1/2/3)
-never reach it, so browsing already-opened apps is never throttled, and the window
-slides so the cap recovers automatically. The `Clock` is injected (real wall clock
-in prod, `createStubClock` in tests) so window/recovery is verified INSTANTLY.
-Marketplace catches `ProduceThrottledError` and renders the softer "give it a
-moment" copy in the SAME neutral failed-open region (storefront stays browsable).
-
-RESIL-06 — Storage pressure: records now carry `useCount`/`updatedAt` (LRU
-bookkeeping). DB bumped to schema v2 (`REGISTRY_DB_VERSION`); the upgrade is purely
-ADDITIVE and the registry/LRU layer defaults the two fields to 0 on read, so v1
-data keeps working. Cache hits bump `useCount` + refresh `updatedAt` (loader
-`touchRecord`); writes set `useCount:0`/`updatedAt:now`. `evictUnderPressure`
-(`src/registry/storagePressure.ts`) runs before every produce write: when the
-injected `estimate()` reports usage/quota over a 0.9 threshold
-(`DEFAULT_EVICTION_THRESHOLD`), it evicts least-recently-used entries (oldest
-`updatedAt`, tie-broken by lowest `useCount`) across apps/widgets/handlers until
-back under threshold (or nothing left). Storage access goes through an injectable
-`StoragePressureSeam` (`src/host/storageEstimate.ts`): `navigatorStorageSeam`
-guards `navigator.storage.persist`/`estimate` (degrade to false/null, never throw);
-init's persist request now routes through it. `Registry` gained `keys(store)`
-enumeration for victim listing. The in-memory fallback path is intact (keys() works
-there too). Tests inject a stub `estimate()` + in-memory registry — NO real
-IndexedDB/navigator.storage in unit scope.
-
-tsc 0 errors, build OK (no .map in dist), 295/295 tests pass (253 baseline + 42 new:
-8 produce-gate unit, 10 LRU unit, 12 storage-seam guard, 7 loader DI, 3 UI RTL, plus
-registry/injection additions), hygiene gate green.
-Last activity: 2026-06-24 -- Phase 7 (Storage & Cost Guardrails) completed on branch
-feature/phase-7-storage-cost-guardrails
-
-Progress: [█████████░] 88% (7 of 8 phases)
+v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements satisfied, 552 tests green. Key deliveries: richer storefront (displayName/prompt/createdAt/useCount), typed widget/handler records + symmetric registryKey, validate-at-merge reliability (zod/mini), host-brokered network-data path (real Weather/Currency), delegated widget composition (`useWidget` wired into view scope).
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 1
-- Average duration: 7 min
-- Total execution time: 0.1 hours
+- Total plans completed (v2.0): 5 (14-01, 14-02, 14-03, 14-04, 14-05)
+- Average duration: —
+- Total execution time: —
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 01 | 1/4 | 7 min | 7 min |
+| Phase 14 | 5/5 | — | — |
+
+| Plan | Duration | Tasks | Files | Completed |
+|------|----------|-------|-------|-----------|
+| 14-03 | ~13min | 2 (TDD) | 6 | 2026-06-26 |
+| 14-04 | ~6min | 1 (atomic) | 1 | 2026-06-26 |
+| 14-05 | ~5min | 2 (TDD) | 4 | 2026-06-26 |
 
 **Recent Trend:**
 
-- Last 5 plans: 7 min
-- Trend: —
+- Last 5 plans: 14-01, 14-02, 14-03, 14-04, 14-05
+- Trend: Phase 14 Theme Foundation COMPLETE (5 of 5 plans done)
 
 *Updated after each plan completion*
+| Phase 15 P03 | ~12 minutes | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -147,40 +87,63 @@ Progress: [█████████░] 88% (7 of 8 phases)
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap]: Vertical-MVP structure — each phase ships an end-to-end working slice; core value is met at Phase 3 (cache-miss generation).
-- [Roadmap]: Devtools hygiene (HYGIENE-01..05) and CSP/source-maps-off (SEC-04) are owned by Phase 1 but enforced as cross-cutting acceptance constraints on every later phase.
-- [Roadmap]: Static loop (Phase 2) precedes live generation (Phase 3) to de-risk `new Function` + classic-Babel + `createRoot` before adding model nondeterminism.
-- [Plan 01-01]: @babel/standalone@^7.26 pinned as runtime dep (not devDep); v7 keeps classic-runtime default that Phase 2 depends on.
-- [Plan 01-01]: jsdom is explicit devDep required by Vitest 4 (dropped auto-install); set as environment:jsdom in vite.config.ts test block.
-- [Plan 01-01]: navigator.storage.persist() guarded with typeof check — jsdom lacks navigator.storage; guard required for tests.
-- [Plan 01-01]: sourcemap:false in vite.config.ts is the master devtools-hygiene switch; must never be toggled true in CI.
+- [Roadmap v2.0]: 5-phase structure (14–18) validated by research. Phase order is strictly dependency-driven: Theme Foundation → Window Manager → Desktop Shell → Create Panel → Theme-Aware Generation.
+- [Roadmap v2.0]: HARD ordering constraint — Theme Foundation (14) must precede Window Manager (15) because WindowFrame chrome references theme CSS vars; the alias bridge must land before any produce-prompt change or pre-v2 cached apps lose their colors.
+- [Roadmap v2.0]: HARD ordering constraint — Window Manager (15) before Desktop Shell (16) before Search/Launcher Panel (17) — consumer chain: useWindowManager → WindowFrame → DesktopShell → CreatePanel onOpen prop.
+- [Roadmap v2.0]: HARD ordering constraint — Theme-Aware Generation (18) is last because it needs the var contract live (Phase 14) and apps opening in windows (Phases 15–17) to verify end-to-end re-skin; it is the highest-novelty/risk phase.
+- [Roadmap v2.0]: Zero new npm dependencies — hand-roll useDrag (setPointerCapture + rAF + state-on-pointerup), VibeThemeProvider (documentElement.style.setProperty), and all windowing/dock/menu-bar components. Research verdict: react-draggable has React 19 findDOMNode breakage; framer-motion is 674KB–4.8MB.
+- [Roadmap v2.0]: Theme vars applied to document.documentElement (not React context) so CSS inheritance reaches all separately-createRoot'd generated app subtrees — this is the central theming mechanism.
+- [Roadmap v2.0]: FOUC prevention via synchronous localStorage read in index.html script before React mounts; IDB settings store (v3) is the authoritative persistence, localStorage is the FOUC guard.
+- [14-03]: Settings store reaches IndexedDB via openRegistry() directly rather than widening the Registry StoreName union (apps|widgets|handlers) — the settings store sits outside the cache-eviction surface.
+- [14-03]: setTheme fires settingsStore.write(name) fire-and-forget (no await) — the UI switch + localStorage write are synchronous and authoritative; the IDB mirror is best-effort.
+- [14-03]: VibeThemeProvider is nested INSIDE the existing light/dark ThemeProvider (not replacing it) so the named-theme CSS-variable contract layers on top without disturbing the 552-test data-theme mechanism.
+- [14-04]: The inline FOUC script duplicates the VIBE_THEMES values verbatim from VibeThemeProvider.tsx rather than importing them — the script must run before any module load, so the runtime provider and first paint stay in sync by convention (copied values), not by shared import.
+- [14-04]: FOUC script edit + CSP sha256 hash regeneration land in ONE atomic commit (963c782) — csp.test.ts recomputes the hash from the live file, so any desync fails CI; the no-flash guarantee stays verifiable.
+- [14-05]: ThemeSelector holds NO local state — the active pill is computed from useVibeTheme().theme each render, so it stays in sync with any theme change source (FOUC first paint, programmatic setTheme, future Phase 16 menu) with no extra wiring.
+- [14-05]: ThemeSelector mounted as the FIRST child of app-bar__controls; the existing useTheme/cycleTheme light/dark/system toggle is left fully intact (purely additive) so the 552 tests depending on the old toggle stay green — temporary home, Phase 16 relocates it to the menu bar.
+- [14-05]: Switch-path test drives a real click through act() and asserts noir's --text (#f5eeff) lands on documentElement — proving the selector → setTheme → applyVibeTheme live re-skin chain end to end (THEME-02), not a mocked setter.
+- [Roadmap v2.0]: All v1.0/v1.1 cross-cutting constraints (HYGIENE-01..05, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, TDD with real captured-Haiku fixtures, additive DB migrations) are acceptance constraints on every v2.0 phase — not separate phases.
+
+### Key Research Flags
+
+- **Phase 18 (Theme-Aware Generation):** prompt-engineering + post-compile check is the most novel piece of the milestone — needs a prompt test proving generated apps actually emit the CSS vars and the self-heal catch works. Plan with a focused design pass.
+- **Phase 15 (Window Manager):** pointer-capture/rAF/root-lifecycle has subtle correctness edges — worth careful test design (drag across app root boundary, close-while-producing cancellation, mountedCount===0 after all closes).
+- **Phases 14, 16, 17:** standard composition/integration patterns — lighter research need but Phase 14 has the FOUC-script/CSP-hash same-commit invariant to respect.
 
 ### Pending Todos
-
-[From .planning/todos/pending/ — ideas captured during sessions]
 
 None yet.
 
 ### Blockers/Concerns
 
-[Issues that affect future work]
+None at roadmap creation.
 
-- [Phase 4 — RESOLVED]: Static widgets only (declared via `@widget`); no dynamic/undeclared widgets. `useWidget` is fully synchronous (a pure `Map.get`). Decided + implemented in Phase 4.
-- [Phase 7 — RESOLVED]: The cost soft-cap hooks the PRODUCE PATH (loader, immediately before `produceComponent`), not the transport wrapper. Rationale: the requirement caps cache MISSES specifically, and a single hook at the produce call sidesteps having to distinguish app vs widget vs tweak traffic inside the shared `createResilientTransport`. The injected `Clock` (`createStubClock`) drove the window/recovery tests with zero real waits as planned.
-- [Phase 7 — RESOLVED]: Threshold decided — N=10 produce misses per 5-minute sliding window (named, configurable constants in `src/host/produceGate.ts`).
-- [Phase 8 — RESOLVED]: Handler denylist decided and implemented as `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage, sessionStorage, indexedDB, window, document]`, shadowed to `undefined` in the handler's `new Function` parameter list, plus a hostile `require` (throws) and no key in scope. It is intentionally a TARGETED denylist (handlers need local compute) — NOT the full app/widget lockdown, and NOT general sandboxing (HARD-01 iframe deferred to v2). `runHandler` reuses `Services.produceGate.tryAcquire()` on a produce miss and writes `useCount:0`/`updatedAt:Date.now()`, consistent with the apps path; produced handlers participate in `evictUnderPressure` (which already sweeps `handlers`) for free.
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260625-q08 | Fix G1 cacheKey contract (fold kind+prompt) + reconcile blueprint doc | 2026-06-25 | 0f9a7d4 | [260625-q08-cachekey-contract-doc-reconcile](./quick/260625-q08-cachekey-contract-doc-reconcile/) |
+
+Last activity: 2026-06-26 — v2.0 Vibe OS roadmap created (Phases 14–18).
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close:
+Items acknowledged and carried forward:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Security | `<iframe sandbox>` isolation of generated code (HARD-01) — v1 mount seam designed to swap to it | Deferred to v2 | Requirements |
-| Polish | Implicit "popular on the platform" storefront row from `useCount` (POP-01) | Deferred to v2 | Requirements |
+| Security | `<iframe sandbox>` isolation of generated code (HARD-01) + SEC-01/02/03 — windowing layer designed so iframe move stays a contained change | Deferred beyond v2.0 | v2.0 Requirements |
+| Refactor | G2 unified `Intent` contract — internal refactor, no user-facing value | Deferred beyond v2.0 | v2.0 Requirements |
+| Theming | User-created / custom themes — built-in four only this milestone; a theme editor is a v2.x follow-up | Deferred to v2.x | v2.0 Requirements |
+| Persistence | Window-position / desktop-layout persistence — restoring window geometry and installed[] dock across reloads | Deferred to v2.x | v2.0 Requirements |
+| Security | Cancellation token (AbortController) per window open — guards mid-flight close; acceptable for alpha | Deferred to polish | v2.0 Roadmap |
 
 ## Session Continuity
 
-Last session: 2026-06-24T22:39:41Z
-Stopped at: Plan 01-01 completed (Scaffold + Walking Skeleton)
-Resume file: .planning/phases/01-hygiene-foundation-storefront-shell/01-02-PLAN.md
+Last session: 2026-06-26T22:30:00.000Z
+Stopped at: Completed Phase 14 Plan 05 (ThemeSelector 4-pill switcher + AppBar mount + switch-path test). Commits 6b53bf5 (component+styles+test) and bfce87b (AppBar mount); switch-path test clicks Noir and asserts documentElement --text becomes #f5eeff (THEME-02 live re-skin); ThemeSelector.test.tsx (3) + src/ui (59) + hygiene (2) green; tsc clean. Phase 14 — all 5 plans complete.
+Resume with: begin Phase 15 — Window Manager (WIN-01..05). Requires Phase 14 (theme CSS-var contract is now live).
+
+## Operator Next Steps
+
+- Phase 14 COMPLETE. Next: Phase 15 — Window Manager (WIN-01..05). Hand-roll useWindowManager (pointer-capture + rAF + root-lifecycle) and WindowFrame chrome that references the now-live theme CSS vars.

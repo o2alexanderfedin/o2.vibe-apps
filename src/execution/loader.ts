@@ -24,14 +24,34 @@
 
 import type { ComponentType } from "react";
 import { transpile } from "./transpile";
-import { instantiate, makeUseWidget } from "./instantiate";
+import { instantiate, makeUseWidget, InstantiateError } from "./instantiate";
+import { instantiateDelegated, makeDelegatedComponent } from "./delegated";
 import { runHandler } from "./handler";
 import { prewarmWidgets } from "./widgetPrewarm";
-import { SEEDED_SOURCES } from "../apps/seeds";
+import { SEEDED_SOURCES, SEEDED_DELEGATED } from "../apps/seeds";
 import { produceComponent, type TransportFn as ProducerTransport } from "./producer";
 import type { Services } from "../services/services";
 import { evictUnderPressure } from "../registry/storagePressure";
 import { logger } from "../lib/logger";
+import { APP_REGISTRY } from "../data/appRegistry";
+import { titleCase } from "../ui/marketplaceUtils";
+
+/** Title-case a type slug for display on storefront cards (Phase 9, STORE-01).
+ * Examples: "weather" → "Weather", "my-app" → "My App".
+ * For tweak variants (non-empty userPrompt), appends a short hygiene-safe suffix
+ * derived from the first 20 characters of the user's instruction (stripped to
+ * [a-zA-Z0-9 ] only) — e.g. "Weather (show celsius)". If the stripped suffix is
+ * empty after trimming, returns the base title only.
+ */
+// Exported for unit tests only — not part of the public loader API.
+export function deriveDisplayName(type: string, userPrompt?: string): string {
+  const base = titleCase(type);
+  if (userPrompt) {
+    const suffix = userPrompt.trim().slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, "").trim();
+    return suffix ? `${base} (${suffix})` : base;
+  }
+  return base;
+}
 
 /**
  * Refresh the LRU bookkeeping of a stored record after a cache HIT (Phase 7,
@@ -75,9 +95,19 @@ const liveComponents = new Map<string, ComponentType>();
  * (so widget `@widget` deps stay parseable on a cache hit) and the transpiled JS
  * (so no recompile). Phase 4 widened this from a bare JS string to the dual shape.
  */
+/**
+ * How an app's produced/seeded pieces are instantiated:
+ *   - "app"       : a monolithic React component (seeds + any legacy cached records).
+ *   - "delegated" : a behavior-free module (initialState + view + actionSpec) mounted
+ *                   through the permanent DelegatedShell runtime, with all behavior
+ *                   produced on demand per action. The default for newly produced apps.
+ */
+type AppMode = "app" | "delegated";
+
 interface CachedApp {
   source: string;
   transpiledJS: string;
+  mode: AppMode;
 }
 const transpiledCache = new Map<string, CachedApp>();
 
@@ -105,6 +135,81 @@ async function instantiateWithWidgets(
   const boundRunHandler = (intent: string, input: unknown) =>
     runHandler(intent, input, services);
   return instantiate(transpiledJS, makeUseWidget(widgetMap), boundRunHandler);
+}
+
+/**
+ * Instantiate a DELEGATED module, pre-warming its declared `@widget` deps first so
+ * the produced `view(state)` can compose sub-widgets synchronously (WIDGET-06). The
+ * delegated analog of `instantiateWithWidgets`: prewarm → `makeUseWidget` → inject
+ * the accessor into the module scope (so `view` closes over it) → bind runHandler →
+ * mount via DelegatedShell. An app that declares no widgets gets an empty map
+ * (`useWidget` → null), so beyond a cheap source parse this is a no-op for the common
+ * case — every pre-Phase-13 delegated app mounts byte-identically.
+ */
+async function instantiateDelegatedWithWidgets(
+  source: string,
+  transpiledJS: string,
+  appType: string,
+  services: Services,
+): Promise<ComponentType> {
+  const widgetMap = await prewarmWidgets(source, services);
+  const module = instantiateDelegated(transpiledJS, makeUseWidget(widgetMap));
+  const boundRunHandler = (intent: string, input: unknown) =>
+    runHandler(intent, input, services);
+  return makeDelegatedComponent(appType, module, boundRunHandler);
+}
+
+/**
+ * Instantiate an app's pieces by mode. A "delegated" app is a behavior-free module
+ * mounted through the permanent DelegatedShell (its on-demand behavior is bound to
+ * THIS app's services-backed runHandler — the app never sees services). An "app" is
+ * the monolithic component path (with transitive widget pre-warm). Shared by every
+ * non-live tier so the dispatch is identical regardless of where the pieces came
+ * from (DRY).
+ */
+async function instantiateApp(
+  source: string,
+  transpiledJS: string,
+  mode: AppMode,
+  appType: string,
+  services: Services,
+): Promise<ComponentType> {
+  if (mode === "delegated") {
+    try {
+      return await instantiateDelegatedWithWidgets(source, transpiledJS, appType, services);
+    } catch (err) {
+      // Graceful fallback: if the payload is not actually a delegated module (it
+      // exports no `view` — e.g. a monolithic component), mount it as a monolith.
+      // Keeps the path robust to either produced shape (real delegated modules take
+      // the delegated branch; a monolith still renders).
+      if (err instanceof InstantiateError) {
+        logger.info("Loader: not a delegated module — mounting as a monolithic app");
+        return instantiateWithWidgets(source, transpiledJS, services);
+      }
+      throw err;
+    }
+  }
+
+  // Monolith path. Symmetric reverse fallback: a record may carry mode:"app" while
+  // its payload is actually a delegated module — e.g. a stale record written before
+  // delegated seeds set mode:"delegated", or any future mode/shape drift. When the
+  // monolith instantiator rejects it for exporting no `App`, retry as a delegated
+  // module so the open self-heals instead of throwing into the ErrorBoundary.
+  try {
+    return await instantiateWithWidgets(source, transpiledJS, services);
+  } catch (err) {
+    if (err instanceof InstantiateError) {
+      try {
+        logger.info("Loader: app payload is a delegated module — mounting via DelegatedShell");
+        return await instantiateDelegatedWithWidgets(source, transpiledJS, appType, services);
+      } catch {
+        // Not a delegated module either — surface the original monolith error so the
+        // failure mode is unchanged for genuinely broken payloads.
+        throw err;
+      }
+    }
+    throw err;
+  }
 }
 
 /**
@@ -142,9 +247,11 @@ export async function resolveComponent(
   const cached = transpiledCache.get(appCacheKey);
   if (cached) {
     logger.info("Loader: tier-2 hit (transpiled cache) for " + appType);
-    const Component = await instantiateWithWidgets(
+    const Component = await instantiateApp(
       cached.source,
       cached.transpiledJS,
+      cached.mode,
+      appType,
       services,
     );
     liveComponents.set(instanceId, Component);
@@ -159,13 +266,19 @@ export async function resolveComponent(
     // entry is marked recently used and survives the next eviction sweep (RESIL-06).
     // A cache hit makes NO model call, so the produce gate is never consulted here.
     await touchRecord(services, appCacheKey, stored, appType);
+    // A record written by the delegated path carries mode:"delegated"; legacy/seeded
+    // records have no mode and instantiate as a monolithic "app" (back-compat).
+    const mode: AppMode = stored.mode === "delegated" ? "delegated" : "app";
     transpiledCache.set(appCacheKey, {
       source: stored.source,
       transpiledJS: stored.transpiledJS,
+      mode,
     });
-    const Component = await instantiateWithWidgets(
+    const Component = await instantiateApp(
       stored.source,
       stored.transpiledJS,
+      mode,
+      appType,
       services,
     );
     liveComponents.set(instanceId, Component);
@@ -179,16 +292,25 @@ export async function resolveComponent(
 
   let source: string;
   let transpiledJS: string;
+  let mode: AppMode;
 
   if (seededSource) {
-    // Seeded path: transpile locally, no model call.
+    // Seeded path: transpile locally, no model call. Most seeds are monolithic
+    // components, but some (weather, currency) are delegated modules (initialState
+    // + view + actionSpec) that must mount through the DelegatedShell. SEEDED_DELEGATED
+    // declares which types use the delegated shape so we route — and persist — the
+    // correct mode. The mode set here flows into BOTH the cached record write and the
+    // instantiate dispatch below.
     logger.info("Loader: cache miss — compiling seeded source for " + appType);
     source = seededSource;
     transpiledJS = transpile(source, { filename: appType + ".tsx" });
+    mode = SEEDED_DELEGATED.has(appType) ? "delegated" : "app";
   } else {
-    // Unseeded path: on-demand produce via model (GEN-01..03, GEN-05). On a
-    // tweak (MOD-03) the user's instruction is woven into the produce prompt so
-    // the produced app reflects the request — same produce loop otherwise (DRY).
+    // Unseeded path: on-demand produce via model (GEN-01..03, GEN-05) in DELEGATED
+    // mode — a behavior-free module (initialState + view + actionSpec) mounted through
+    // the permanent DelegatedShell, with per-action behavior produced on demand. The
+    // produced module is far smaller (and so more reliable) than a monolith. On a
+    // tweak (MOD-03) the user's instruction is woven into the produce prompt.
     //
     // RESIL-05 cost guardrail: this is the ONE place a cache miss spends real
     // budget, so the soft cap is checked HERE, immediately before the model call.
@@ -201,14 +323,15 @@ export async function resolveComponent(
       appType,
       services.transport,
       services.getApiKey,
-      "app",
+      "delegated",
       userPrompt,
     );
     source = produced.source;
     transpiledJS = produced.transpiledJS;
+    mode = "delegated";
   }
 
-  transpiledCache.set(appCacheKey, { source, transpiledJS });
+  transpiledCache.set(appCacheKey, { source, transpiledJS, mode });
 
   // RESIL-06: before writing a new record, relieve storage pressure if the
   // registry is approaching quota — evict least-recently-used entries so the
@@ -223,6 +346,11 @@ export async function resolveComponent(
 
   // Persist both pieces to the registry — next open is an instant cache hit (GEN-04).
   // Fresh LRU bookkeeping: useCount 0 (no hits yet), updatedAt = now (RESIL-06).
+  // Phase 9 (STORE-01): set displayName (static label for seeded apps, title-cased
+  // slug for unseeded), createdAt (first-write timestamp, never overwritten on touch),
+  // and prompt (user's intent string only — never the model system-prompt, which
+  // contains lexicon visible via devtools → IndexedDB).
+  const staticEntry = APP_REGISTRY.find((a) => a.id === appType);
   await services.registry.put(
     "apps",
     {
@@ -230,14 +358,19 @@ export async function resolveComponent(
       type: appType,
       source,
       transpiledJS,
+      mode,
       useCount: 0,
       updatedAt: Date.now(),
+      createdAt: Date.now(),
+      displayName: staticEntry?.displayName ?? deriveDisplayName(appType, userPrompt),
+      prompt: userPrompt ?? undefined,
     },
     appCacheKey,
   );
 
-  // Pre-warm declared widgets, then instantiate with the bound useWidget (WIDGET-02/03).
-  const Component = await instantiateWithWidgets(source, transpiledJS, services);
+  // Instantiate by mode: a delegated module mounts through DelegatedShell; a
+  // monolithic app pre-warms its declared widgets and binds useWidget (WIDGET-02/03).
+  const Component = await instantiateApp(source, transpiledJS, mode, appType, services);
   liveComponents.set(instanceId, Component);
   return Component;
 }

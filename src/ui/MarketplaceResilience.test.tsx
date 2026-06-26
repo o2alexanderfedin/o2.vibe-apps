@@ -74,15 +74,15 @@ afterEach(() => {
 
 describe("Marketplace — 401 degrades to inline reconfigure (RESIL-03)", () => {
   it("shows a neutral 'Connect your account' prompt and opens the KeyDialog, storefront stays browsable", async () => {
-    // Weather is unseeded → routes through the transport, which returns a 401.
+    // Calculator is unseeded → routes through the transport, which returns a 401.
     const transport: TransportFn = () =>
       Promise.reject(new ModelHttpError(401, undefined, "bad key"));
     const { user } = renderMarketplace({ transport });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
     // Inline reconfigure prompt appears (neutral copy), NOT a crash.
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     const connectBtn = await within(region).findByRole("button", {
       name: /connect your account/i,
     });
@@ -103,11 +103,12 @@ describe("Marketplace — 401 degrades to inline reconfigure (RESIL-03)", () => 
 
   it("a missing key (no transport call needed) also surfaces the reconfigure path", async () => {
     // No key at all → produceComponent throws ProduceAuthError before any call.
+    // Calculator is unseeded → triggers auth check.
     const { user } = renderMarketplace({ apiKey: null });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     expect(
       await within(region).findByRole("button", { name: /connect your account/i }),
     ).toBeInTheDocument();
@@ -136,10 +137,10 @@ describe("Marketplace — 429 exhausted degrades to neutral fallback (RESIL-04)"
     });
 
     const { user } = renderMarketplace({ transport });
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
     // Generic neutral fallback (NOT the auth path — a 429 is not auth).
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     expect(
       within(region).getByText(/this app couldn.t load\. try again\./i),
     ).toBeInTheDocument();
@@ -173,10 +174,10 @@ describe("Marketplace — 429 exhausted degrades to neutral fallback (RESIL-04)"
     });
 
     const { user } = renderMarketplace({ transport });
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
     // The produced component rendered — no fallback shown.
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     await waitFor(() =>
       expect(
         within(region).queryByText(/this app couldn.t load/i),

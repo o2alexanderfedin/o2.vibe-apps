@@ -1,0 +1,96 @@
+```tsx
+function App() {
+  const [state, setState] = React.useState({ display: "0", expr: "" });
+  const [busy, setBusy] = React.useState(false);
+
+  const dispatch = async (action, payload) => {
+    setBusy(true);
+    const intent =
+      "calculator action '" +
+      action +
+      "': state shape { display: string, expr: string }; given input { state, payload } return { data: { state } } with the same shape, updating it like a real calculator; payload is the pressed key";
+    const res = await runHandler(intent, { state, payload });
+    if (res && res.data && res.data.state) {
+      setState((prev) => ({ ...prev, ...res.data.state }));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div
+      style={{
+        backgroundColor: "var(--color-surface)",
+        color: "var(--color-text)",
+        padding: "1rem",
+        borderRadius: "0.5rem",
+        maxWidth: "300px",
+        fontFamily: "monospace",
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: "var(--color-surface)",
+          border: "1px solid var(--color-accent)",
+          padding: "1rem",
+          marginBottom: "1rem",
+          fontSize: "1.5rem",
+          textAlign: "right",
+          borderRadius: "0.25rem",
+          minHeight: "2rem",
+        }}
+      >
+        {state.display}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem" }}>
+        {["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "=", "+"].map(
+          (btn) => (
+            <button
+              key={btn}
+              onClick={() => dispatch(btn, btn)}
+              disabled={busy}
+              style={{
+                padding: "1rem",
+                fontSize: "1rem",
+                backgroundColor: "var(--color-accent)",
+                color: "var(--color-text)",
+                border: "none",
+                borderRadius: "0.25rem",
+                cursor: busy ? "not-allowed" : "pointer",
+                opacity: busy ? 0.5 : 1,
+              }}
+            >
+              {btn}
+            </button>
+          )
+        )}
+      </div>
+
+      <button
+        onClick={() => dispatch("clear", null)}
+        disabled={busy}
+        style={{
+          width: "100%",
+          marginTop: "0.5rem",
+          padding: "0.75rem",
+          fontSize: "1rem",
+          backgroundColor: "var(--color-accent)",
+          color: "var(--color-text)",
+          border: "none",
+          borderRadius: "0.25rem",
+          cursor: busy ? "not-allowed" : "pointer",
+          opacity: busy ? 0.5 : 1,
+        }}
+      >
+        C
+      </button>
+
+      {busy && (
+        <div style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "var(--color-accent)" }}>
+          computing...
+        </div>
+      )}
+    </div>
+  );
+}
+```

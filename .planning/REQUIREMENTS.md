@@ -1,171 +1,101 @@
-# Requirements: Vibe App Store
+# Requirements: Vibe App Store — Milestone v2.0 "Vibe OS"
 
-**Defined:** 2026-06-24
-**Core Value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
+**Defined:** 2026-06-26
+**Milestone goal:** Transform the flat storefront into a themeable, multi-window **Vibe OS desktop** — apps open as draggable glass windows sharing one chrome, several at once, managed by a dock and menu bar; a **dock-launched search/launcher panel** (search/describe an app + a pre-installed apps list) replaces the flat grid and places found apps on the desktop; and a switchable, locally-persisted 4-theme system re-skins the entire OS — host chrome and every open app — at a click.
 
-## v1 Requirements
+Requirements continue the v1.0/v1.1 REQ-ID families. All v1.0/v1.1 cross-cutting constraints (HYGIENE-01..05 devtools illusion, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, TDD with real captured-Haiku fixtures, additive DB migrations) remain in force on every requirement below. **Design reference:** `design/VibeOS.dc.html` — structure/visual language only; wording is a free variable. **Research:** `.planning/research/SUMMARY.md`.
 
-Requirements for the initial release. Scope = the blueprint MVP checklist plus the load-bearing corrections surfaced by research. Each maps to a roadmap phase (Vertical-MVP slices). Categories follow the architecture's component boundaries.
+---
 
-### Shell & Onboarding (SHELL)
+## v2.0 Requirements
 
-- [ ] **SHELL-01**: User lands on a marketplace storefront that shows a grid of available app types
-- [ ] **SHELL-02**: User can open an app from the storefront grid
-- [ ] **SHELL-03**: User can set, change, and clear their own Anthropic API key from the UI, stored locally and framed as activating the platform (never as "paste your AI key")
-- [ ] **SHELL-04**: User can switch theme between light, dark, and system, applied via CSS variables on `:root` so every app looks native to the platform
-- [ ] **SHELL-05**: An opened app renders inside an app shell that shows the app's name and a contextual `⋮` menu
+### WIN — Windowing system
 
-### Resolve → Cache → Render Loop (LOOP)
+> Apps open as draggable glass windows, several at once, managed by a dock + menu bar. (Research: `ARCHITECTURE.md` window-manager/mount integration; `PITFALLS.md` drag/z-order/root-leak.)
 
-- [ ] **LOOP-01**: Opening or interacting with an app produces a structured intent (operation, kind, type, contextBundle, cacheKey)
-- [ ] **LOOP-02**: Cache keys are derived with SHA-256 over a normalized input (lowercase, trim, collapse whitespace, NFC), applied identically on read and write, and are opaque (no readable type slug or prompt text)
-- [ ] **LOOP-03**: A single IndexedDB database with `apps`, `widgets`, and `handlers` object stores is initialized at startup, with a probe write and an in-memory `Map` fallback when storage is unavailable
-- [ ] **LOOP-04**: On a cache hit, the app renders immediately from the registry with no model call (three-tier resolve: live-component Map → transpiled-string Map → IndexedDB)
-- [ ] **LOOP-05**: Generated source is compiled exactly once; **both** the original TypeScript/TSX source **and** the Babel-transpiled JS are persisted in the registry (Babel uses `preset-typescript` + `preset-react` classic runtime), and the transpiled JS is never recompiled from storage twice within a session (session-scoped in-memory transpiled cache)
-- [ ] **LOOP-06**: The compiler is pinned to the classic JSX runtime (`presets: [["react", { runtime: "classic" }]]`) so output uses `React.createElement` and resolves against the injected `React` (verified by a test asserting no `react/jsx-runtime` import is emitted)
-- [ ] **LOOP-07**: Generated code is instantiated in a `new Function()` scope that receives only an explicit named parameter list (a single shared `React` instance, plus `useWidget` for apps) and never `window`, `document`, or other globals
-- [ ] **LOOP-08**: Each app/widget container gets exactly one React root (created once, re-rendered on update, unmounted on removal), tracked in a roots map keyed by instance id
+- [ ] **WIN-01**: An opened app renders inside a draggable **window** with a shared glass chrome and a macOS-style titlebar (traffic-light close/minimize controls + app icon + title) — the same frame for every app.
+- [ ] **WIN-02**: Multiple apps are open **concurrently** as independent windows, each mounted in its own React root; the active window's app name shows in the menu bar.
+- [ ] **WIN-03**: Pointer-down on a window **raises** it to front (z-order) and makes it active; dragging the titlebar moves it, **clamped** to the viewport; new windows **cascade**-place.
+- [ ] **WIN-04**: A window can be **minimized** to the dock and **restored**.
+- [ ] **WIN-05**: A window can be **closed**, fully unmounting its app — no leaked React root, timer, or listener (close routes through the manager that calls `unmountApp`).
+- [ ] **WIN-06**: A bottom **dock** shows opened apps with a running indicator (clicking opens/restores; hover-scale) **and a search (magnifier) icon** that opens the search/launcher panel (CREATE-01).
+- [ ] **WIN-07**: A top **menu bar** shows the OS wordmark, the active app's name, and a live clock.
+- [ ] **WIN-08**: The **desktop surface** is the workspace where apps live — apps launched from the search/launcher panel are placed here (opened as windows and added to the dock); the surface carries the themed wallpaper.
 
-### On-Demand Generation (GEN)
+### THEME — Themeable shell
 
-- [ ] **GEN-01**: On a cache miss, the platform calls Claude Haiku (`claude-haiku-4-5-20251001`) via a single browser `fetch` to `api.anthropic.com/v1/messages` using the user's key, with the `anthropic-dangerous-direct-browser-access: true`, `x-api-key`, and `anthropic-version` headers
-- [ ] **GEN-02**: Model output is robustly extracted to compilable JSX (strips prose/markdown fences; tolerates preamble) before compilation
-- [ ] **GEN-03**: A failed compile triggers a bounded self-heal retry (≤3 attempts) that feeds the **compiler** error back into the next prompt, with early-stop on identical consecutive errors
-- [ ] **GEN-04**: A successfully produced app/widget is stored (`sourceJSX` + `transpiledJS`, neutral metadata) and then rendered, so the next open is an instant cache hit
-- [ ] **GEN-05**: During a cache-miss produce, the user sees a neutral skeleton/loading state ("Opening…", "Just a moment…") that mirrors the app shape — never "Generating…" or any AI language
+> A named-theme registry of CSS-variable sets, switchable live, persisted, applied to host **and** apps. (Research: `STACK.md` extend ThemeProvider, zero deps; `PITFALLS.md` documentElement/FOUC/alias-bridge.)
 
-### Widget Composition (WIDGET)
+- [x] **THEME-01**: Four built-in themes (**Aurora / Aero / Aqua / Noir**) are selectable from an always-visible switcher in the menu bar.
+- [x] **THEME-02**: Switching the theme **re-skins host chrome AND every open app window live** — no reload, no remount.
+- [x] **THEME-03**: The active theme **persists** across reloads and is restored on first paint with **no flash** of the wrong theme (FOUC-safe).
+- [x] **THEME-04**: Themes apply as CSS custom properties on the **document root**, so the styling reaches every app window's independently-mounted subtree.
+- [ ] **THEME-05**: A backward-compat **alias bridge** maps prior style variables to the new theme contract so apps cached **before v2.0** still render correctly after the new variables land.
 
-- [x] **WIDGET-01**: An app can declare widget dependencies (`// @widget <type>`); the parser extracts them before mount
-- [x] **WIDGET-02**: Declared widgets are pre-warmed (resolved from cache or produced) transitively before the app mounts, with a cycle guard and a concurrency cap (≤2) to avoid request storms
-- [x] **WIDGET-03**: `useWidget(type)` returns the resolved widget component synchronously at render time (a pure `Map.get`, never triggering async work during render)
-- [x] **WIDGET-04**: Each widget renders inside its own widget shell with an independent `⋮` menu, so a widget can be modified without touching its parent app
-- [x] **WIDGET-05**: A widget that fails to load or throws shows a placeholder without crashing its parent app (per-widget error boundary)
+### CREATE — Search / launcher panel (find or describe → desktop)
 
-### Contextual Modification (MOD)
+> A dock-launched panel that unifies browse + create: search/describe an app or pick a pre-installed one; results land on the desktop. Replaces the flat storefront grid. (Research: `FEATURES.md` create-panel states; `PITFALLS.md` hygiene on new copy.)
 
-- [x] **MOD-01**: A shared contextual prompt popover (used by both app and widget shells) accepts free-form natural-language instructions and names the target being modified
-- [x] **MOD-02**: Prompt routing resolves remove/close and clone/duplicate client-side with no model call; everything else is treated as a tweak
-- [x] **MOD-03**: A tweak derives a new cache key, resolves it (cache or produce), and replaces the target in place by re-rendering the existing root (no surfaced version history)
-- [x] **MOD-04**: Remove unmounts the target's root and detaches it; clone creates a new instance from the stored record under a new instance id with no model call
+- [ ] **CREATE-01**: A **search (magnifier) icon in the dock** opens a **search/launcher panel** containing a text input + action button and a list of **pre-installed apps**.
+- [ ] **CREATE-02**: Submitting a description **finds-or-produces** the app via the existing resolve→produce→cache→mount loop (cache hit = instant; miss = produced) with **idle / working / result** states — the working state is a real loading affordance over **genuine** production (never faked, never naming the mechanic) — and the result is **placed on the desktop surface** as a window.
+- [ ] **CREATE-03**: Selecting a **pre-installed app** from the panel's list opens it on the desktop; launched apps appear in the dock as installed/running. No surface in the flow names the mechanic.
 
-### Resilience & Graceful Degradation (RESIL)
+### TGEN — Theme-aware generation
 
-- [x] **RESIL-01** (Phase 6, Complete): Every app and every widget is wrapped in an error boundary that catches render errors and offers a neutral retry without taking down the rest of the page
-- [x] **RESIL-02** (Phase 6, Complete): A global async backstop (`window.onerror` + `unhandledrejection` + React root `onUncaughtError`) routes uncaught async/event-handler errors to neutral handling so no revealing message ever surfaces
-- [x] **RESIL-03** (Phase 6, Complete): A missing or invalid API key (401) degrades to an inline key-reconfiguration prompt, with neutral copy and no crash
-- [x] **RESIL-04** (Phase 6, Complete): Rate limiting (429) is handled with exponential backoff + jitter honoring `retry-after`, shared via a token bucket at the single egress point, then a neutral user-visible error if exhausted
-- [x] **RESIL-05** (Phase 7, Complete): A cost guardrail soft-caps produce calls after a configured threshold of cache misses per time window (N=10 / 5-min sliding window, injected `Clock`), surfaced with neutral messaging via the failed-open fallback; cache hits are never capped and the window recovers automatically as it slides
-- [x] **RESIL-06** (Phase 7, Complete): Storage pressure is handled by `navigator.storage.persist()` at init (guarded) plus LRU eviction (oldest `updatedAt`, tie-broken by lowest `useCount`) across all stores when usage/quota exceeds a 0.9 threshold; records carry `useCount`/`updatedAt` (DB schema v2, additive upgrade, default-on-read for v1 data) and the in-memory fallback path stays intact
+> Produced apps reference the theme contract so they re-skin for free. The load-bearing, novel piece. (Research: `ARCHITECTURE.md` buildPrompt update; `PITFALLS.md` hardcoded-colors + name-sanitization.)
 
-### Backend-Style Handlers (HANDLER)
+- [ ] **TGEN-01**: Produced apps/widgets **reference the theme variable contract** (accents, text, glass, border, …) instead of hardcoded colors, so they re-skin automatically on theme switch.
+- [ ] **TGEN-02**: A **post-compile static check** detects hardcoded colors in produced code and feeds violations into the existing **compile-error self-heal loop** — no extra round-trips beyond the shipped resilience budget.
+- [ ] **TGEN-03**: Model-supplied app names/text rendered in chrome (titlebar, dock, menu bar) are **sanitized** so no banned-lexicon token can reach a visible surface.
 
-- [x] **HANDLER-01** (Phase 8, Complete): Apps and widgets can request a data operation through a single `runHandler(intent, input)` helper that transparently resolves a cached handler or produces one on first need, then executes it and returns `{ data?, error? }` — wired into the produced-app `new Function` scope alongside `useWidget` (services bound by the loader, so an app calls the 2-arg form)
-- [x] **HANDLER-02** (Phase 8, Complete): Produced handlers are dual-cached (source + transpiledJS) in the `handlers` store under an opaque key, written with `useCount:0`/`updatedAt:now` (bumped on hit, consistent with the apps path) and reused on subsequent calls with no further model call
-- [x] **HANDLER-03** (Phase 8, Complete): Handler code executes in a constrained scope — a targeted denylist shadows `fetch`/`XMLHttpRequest`/`localStorage`/`sessionStorage`/`indexedDB`/`window`/`document` to `undefined` in the `new Function` parameter list, `require` is hostile (throws), and no API key enters the scope; local data operations only, proven by handlers attempting network/storage access being blocked and a thrown handler returning a neutral `{ error }`
+### Cross-cutting acceptance constraints (every phase — not standalone phases)
 
-### Devtools Hygiene — "Apps Just Exist" (HYGIENE, cross-cutting NFR)
+- [ ] **HYGIENE-06**: The CI lexicon gate is **extended to all new v2.0 surfaces/files** (window chrome, dock, menu bar, create panel) plus the sanitization of model-supplied display strings (TGEN-03).
+- [ ] **PERF-01**: With several windows open plus the animated wallpaper, the desktop stays responsive — **minimized windows don't composite**, and blur/animation **degrade** under `prefers-reduced-motion` / weak-GPU conditions.
+- The FOUC theme script's SHA-256 hash stays in sync with `csp.test.ts` (same-commit invariant). All v1.0/v1.1 constraints (HYGIENE-01..05, single egress, sourcemaps-off, CSP allowlist, IoC/DI, TDD) remain binding.
 
-These are acceptance criteria attached to every other requirement's definition of done, enforced from the first phase.
+---
 
-- [ ] **HYGIENE-01**: No devtools-visible surface (JS symbol names, IndexedDB store/key names, console logs, network payloads, source comments, CSS class names, HTML attributes, error copy, localStorage keys) narrates that apps are produced on demand
-- [ ] **HYGIENE-02**: The literal token "synthesize / synthesized / synthesis" appears in **no** devtools-visible surface, including source comments (production source maps are disabled, `build.sourcemap: false`)
-- [ ] **HYGIENE-03**: A CI lexicon-grep gate fails any merge that introduces banned/mechanic-revealing tokens (e.g. `synthesize`, `generate`, `fake`, `mock`, `\bAI\b`, `llm`) in identifiers, comments, CSS, `data-*`, or visible strings
-- [ ] **HYGIENE-04**: Production logging is off by default, gated behind `localStorage.debug`, and uses only neutral product language when enabled
-- [ ] **HYGIENE-05**: The browser→Anthropic request body uses neutral, product-framed language and the API key is sent only to `api.anthropic.com`, never logged, never proxied, and is the only credential stored
+## Future Requirements (deferred beyond v2.0)
 
-### Security (SEC)
+- **User-created / custom themes** — built-in four only this milestone; a theme editor (and persisting custom themes in the IDB `settings` store) is a v2.x follow-up.
+- **Window-position / desktop-layout persistence** — restoring exact window geometry and the `installed[]` dock across reloads; deferred (active-theme persistence ships, layout doesn't).
+- **HARD-01 `<iframe sandbox>` isolation** + **SEC-01/02/03** — security still deferred; the windowing/theming layer is designed so the iframe move stays a contained change later.
+- **G2 unified `Intent` contract** — internal refactor, no user-facing value.
 
-- [ ] **SEC-01**: Generated code runs only in the constrained `new Function()` scope (no `eval`, no global pollution); dangerous globals (`window`, `document`, `localStorage`, `fetch`, `XMLHttpRequest`, `eval`, `Function`, …) are shadowed to `undefined` in the parameter list, behind a single swappable mount seam
-- [ ] **SEC-02**: Rendering goes through React's virtual DOM; raw `innerHTML` is never used for generated content
-- [ ] **SEC-03**: A static-reject pass screens `transpiledJS` for disallowed constructs before instantiation
-- [ ] **SEC-04**: A Content-Security-Policy restricts `connect-src` to `'self' https://api.anthropic.com` to contain key exfiltration
+## Out of Scope (explicit exclusions, with reasoning)
 
-## v2 Requirements
-
-Acknowledged but deferred — not in the current roadmap.
-
-### Hardening & Polish
-
-- **HARD-01**: `<iframe sandbox="allow-scripts">` isolation of generated code with `postMessage` brokering (the production security end-state; the v1 mount seam is designed to swap to it as one module)
-- **POP-01**: Implicit "popular on the platform" storefront row derived from `useCount`
-
-## Out of Scope
-
-Explicitly excluded. Documented to prevent scope creep. Anti-features carry a warning because a contributor would reflexively add them.
-
-| Feature | Reason |
-|---------|--------|
-| Server-side application backend / database | Architecture is client-only; "handlers" run in-browser on mock/local data. No server to build or operate. |
-| Proxying the Anthropic API through our own server | Breaks the client-only zero-infra model and creates key-handling liability; key goes browser → `api.anthropic.com` only. |
-| Real authentication / accounts / billing / subscriptions | No backend to host auth; the subscription is narrative only — the API key is the sole activation gate. |
-| Multi-user sync / publish / share generated apps | Registry is local IndexedDB per browser; cloud sharing needs infra and risks exposing the mechanic. |
-| ⚠️ Visible prompt box / "Generate" button / model picker | Destroys the core illusion — apps must *exist*, not be summoned. The `⋮` tweak is the only NL surface. |
-| ⚠️ Visible "AI is thinking / generating…" progress or streaming code | Names/reveals the mechanic. Use neutral skeleton + "Opening…" and render only the finished component. |
-| ⚠️ Generation/version history, attempt log, "regenerate" button | Exposes that output is produced and non-deterministic. Self-heal retries are invisible; tweaks silently replace. |
-| ⚠️ Ratings / reviews / comments / creator monetization | Implies human authors and a backend; there are none — every app is produced on demand. |
-| ⚠️ Recompiling from storage on every load / storing compiled functions | Functions aren't serializable; recompiling twice per session kills the "instant" feel. Store the transpiled string. |
-| Anthropic SDK / streaming in the generation hot path | Adds bundle weight and devtools fingerprint; partial JSX cannot be compiled. Use raw non-streaming `fetch`. |
+- **Window resize handles** — break fixed-width generated app layouts; the glass windows are content-sized.
+- **Maximize / fullscreen** — conflicts with the partial-glass desktop aesthetic.
+- **Snap / tiling / multi-desktop** — over-engineered for widget-scale apps; not the product.
+- **Any application server / sync** — the desktop, registry, and theming are all client-only; no backend.
+- **Naming the mechanic** — no AI/LLM/generate/synthesize/fake/mock in any visible or devtools surface (the create surface is allowed; naming the mechanic is not); no streamed source as a progress affordance.
+- **A drag/animation/CSS-in-JS library** — research verdict is hand-roll, zero new npm deps.
 
 ## Traceability
 
-Each v1 requirement maps to exactly one owning phase. Cross-cutting HYGIENE/SEC requirements are *owned* by their foundation phase for traceability even though they are *enforced* on every phase from Phase 1 forward.
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| THEME-01 | Phase 14 — Theme Foundation | Complete |
+| THEME-02 | Phase 14 — Theme Foundation | Complete |
+| THEME-03 | Phase 14 — Theme Foundation | Complete |
+| THEME-04 | Phase 14 — Theme Foundation | Complete |
+| THEME-05 | Phase 14 — Theme Foundation | Pending |
+| WIN-01 | Phase 15 — Window Manager | Pending |
+| WIN-02 | Phase 15 — Window Manager | Pending |
+| WIN-03 | Phase 15 — Window Manager | Pending |
+| WIN-04 | Phase 15 — Window Manager | Pending |
+| WIN-05 | Phase 15 — Window Manager | Pending |
+| WIN-06 | Phase 16 — Desktop Shell | Pending |
+| WIN-07 | Phase 16 — Desktop Shell | Pending |
+| WIN-08 | Phase 16 — Desktop Shell | Pending |
+| PERF-01 | Phase 16 — Desktop Shell | Pending |
+| CREATE-01 | Phase 17 — Search / Launcher Panel | Pending |
+| CREATE-02 | Phase 17 — Search / Launcher Panel | Pending |
+| CREATE-03 | Phase 17 — Search / Launcher Panel | Pending |
+| TGEN-01 | Phase 18 — Theme-Aware Generation | Pending |
+| TGEN-02 | Phase 18 — Theme-Aware Generation | Pending |
+| TGEN-03 | Phase 18 — Theme-Aware Generation | Pending |
+| HYGIENE-06 | Phase 18 — Theme-Aware Generation | Pending |
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| SHELL-01 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| SHELL-02 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| SHELL-03 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| SHELL-04 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| LOOP-02 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| LOOP-03 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| HYGIENE-01 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| HYGIENE-02 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| HYGIENE-03 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| HYGIENE-04 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| HYGIENE-05 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| SEC-04 | Phase 1 — Hygiene Foundation & Storefront Shell | Pending |
-| LOOP-01 | Phase 2 — Static Open-One-App Loop | Pending |
-| LOOP-04 | Phase 2 — Static Open-One-App Loop | Pending |
-| LOOP-05 | Phase 2 — Static Open-One-App Loop | Pending |
-| LOOP-06 | Phase 2 — Static Open-One-App Loop | Pending |
-| LOOP-07 | Phase 2 — Static Open-One-App Loop | Pending |
-| LOOP-08 | Phase 2 — Static Open-One-App Loop | Pending |
-| SHELL-05 | Phase 2 — Static Open-One-App Loop | Pending |
-| SEC-01 | Phase 2 — Static Open-One-App Loop | Pending |
-| SEC-02 | Phase 2 — Static Open-One-App Loop | Pending |
-| SEC-03 | Phase 2 — Static Open-One-App Loop | Pending |
-| GEN-01 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
-| GEN-02 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
-| GEN-03 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
-| GEN-04 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
-| GEN-05 | Phase 3 — Cache-Miss Generation (Core Value) | Pending |
-| WIDGET-01 | Phase 4 — Widget Composition | Complete |
-| WIDGET-02 | Phase 4 — Widget Composition | Complete |
-| WIDGET-03 | Phase 4 — Widget Composition | Complete |
-| WIDGET-04 | Phase 4 — Widget Composition | Complete |
-| WIDGET-05 | Phase 4 — Widget Composition | Complete |
-| MOD-01 | Phase 5 — Contextual Modification | Complete |
-| MOD-02 | Phase 5 — Contextual Modification | Complete |
-| MOD-03 | Phase 5 — Contextual Modification | Complete |
-| MOD-04 | Phase 5 — Contextual Modification | Complete |
-| RESIL-01 | Phase 6 — API Error Degradation | Complete |
-| RESIL-02 | Phase 6 — API Error Degradation | Complete |
-| RESIL-03 | Phase 6 — API Error Degradation | Complete |
-| RESIL-04 | Phase 6 — API Error Degradation | Complete |
-| RESIL-05 | Phase 7 — Storage & Cost Guardrails | Complete |
-| RESIL-06 | Phase 7 — Storage & Cost Guardrails | Complete |
-| HANDLER-01 | Phase 8 — Backend-Style Handlers | Complete |
-| HANDLER-02 | Phase 8 — Backend-Style Handlers | Complete |
-| HANDLER-03 | Phase 8 — Backend-Style Handlers | Complete |
-
-**Coverage:**
-- v1 requirements: 45 total — SHELL 5, LOOP 8, GEN 5, WIDGET 5, MOD 4, RESIL 6, HANDLER 3, HYGIENE 5, SEC 4
-- Mapped to phases: 45 ✓ (no orphans, no duplicates)
-- Unmapped: 0 ✓
-- Per-phase counts: Phase 1 = 12, Phase 2 = 10, Phase 3 = 5, Phase 4 = 5, Phase 5 = 4, Phase 6 = 4, Phase 7 = 2, Phase 8 = 3 (total 45)
-- **Implemented: 45/45 — all 8 phases complete; milestone v1.0 feature-complete.**
-
----
-*Requirements defined: 2026-06-24*
-*Last updated: 2026-06-24 — Phase 8 (Backend-Style Handlers) complete; HANDLER-01..03 → Complete; 45/45 requirements implemented across all 8 phases.*
+**Coverage:** 21/21 requirements mapped across 5 phases. Cross-cutting constraints (HYGIENE-01..05, single egress, sourcemaps-off, CSP, IoC/DI, TDD, additive DB migrations, FOUC-script/CSP-hash invariant) apply to all phases.

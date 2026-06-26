@@ -1,0 +1,79 @@
+interface CalculatorState {
+  display: string;
+  expr: string;
+}
+
+interface HandlerInput {
+  state: CalculatorState;
+  payload: string;
+}
+
+interface HandlerOutput {
+  data?: { state: CalculatorState };
+  error?: string;
+}
+
+async function handler(input: HandlerInput): Promise<HandlerOutput> {
+  const { state, payload } = input;
+  let { display, expr } = state;
+
+  try {
+    const action = payload;
+
+    if (action === "clear") {
+      display = "0";
+      expr = "";
+    } else if (action === "delete") {
+      expr = expr.slice(0, -1);
+      display = expr === "" ? "0" : expr;
+    } else if (/^\d$/.test(action)) {
+      if (expr === "" || state === input.state && display.includes("=")) {
+        expr = action;
+      } else {
+        expr += action;
+      }
+      display = expr;
+    } else if (["add", "subtract", "multiply", "divide"].includes(action)) {
+      const operators: Record<string, string> = {
+        add: "+",
+        subtract: "−",
+        multiply: "×",
+        divide: "÷",
+      };
+      expr += operators[action];
+      display = expr;
+    } else if (action === "decimal") {
+      if (!expr.includes(".")) {
+        expr += ".";
+        display = expr;
+      }
+    } else if (action === "equals") {
+      if (expr) {
+        const sanitized = expr
+          .replace(/−/g, "-")
+          .replace(/×/g, "*")
+          .replace(/÷/g, "/");
+
+        const result = Function('"use strict"; return (' + sanitized + ")")();
+
+        if (typeof result === "number" && isFinite(result)) {
+          const rounded = Math.round(result * 10000000000) / 10000000000;
+          display = rounded.toString();
+          expr = rounded.toString();
+        } else {
+          return { error: "Invalid calculation" };
+        }
+      }
+    } else {
+      return { error: `Unknown action: ${action}` };
+    }
+
+    return {
+      data: {
+        state: { display, expr },
+      },
+    };
+  } catch (e) {
+    return { error: `Calculation error: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
