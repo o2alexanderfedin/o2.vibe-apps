@@ -4,14 +4,14 @@ milestone: v1.1
 milestone_name: Real & Robust
 status: executing
 stopped_at: Session resumed via /gsd-resume-work — clean checkpoint confirmed (develop synced with origin, no incomplete plans/handoff). Proceeding to plan Phase 9 (Richer Storefront).
-last_updated: "2026-06-26T13:42:10.941Z"
-last_activity: 2026-06-26 -- Phase 12 execution started
+last_updated: "2026-06-26T13:55:00.000Z"
+last_activity: 2026-06-26 -- Phase 12 merged to develop (passed, live smoke OK, 548 tests)
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 12
-  completed_plans: 11
-  percent: 92
+  completed_plans: 12
+  percent: 80
 ---
 
 # Project State
@@ -21,16 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 12 — network-data-path
+**Current focus:** Phase 13 — activate widget composition (FINAL phase; highest regression risk)
 
 ## Current Position
 
-Phase: 12 (network-data-path) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 12
-Last activity: 2026-06-26 -- Phase 12 execution started
+Phase: 13 (Activate Widget Composition) — READY TO PLAN
+Plan: —
+Status: Phases 9–12 complete (merged); planning the final phase 13 next
+Last activity: 2026-06-26 -- Phase 12 merged to develop (passed, live browser smoke OK)
 
-Progress: [██████░░░░] 60% (3 of 5 v1.1 phases)
+Progress: [████████░░] 80% (4 of 5 v1.1 phases)
+
+### Phase 12 — DONE (merged de9ce2b)
+
+DATA-01..04 shipped: host-brokered fetchData injected into handler scope (raw fetch/XHR/WebSocket shadowed); host builds URLs from a keyless-CORS manifest (Open-Meteo geocode+forecast, Frankfurter); CSP connect-src = exactly those 3 origins + api.anthropic.com (no *); in-memory TTL cache (Clock-DI). Seeded Weather + Currency delegated apps with deterministic seeded handlers (zero model calls). LIVE BROWSER SMOKE PASSED: real conditions for London + real USD FX, CORS 200 on all 3 origins. Two smoke-found bugs fixed w/ regression tests (seeded-delegated instantiation routing; DelegatedShell data-field input capture). 548 tests, tsc 0, build clean, hygiene+csp green.
 
 ### Phase 11 — DONE (merged 8e10317)
 
