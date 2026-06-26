@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Real & Robust
-status: planning
-last_updated: "2026-06-26T03:47:16.069Z"
+status: ready
+last_updated: "2026-06-26T04:10:00.000Z"
 last_activity: 2026-06-26
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,80 +17,61 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-24)
+See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v1.0 MVP shipped + archived (2026-06-26). Planning the next milestone — candidate scope in ROADMAP.md (sanctioned network-data path, widget/handler activation, deferred safety HARD-01/SEC, POP-01). Run `/gsd-new-milestone`.
+**Current focus:** v1.1 "Real & Robust" roadmapped (Phases 9–13). Next: plan Phase 9 (Richer Storefront) with `/gsd-plan-phase 9`. The dependency-driven build order is C → D-typing/key-audit → B → A → D-activation, with two hard constraints: RELY (Phase 11) before DATA (Phase 12), and WIDGET typing (Phase 10) before WIDGET activation (Phase 13).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 9 (Richer Storefront) — READY TO PLAN
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-26 — Milestone v1.1 started
+Status: Roadmap complete; Phase 9 not started
+Last activity: 2026-06-26 — v1.1 roadmap created (5 phases, 12/12 requirements mapped)
 
-## Prior Position (Phase 7)
+Progress: [░░░░░░░░░░] 0% (0 of 5 v1.1 phases)
 
-Phase: 07 (Storage & Cost Guardrails) — COMPLETE
-Status: Phase 7 bounded runaway produce-cost (RESIL-05) and storage pressure
-(RESIL-06) with neutral messaging.
+### v1.1 Phase Map
 
-RESIL-05 — Cost guardrail: `createProduceGate` (`src/host/produceGate.ts`) is a
-sliding-window soft cap (N=10 produce misses per 5-min window; named constants
-`DEFAULT_PRODUCE_CAP`/`DEFAULT_PRODUCE_WINDOW_MS`, overridable). It keeps a list of
-recent produce timestamps, prunes those outside the window on each `tryAcquire()`,
-and either records `now` (under cap) or throws the neutral `ProduceThrottledError`
-("You're opening a lot of apps quickly — give it a moment."). It is injected via
-`Services.produceGate` and called in the loader IMMEDIATELY before the
-`produceComponent` model call — i.e. only on a cache MISS. Cache hits (tier 1/2/3)
-never reach it, so browsing already-opened apps is never throttled, and the window
-slides so the cap recovers automatically. The `Clock` is injected (real wall clock
-in prod, `createStubClock` in tests) so window/recovery is verified INSTANTLY.
-Marketplace catches `ProduceThrottledError` and renders the softer "give it a
-moment" copy in the SAME neutral failed-open region (storefront stays browsable).
+| Phase | Name | Requirements | Notes |
+|-------|------|--------------|-------|
+| 9 | Richer Storefront | STORE-01, STORE-02 | Independent, cheapest visible win; builds the additive-schema muscle |
+| 10 | Widget Schema & Key Correctness | WIDGET-07, WIDGET-08 | Gate for activation; must precede Phase 13 (hard) |
+| 11 | Reliability Hardening | RELY-01, RELY-02, RELY-03 | Validate-and-keep-prior at merge; must precede Phase 12 (hard) |
+| 12 | Sanctioned Network-Data Path | DATA-01..04 | Highest judgment; host-brokered allowlist, key never in app scope |
+| 13 | Activate Widget Composition | WIDGET-06 | Highest regression risk; touches delegated render path — do last |
 
-RESIL-06 — Storage pressure: records now carry `useCount`/`updatedAt` (LRU
-bookkeeping). DB bumped to schema v2 (`REGISTRY_DB_VERSION`); the upgrade is purely
-ADDITIVE and the registry/LRU layer defaults the two fields to 0 on read, so v1
-data keeps working. Cache hits bump `useCount` + refresh `updatedAt` (loader
-`touchRecord`); writes set `useCount:0`/`updatedAt:now`. `evictUnderPressure`
-(`src/registry/storagePressure.ts`) runs before every produce write: when the
-injected `estimate()` reports usage/quota over a 0.9 threshold
-(`DEFAULT_EVICTION_THRESHOLD`), it evicts least-recently-used entries (oldest
-`updatedAt`, tie-broken by lowest `useCount`) across apps/widgets/handlers until
-back under threshold (or nothing left). Storage access goes through an injectable
-`StoragePressureSeam` (`src/host/storageEstimate.ts`): `navigatorStorageSeam`
-guards `navigator.storage.persist`/`estimate` (degrade to false/null, never throw);
-init's persist request now routes through it. `Registry` gained `keys(store)`
-enumeration for victim listing. The in-memory fallback path is intact (keys() works
-there too). Tests inject a stub `estimate()` + in-memory registry — NO real
-IndexedDB/navigator.storage in unit scope.
+## Prior Position (Milestone v1.0 — SHIPPED 2026-06-26)
 
-tsc 0 errors, build OK (no .map in dist), 295/295 tests pass (253 baseline + 42 new:
-8 produce-gate unit, 10 LRU unit, 12 storage-seam guard, 7 loader DI, 3 UI RTL, plus
-registry/injection additions), hygiene gate green.
-Last activity: 2026-06-24 -- Phase 7 (Storage & Cost Guardrails) completed on branch
-feature/phase-7-storage-cost-guardrails
+v1.0 MVP shipped and archived: 8 phases, 42/42 active requirements satisfied, 378 tests
+green, released `v0.1.0`, validated live in-browser. Post-v1.0 the **delegated thin-shell**
+pivot landed (now the default for unseeded apps — behavior-free module + per-action
+handlers produced on demand and cached) and quick task **260625-q08** closed gap G1 (the
+`registryKey` cache-key contract that folds kind+prompt for the shipped surface).
 
-Progress: [█████████░] 88% (7 of 8 phases)
+Known limits carried into v1.1 (the v1.1 work addresses these):
+- Network-dependent apps (Weather/Currency) can't `fetch` in the sandboxed handler scope →
+  Phase 12.
+- Produced delegated reducers can have state-machine quirks → Phase 11.
+- The bare `SHA-256(type)` collision risk is latent until widgets activate → Phases 10 + 13.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 1
-- Average duration: 7 min
-- Total execution time: 0.1 hours
+- Total plans completed (v1.1): 0
+- Average duration: —
+- Total execution time: —
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 01 | 1/4 | 7 min | 7 min |
+| Phase 09 | 0/TBD | — | — |
 
 **Recent Trend:**
 
-- Last 5 plans: 7 min
+- Last 5 plans: —
 - Trend: —
 
 *Updated after each plan completion*
@@ -102,13 +83,12 @@ Progress: [█████████░] 88% (7 of 8 phases)
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap]: Vertical-MVP structure — each phase ships an end-to-end working slice; core value is met at Phase 3 (cache-miss generation).
-- [Roadmap]: Devtools hygiene (HYGIENE-01..05) and CSP/source-maps-off (SEC-04) are owned by Phase 1 but enforced as cross-cutting acceptance constraints on every later phase.
-- [Roadmap]: Static loop (Phase 2) precedes live generation (Phase 3) to de-risk `new Function` + classic-Babel + `createRoot` before adding model nondeterminism.
-- [Plan 01-01]: @babel/standalone@^7.26 pinned as runtime dep (not devDep); v7 keeps classic-runtime default that Phase 2 depends on.
-- [Plan 01-01]: jsdom is explicit devDep required by Vitest 4 (dropped auto-install); set as environment:jsdom in vite.config.ts test block.
-- [Plan 01-01]: navigator.storage.persist() guarded with typeof check — jsdom lacks navigator.storage; guard required for tests.
-- [Plan 01-01]: sourcemap:false in vite.config.ts is the master devtools-hygiene switch; must never be toggled true in CI.
+- [Roadmap v1.1]: Phase order follows the research dependency-driven build order — C (storefront) → D-typing/key-audit → B (reliability) → A (network data) → D-activation. Mapped to Phases 9 → 10 → 11 → 12 → 13.
+- [Roadmap v1.1]: HARD ordering constraint — RELY (Phase 11) must precede DATA (Phase 12) so the merge step already validates produced state before live network-derived data flows through it.
+- [Roadmap v1.1]: HARD ordering constraint — WIDGET typing/key-audit (Phase 10) must precede WIDGET activation (Phase 13) so activated widgets land on real typed records + audited symmetric cache keys.
+- [Roadmap v1.1]: Phase 13 (widget activation) sequenced after Phase 12 (soft constraint) because both touch the delegated render path (`delegated.tsx`/`producer.ts`); serializing avoids merge churn and compounds the prompt edits.
+- [Roadmap v1.1]: All v1.0 cross-cutting constraints (HYGIENE-01..05, single Anthropic egress, sourcemaps-off, IoC/DI, TDD with real captured-Haiku fixtures) are acceptance constraints on every v1.1 phase — not separate phases.
+- [Roadmap v1.0]: Devtools hygiene (HYGIENE-01..05) and CSP/source-maps-off (SEC-04) enforced as cross-cutting acceptance constraints on every phase.
 
 ### Pending Todos
 
@@ -120,10 +100,16 @@ None yet.
 
 [Issues that affect future work]
 
-- [Phase 4 — RESOLVED]: Static widgets only (declared via `@widget`); no dynamic/undeclared widgets. `useWidget` is fully synchronous (a pure `Map.get`). Decided + implemented in Phase 4.
-- [Phase 7 — RESOLVED]: The cost soft-cap hooks the PRODUCE PATH (loader, immediately before `produceComponent`), not the transport wrapper. Rationale: the requirement caps cache MISSES specifically, and a single hook at the produce call sidesteps having to distinguish app vs widget vs tweak traffic inside the shared `createResilientTransport`. The injected `Clock` (`createStubClock`) drove the window/recovery tests with zero real waits as planned.
-- [Phase 7 — RESOLVED]: Threshold decided — N=10 produce misses per 5-minute sliding window (named, configurable constants in `src/host/produceGate.ts`).
-- [Phase 8 — RESOLVED]: Handler denylist decided and implemented as `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage, sessionStorage, indexedDB, window, document]`, shadowed to `undefined` in the handler's `new Function` parameter list, plus a hostile `require` (throws) and no key in scope. It is intentionally a TARGETED denylist (handlers need local compute) — NOT the full app/widget lockdown, and NOT general sandboxing (HARD-01 iframe deferred to v2). `runHandler` reuses `Services.produceGate.tryAcquire()` on a produce miss and writes `useCount:0`/`updatedAt:Date.now()`, consistent with the apps path; produced handlers participate in `evictUnderPressure` (which already sweeps `handlers`) for free.
+- [Phase 12 — RESEARCH FLAG]: The network-data path is the highest-judgment phase. The broker design, the manifest shape, the param-validation/URL-build contract, the broker throttle, and the mount-`load`-action pattern warrant a focused design pass during planning — though the core decision (host-brokered keyless allowlist: Open-Meteo + geocoding + Frankfurter) is already settled and CORS-verified live.
+- [Phase 12 — GAP]: Live keyless-CORS holds only verified via `curl`, not the real browser. Add a documented manual browser smoke-check per allowlisted source during Phase 12, plus an integration test parsing a real-shape response.
+- [Phase 13 — RESEARCH FLAG / regression risk]: Highest regression risk. The "which scope composes widgets" decision and extending the delegated instantiation to inject a pre-warmed `useWidget` map need an explicit design step + an end-to-end `@widget` test plan before touching the load-bearing runtime. The dormant widget pre-warm/instantiate/isolate path goes live on real model output for the first time.
+- [Phase 11 — CONCERN]: Reliability paradox — over-constraining the prompt or over-strict validation makes the small model fail MORE often. Ship merge-step validate-and-keep-prior first and measure produce-success against real-Haiku fixtures before adding any runtime self-heal round-trip.
+
+### Resolved (v1.0)
+
+- [Phase 4 — RESOLVED]: Static widgets only (declared via `@widget`); `useWidget` is fully synchronous (a pure `Map.get`).
+- [Phase 7 — RESOLVED]: Cost soft-cap hooks the produce path (loader, immediately before `produceComponent`); N=10 produce misses per 5-minute sliding window.
+- [Phase 8 — RESOLVED]: Handler denylist = `[fetch, XMLHttpRequest, localStorage, sessionStorage, indexedDB, window, document]` shadowed to `undefined`, plus a hostile `require`. A targeted denylist (handlers need local compute), NOT general sandboxing (HARD-01 iframe deferred). This is the seam Phase 12's `fetchData` broker plugs into.
 
 ### Quick Tasks Completed
 
@@ -131,36 +117,25 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260625-q08 | Fix G1 cacheKey contract (fold kind+prompt) + reconcile blueprint doc | 2026-06-25 | 0f9a7d4 | [260625-q08-cachekey-contract-doc-reconcile](./quick/260625-q08-cachekey-contract-doc-reconcile/) |
 
-Last activity: 2026-06-25 — Completed quick task 260625-q08: G1 cacheKey contract fix (`registryKey` folds kind+prompt) + blueprint-doc reconcile. 378 tests, tsc 0, build clean.
+Last activity: 2026-06-26 — v1.1 roadmap created (Phases 9–13).
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close:
+Items acknowledged and carried forward:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Security | `<iframe sandbox>` isolation of generated code (HARD-01) — v1 mount seam designed to swap to it | Deferred to v2 | Requirements |
-| Polish | Implicit "popular on the platform" storefront row from `useCount` (POP-01) | Deferred to v2 | Requirements |
-| Verification (UAT) | Phase 01 human-UAT — F12 devtools sweep confirming no authored surface narrates the on-demand mechanic | Acknowledged non-blocking | v1.0 close |
-| Verification (UAT) | Phase 01 human-UAT — theme-persist-across-reload re-confirm (partially verified live) | Acknowledged non-blocking | v1.0 close |
+| Security | `<iframe sandbox>` isolation of generated code (HARD-01) + SEC-01/02/03 — the DATA-* broker sits behind the same seam so the iframe move stays contained | Deferred beyond v1.1 | Requirements |
+| Refactor | G2 unified `Intent` contract — internal refactor, no user-facing value | Deferred (unless it blocks v1.1) | Requirements |
+| Polish | POP-01 cross-session/cross-device popularity — would need a backend | Deferred (out of client-only model) | Requirements |
+| Verification (UAT) | Phase 01 human-UAT — F12 devtools sweep + theme-persist re-confirm | Acknowledged non-blocking | v1.0 close |
 
 ## Session Continuity
 
-Last session: 2026-06-26T01:12:38.436Z
-Stopped at: context exhaustion at 75% (2026-06-26)
-MERGED to develop** (merge 1a274b6, pushed; feature branch + worktree deleted). Unseeded
-apps now produce BEHAVIOR-FREE "delegated" modules (markup-only view + state SSOT +
-actionSpec) mounted through the permanent DelegatedShell, with per-action behavior
-produced on demand via runHandler and cached (event-delegation). Handlers are TypeScript
-with a require-purity guard; extractCode fixed for modules; produced views must inline-style
-their layout (no Tailwind/stylesheet) and fit their app type. Seeds stay monolithic; a
-graceful fallback mounts non-module payloads as monoliths. tsc 0, 368 tests, build clean
-(no source maps), hygiene green. Validated live in the browser (Calculator computes + caches;
-Budget renders type-appropriate + polished). See memory: [[delegated-on-demand-architecture]],
-[[verify-ui-visually]]. Known limits: network-dependent apps can't fetch in the sandboxed
-handler scope; generated reducers can have state-machine quirks.
+Last session: 2026-06-26T04:10:00.000Z
+Stopped at: v1.1 roadmap created — Phases 9–13 written, 12/12 requirements mapped, REQUIREMENTS.md traceability filled, STATE.md set to Phase 9 ready.
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan the first v1.1 phase: `/gsd-plan-phase 9` (Richer Storefront — STORE-01, STORE-02).

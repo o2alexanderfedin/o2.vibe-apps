@@ -11,7 +11,9 @@ Requirements continue the v1.0 REQ-ID families. v1.0 requirements (SHELL/LOOP/GE
 
 ### DATA — Sanctioned network-data path
 
-> Network apps (Weather, Currency) fetch **real** data through a host-brokered, allowlisted path. Raw `fetch` stays banned in generated scope; the Anthropic key never enters app scope. (Research: `ARCHITECTURE.md`, `PITFALLS-v1.1.md` — the load-bearing security item.)
+> Network apps (Weather, Currency) fetch **real** data through a host-brokered, allowlisted path. Raw `fetch` stays banned in generated scope. (Research: `ARCHITECTURE.md`, `PITFALLS-v1.1.md`.)
+>
+> **Scope note (user direction, 2026-06-26):** v1.1 does **not** gate on Anthropic-key-exfiltration hardening — the user owns the key-handling story and will apply separate ideas *after* this milestone. Keep the host-brokered keyless allowlist (it's required for CORS and keeps the path simple + hygiene-safe), but Phase 12 should treat the allowlist as a **feature/CORS necessity, not a security gate** — do not gold-plate key-exfil defenses or block on that threat model.
 
 - [ ] **DATA-01**: A host-brokered `fetchData(sourceId, params)` is injected into the handler/delegated scope (a bound closure, like `runHandler`); generated code calls it instead of `fetch`, and the **host** — not generated code — builds the request URL from a curated source manifest. Raw `fetch`/`XMLHttpRequest` stay shadowed to `undefined` in the generated scope.
 - [ ] **DATA-02**: Data sources are a curated allowlist of **keyless, CORS-open, read-only** origins (Open-Meteo + Open-Meteo geocoding + Frankfurter); CSP `connect-src` is widened to exactly those origins (never `*`), enforced and asserted in `csp.test.ts`. A `sourceId` not on the allowlist is rejected by the broker.
@@ -61,5 +63,18 @@ Requirements continue the v1.0 REQ-ID families. v1.0 requirements (SHELL/LOOP/GE
 ## Traceability
 
 | REQ-ID | Phase | Status |
-|--------|-------|--------|
-| _(populated by the roadmapper)_ | | |
+|--------|----------------------------------------|---------|
+| STORE-01 | Phase 9 — Richer Storefront | Pending |
+| STORE-02 | Phase 9 — Richer Storefront | Pending |
+| WIDGET-07 | Phase 10 — Widget Schema & Key Correctness | Pending |
+| WIDGET-08 | Phase 10 — Widget Schema & Key Correctness | Pending |
+| RELY-01 | Phase 11 — Reliability Hardening | Pending |
+| RELY-02 | Phase 11 — Reliability Hardening | Pending |
+| RELY-03 | Phase 11 — Reliability Hardening | Pending |
+| DATA-01 | Phase 12 — Sanctioned Network-Data Path | Pending |
+| DATA-02 | Phase 12 — Sanctioned Network-Data Path | Pending |
+| DATA-03 | Phase 12 — Sanctioned Network-Data Path | Pending |
+| DATA-04 | Phase 12 — Sanctioned Network-Data Path | Pending |
+| WIDGET-06 | Phase 13 — Activate Widget Composition | Pending |
+
+**Coverage:** 12/12 v1.1 requirements mapped to exactly one phase. No orphans, no duplicates.
