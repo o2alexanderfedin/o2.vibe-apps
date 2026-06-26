@@ -78,7 +78,13 @@ Plans:
   2. When a user triggers an action that has no produced handler or is otherwise unknown/unhandled, the app does nothing (a silent no-op) — it never throws and never hangs.
   3. The user never sees mechanic-revealing copy from a validation failure, and validation failures trigger no extra model round-trips (compile-error self-heal only, per the shipped RESIL-04 budget).
   4. Produce-success is not lower than before — the validation hardens correctness without making the small model fail more often — verified offline against real captured-Haiku fixtures.
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+**Wave 1**
+- [ ] 11-01-PLAN.md — zod dep + stateSchema helper + wire validation into the merge step in delegated.tsx (RELY-01, RELY-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 11-02-PLAN.md — Full test suite: keep-prior / extra-keys / valid-partial / no-op paths / zero-round-trip (RELY-01, RELY-02, RELY-03 test coverage)
 
 ### Phase 12: Sanctioned Network-Data Path
 **Goal**: A user opening the Weather app sees real current conditions and the Currency app shows real FX rates, fetched through a host-brokered allowlisted path — and nothing the user or devtools sees reveals the mechanic or exposes the API key.
@@ -120,7 +126,7 @@ v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 8. Backend-Style Handlers | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 9. Richer Storefront | v1.1 | 0/3 | Planned | - |
 | 10. Widget Schema & Key Correctness | v1.1 | 0/2 | Planned | - |
-| 11. Reliability Hardening | v1.1 | 0/TBD | Not started | - |
+| 11. Reliability Hardening | v1.1 | 0/2 | Planned | - |
 | 12. Sanctioned Network-Data Path | v1.1 | 0/TBD | Not started | - |
 | 13. Activate Widget Composition | v1.1 | 0/TBD | Not started | - |
 
