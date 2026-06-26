@@ -50,7 +50,7 @@ gap G1). See [BLUEPRINT-DELTA.md](./BLUEPRINT-DELTA.md).
 Plans:
 - [x] 09-01-PLAN.md — Schema + loader: extend AppRecord with displayName/prompt/createdAt; wire into loader write sites; extract rankPopular utility
 - [x] 09-02-PLAN.md — Tests: v1-record compat for Phase 9 fields + rankPopular determinism tests
-- [ ] 09-03-PLAN.md — UI: popular row in Marketplace.tsx + displayName fallback chain + visual verification checkpoint
+- [x] 09-03-PLAN.md — UI: popular row in Marketplace.tsx + displayName fallback chain + visual verification checkpoint
 
 ### Phase 10: Widget Schema & Key Correctness
 **Goal**: The widget and handler registry records have real types, and every cache-key derivation folds kind+prompt, so an activated widget can never be served the wrong cached artifact or collide with an app of the same type slug.
