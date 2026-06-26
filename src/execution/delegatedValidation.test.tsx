@@ -145,7 +145,7 @@ describe("DelegatedShell — merge step keeps prior state on type mismatch", () 
       Promise.resolve({ data: { state: { display: 42 } } });
 
     const App = makeDelegatedComponent("test-app", mod, badHandler);
-    render(createElement(App));
+    const { container } = render(createElement(App));
 
     const display = screen.getByTestId("display");
     expect(display).toHaveTextContent("0"); // initial
@@ -153,9 +153,10 @@ describe("DelegatedShell — merge step keeps prior state on type mismatch", () 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "bad" }));
 
-    // State must be KEPT (display stays "0"); schema validation rejected the merge.
-    // Wait a tick for async handler to resolve.
-    await new Promise((r) => setTimeout(r, 50));
+    // Wait for the action to settle (busy marker clears once the handler
+    // resolves and the finally block runs). State must be KEPT (display stays
+    // "0") — schema validation rejected the merge.
+    await waitFor(() => expect(container.querySelector("[data-busy]")).toBeNull());
     expect(display).toHaveTextContent("0");
   });
 
@@ -203,14 +204,14 @@ describe("DelegatedShell — merge step keeps prior state on type mismatch", () 
       Promise.resolve({ data: {} });
 
     const App = makeDelegatedComponent("test-app", mod, noStateHandler);
-    render(createElement(App));
+    const { container } = render(createElement(App));
 
     const display = screen.getByTestId("display");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "1" }));
 
-    await new Promise((r) => setTimeout(r, 50));
-    // State stays at initial "0"
+    // Wait for the action to settle, then assert the state stays at initial "0".
+    await waitFor(() => expect(container.querySelector("[data-busy]")).toBeNull());
     expect(display).toHaveTextContent("0");
   });
 
@@ -221,13 +222,14 @@ describe("DelegatedShell — merge step keeps prior state on type mismatch", () 
       Promise.resolve({ error: "Handler failed" });
 
     const App = makeDelegatedComponent("test-app", mod, errorHandler);
-    render(createElement(App));
+    const { container } = render(createElement(App));
 
     const display = screen.getByTestId("display");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "1" }));
 
-    await new Promise((r) => setTimeout(r, 50));
+    // Wait for the action to settle, then assert the state is unchanged.
+    await waitFor(() => expect(container.querySelector("[data-busy]")).toBeNull());
     expect(display).toHaveTextContent("0");
   });
 
@@ -238,16 +240,17 @@ describe("DelegatedShell — merge step keeps prior state on type mismatch", () 
       Promise.reject(new Error("Handler threw"));
 
     const App = makeDelegatedComponent("test-app", mod, throwingHandler);
-    render(createElement(App));
+    const { container } = render(createElement(App));
 
     const display = screen.getByTestId("display");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "1" }));
 
-    await new Promise((r) => setTimeout(r, 100));
-    // No crash — button re-enables and state stays
+    // The outer catch swallows the throw; the finally clears the busy marker.
+    await waitFor(() => expect(container.querySelector("[data-busy]")).toBeNull());
+    // No crash — button re-enables and state stays.
     expect(display).toHaveTextContent("0");
-    // Button should be re-enabled (not stuck in busy state)
+    // Button should be re-enabled (not stuck in busy state).
     const btn = screen.getByRole("button", { name: "1" });
     expect(btn).toBeTruthy();
   });
