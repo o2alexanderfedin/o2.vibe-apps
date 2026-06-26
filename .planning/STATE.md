@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
+status: Awaiting next milestone
 stopped_at: context exhaustion at 75% (2026-06-26)
-last_updated: "2026-06-26T01:12:38.443Z"
-last_activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed on branch
+last_updated: "2026-06-26T02:33:58.965Z"
+last_activity: 2026-06-26 — Milestone v1.0 completed and archived
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 4
   completed_plans: 4
-  percent: 13
+  percent: 100
 ---
 
 # Project State
@@ -21,58 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-24)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Milestone v1.0 — FEATURE-COMPLETE. All 8 phases done; 45/45 requirements implemented.
+**Current focus:** v1.0 MVP shipped + archived (2026-06-26). Planning the next milestone — candidate scope in ROADMAP.md (sanctioned network-data path, widget/handler activation, deferred safety HARD-01/SEC, POP-01). Run `/gsd-new-milestone`.
 
 ## Current Position
 
-Phase: 08 (Backend-Style Handlers) — COMPLETE
-Status: Phases 1–8 complete — milestone v1.0 feature-complete. Phase 8 layered
-transparent backend-style data handlers (HANDLER-01..03) as a fully additive
-capability that never reaches the network or the API key.
-
-HANDLER-01..03 — Backend-Style Handlers: `runHandler(intent, input, services)`
-(`src/execution/handler.ts`) is resolve-or-produce-then-exec. It hashes the intent
-into an opaque key (`cacheKey("handler\n" + intent)`), reads the `handlers` store;
-a HIT reuses the stored transpiledJS (no model call) and bumps `useCount`/refreshes
-`updatedAt` (consistent with the loader's apps path, RESIL-06). A MISS calls
-`services.produceGate.tryAcquire()` (the SAME sliding-window cost cap as apps,
-RESIL-05) BEFORE producing via the SHARED `produceComponent` machinery on a new
-`kind:"handler"` path — handler prompt (hygiene-safe, asks for a plain
-`handler(input)` returning `{data}`/`{error}`) + `transpileHandler` (TS-strip only,
-NO react preset / NO JSX) — then dual-caches source + transpiledJS with
-`useCount:0`/`updatedAt:now`. So produced handlers participate in LRU eviction
-for free (`evictUnderPressure` already sweeps `handlers`).
-
-HANDLER-03 constrained scope: the handler runs via `new Function(<denied…>, "input",
-body)` with the denylist `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage,
-sessionStorage, indexedDB, window, document]` SHADOWED TO `undefined` in the
-parameter list (each reference binds the undefined parameter, never the real
-global), a HOSTILE `require` (throws on any specifier), and NO key parameter in
-scope. Pure language built-ins (Math/JSON/Date/…) stay reachable for local compute.
-Any throw (produce/compile/throttle/exec) maps to a neutral `{ error: "This
-operation could not be completed." }` — the mechanic is never revealed.
-
-Wiring: `runHandler` is injected into the produced-app `new Function` scope
-alongside `useWidget` (`instantiate.ts` adds a `runHandler` param; the loader's
-`instantiateWithWidgets` binds it to the app's services as a 2-arg
-`runHandler(intent, input)`). Apps never see registry/transport/key. Apps that
-never call it pay nothing.
-
-DI: every dep injected via `Services` (transport, registry, getApiKey,
-produceGate). Tests substitute a canned transport (handler source, no network), an
-in-memory registry (no IndexedDB), a fixed key getter (no localStorage), and a real
-produce gate + stub clock for the cost cap (no real waits). Real captured Haiku
-handler fixtures (`src/test/fixtures/handler-{filter-tasks,summarize-list}.{raw,code}.txt`)
-prove the path against real output: filter-tasks → `{data}`; summarize-list (which
-reached for an external module) → blocked → `{error}`.
-
-tsc 0 errors, build OK (no .map in dist), 333/333 tests pass (295 baseline + 38 new:
-handler DI/unit + constrained-scope denylist + cost-gate + real-fixture, transpileHandler,
-producer handler-kind, and the produced-app wiring integration), hygiene gate green.
-Last activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed on branch
-feature/phase-8-backend-handlers; milestone v1.0 feature-complete.
-
-Progress: [██████████] 100% (8 of 8 phases)
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-26 — Milestone v1.0 completed and archived
 
 ## Prior Position (Phase 7)
 
@@ -186,6 +142,8 @@ Items acknowledged and carried forward from previous milestone close:
 |----------|------|--------|-------------|
 | Security | `<iframe sandbox>` isolation of generated code (HARD-01) — v1 mount seam designed to swap to it | Deferred to v2 | Requirements |
 | Polish | Implicit "popular on the platform" storefront row from `useCount` (POP-01) | Deferred to v2 | Requirements |
+| Verification (UAT) | Phase 01 human-UAT — F12 devtools sweep confirming no authored surface narrates the on-demand mechanic | Acknowledged non-blocking | v1.0 close |
+| Verification (UAT) | Phase 01 human-UAT — theme-persist-across-reload re-confirm (partially verified live) | Acknowledged non-blocking | v1.0 close |
 
 ## Session Continuity
 
@@ -203,3 +161,7 @@ Budget renders type-appropriate + polished). See memory: [[delegated-on-demand-a
 [[verify-ui-visually]]. Known limits: network-dependent apps can't fetch in the sandboxed
 handler scope; generated reducers can have state-machine quirks.
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
