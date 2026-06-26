@@ -43,7 +43,7 @@ All 5 phases complete and merged to `develop`; 12/12 requirements satisfied; 552
 
 ### v2.0 Vibe OS (Phases 14–18)
 
-- [ ] **Phase 14: Theme Foundation** — The CSS-variable theme contract and FOUC-safe persistence are established; the alias bridge keeps pre-v2 cached apps rendering. Dependency root for all v2.0 phases.
+- [x] **Phase 14: Theme Foundation** — The CSS-variable theme contract and FOUC-safe persistence are established; the alias bridge keeps pre-v2 cached apps rendering. Dependency root for all v2.0 phases. (completed 2026-06-26)
 - [ ] **Phase 15: Window Manager** — Apps open as draggable glass windows with z-order, focus, minimize, close, and no React root leaks.
 - [ ] **Phase 16: Desktop Shell** — The desktop surface, animated wallpaper, dock (with running indicators and the launcher icon), and menu bar (wordmark, active-app name, clock) replace the flat storefront as the root UI.
 - [ ] **Phase 17: Search / Launcher Panel** — A dock-launched panel lets the user describe an app or pick a pre-installed one; results open as windows on the desktop via the real produce loop.
@@ -149,7 +149,13 @@ Plans:
   3. An app that was cached before v2.0 (referencing `--color-surface`, `--color-text`, `--color-accent`) still renders and re-skins correctly after the new theme variables land, because the `:root` alias bridge forwards those old names to the new contract.
   4. The active theme name is persisted in both `localStorage` (for the FOUC script) and the new IDB `settings` store (DB version bumped to 3, additive upgrade), so the choice survives tab close, hard reload, and browser restart.
   5. The FOUC script SHA-256 hash in `csp.test.ts` is updated in the same commit as the script change, and all 552+ existing tests stay green (theme foundation is entirely additive).
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [x] 14-01-PLAN.md — Additive registry DB v2→v3 settings store (durable theme-name mirror foundation)
+- [x] 14-02-PLAN.md — Alias bridge CSS (pre-v2 apps keep colors) + osTheme storage key
+- [x] 14-03-PLAN.md — VibeThemeProvider + VIBE_THEMES contract on document root, dual persistence via injected settings seam
+- [x] 14-04-PLAN.md — FOUC script extension + CSP sha256 hash sync (atomic, no-flash first paint)
+- [x] 14-05-PLAN.md — ThemeSelector 4-pill switcher in AppBar + switch-path test (temporary home)
 **Research pitfalls defended**: Pitfall 5 (CSS vars on documentElement, not React context), Pitfall 6 (FOUC — localStorage sync read in index.html script), Pitfall 7 (theme transition jank — @property or opacity crossfade), Pitfall 11 (new surfaces extend hygiene gate)
 
 ### Phase 15: Window Manager
@@ -225,7 +231,7 @@ v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 
 | 11. Reliability Hardening | v1.1 | 2/2 | Complete | 2026-06-26 |
 | 12. Sanctioned Network-Data Path | v1.1 | 5/5 | Complete | 2026-06-26 |
 | 13. Activate Widget Composition | v1.1 | TBD | Complete | 2026-06-26 |
-| 14. Theme Foundation | v2.0 | 0/TBD | Not started | - |
+| 14. Theme Foundation | v2.0 | 5/5 | Complete   | 2026-06-26 |
 | 15. Window Manager | v2.0 | 0/TBD | Not started | - |
 | 16. Desktop Shell | v2.0 | 0/TBD | Not started | - |
 | 17. Search / Launcher Panel | v2.0 | 0/TBD | Not started | - |

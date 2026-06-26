@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Vibe OS
-status: planning
-last_updated: "2026-06-26T19:30:02.177Z"
-last_activity: 2026-06-26
+status: Phase 14 COMPLETE — Wave 4 landed: ThemeSelector 4-pill switcher (Aurora/Aero/Aqua/Noir) mounted in AppBar, wired to useVibeTheme().setTheme; THEME-01/02 satisfied; all 5 plans done
+stopped_at: Completed Phase 14 Plan 05 (ThemeSelector 4-pill switcher + AppBar mount + switch-path test). Commits 6b53bf5 (component+styles+test) and bfce87b (AppBar mount); switch-path test clicks Noir and asserts documentElement --text becomes #f5eeff (live re-skin, THEME-02); ThemeSelector.test.tsx (3) + src/ui (59) + hygiene (2) green; tsc clean. Phase 14 — all 5 plans complete.
+last_updated: "2026-06-26T22:30:00.000Z"
+last_activity: 2026-06-26 — Completed Phase 14 Plan 05 (ThemeSelector switcher + AppBar mount); Phase 14 COMPLETE
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 10
+  completed_phases: 6
+  total_plans: 18
+  completed_plans: 18
+  percent: 100
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation. Roadmap created; ready for `/gsd-plan-phase 14`.
+**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation COMPLETE (all 5 plans). ThemeSelector switcher live in AppBar; named-theme capability visible and interactive. Ready for Phase 15 (Window Manager).
 
 ## Current Position
 
-Phase: 14 — Theme Foundation (Not started)
-Plan: —
-Status: Roadmap created; awaiting first phase plan
-Last activity: 2026-06-26 — v2.0 Vibe OS roadmap created (Phases 14–18)
+Phase: 14 — Theme Foundation (COMPLETE — all 5 plans)
+Plan: 14-05 complete (ThemeSelector 4-pill switcher + AppBar mount + switch-path test)
+Status: Phase 14 COMPLETE — Wave 4 landed: ThemeSelector mounted in AppBar, wired to useVibeTheme().setTheme; THEME-01/02 satisfied
+Last activity: 2026-06-26 — Completed Phase 14 Plan 05 (ThemeSelector switcher + AppBar mount); Phase 14 COMPLETE
 
 ### v2.0 Phase Map
 
@@ -55,7 +56,7 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 
 **Velocity:**
 
-- Total plans completed (v2.0): 0
+- Total plans completed (v2.0): 5 (14-01, 14-02, 14-03, 14-04, 14-05)
 - Average duration: —
 - Total execution time: —
 
@@ -63,12 +64,18 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 14 | 0/TBD | — | — |
+| Phase 14 | 5/5 | — | — |
+
+| Plan | Duration | Tasks | Files | Completed |
+|------|----------|-------|-------|-----------|
+| 14-03 | ~13min | 2 (TDD) | 6 | 2026-06-26 |
+| 14-04 | ~6min | 1 (atomic) | 1 | 2026-06-26 |
+| 14-05 | ~5min | 2 (TDD) | 4 | 2026-06-26 |
 
 **Recent Trend:**
 
-- Last 5 plans: —
-- Trend: —
+- Last 5 plans: 14-01, 14-02, 14-03, 14-04, 14-05
+- Trend: Phase 14 Theme Foundation COMPLETE (5 of 5 plans done)
 
 *Updated after each plan completion*
 
@@ -86,6 +93,14 @@ Recent decisions affecting current work:
 - [Roadmap v2.0]: Zero new npm dependencies — hand-roll useDrag (setPointerCapture + rAF + state-on-pointerup), VibeThemeProvider (documentElement.style.setProperty), and all windowing/dock/menu-bar components. Research verdict: react-draggable has React 19 findDOMNode breakage; framer-motion is 674KB–4.8MB.
 - [Roadmap v2.0]: Theme vars applied to document.documentElement (not React context) so CSS inheritance reaches all separately-createRoot'd generated app subtrees — this is the central theming mechanism.
 - [Roadmap v2.0]: FOUC prevention via synchronous localStorage read in index.html script before React mounts; IDB settings store (v3) is the authoritative persistence, localStorage is the FOUC guard.
+- [14-03]: Settings store reaches IndexedDB via openRegistry() directly rather than widening the Registry StoreName union (apps|widgets|handlers) — the settings store sits outside the cache-eviction surface.
+- [14-03]: setTheme fires settingsStore.write(name) fire-and-forget (no await) — the UI switch + localStorage write are synchronous and authoritative; the IDB mirror is best-effort.
+- [14-03]: VibeThemeProvider is nested INSIDE the existing light/dark ThemeProvider (not replacing it) so the named-theme CSS-variable contract layers on top without disturbing the 552-test data-theme mechanism.
+- [14-04]: The inline FOUC script duplicates the VIBE_THEMES values verbatim from VibeThemeProvider.tsx rather than importing them — the script must run before any module load, so the runtime provider and first paint stay in sync by convention (copied values), not by shared import.
+- [14-04]: FOUC script edit + CSP sha256 hash regeneration land in ONE atomic commit (963c782) — csp.test.ts recomputes the hash from the live file, so any desync fails CI; the no-flash guarantee stays verifiable.
+- [14-05]: ThemeSelector holds NO local state — the active pill is computed from useVibeTheme().theme each render, so it stays in sync with any theme change source (FOUC first paint, programmatic setTheme, future Phase 16 menu) with no extra wiring.
+- [14-05]: ThemeSelector mounted as the FIRST child of app-bar__controls; the existing useTheme/cycleTheme light/dark/system toggle is left fully intact (purely additive) so the 552 tests depending on the old toggle stay green — temporary home, Phase 16 relocates it to the menu bar.
+- [14-05]: Switch-path test drives a real click through act() and asserts noir's --text (#f5eeff) lands on documentElement — proving the selector → setTheme → applyVibeTheme live re-skin chain end to end (THEME-02), not a mocked setter.
 - [Roadmap v2.0]: All v1.0/v1.1 cross-cutting constraints (HYGIENE-01..05, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, TDD with real captured-Haiku fixtures, additive DB migrations) are acceptance constraints on every v2.0 phase — not separate phases.
 
 ### Key Research Flags
@@ -124,10 +139,10 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-06-26
-Stopped at: v2.0 Vibe OS roadmap created. 5 phases defined (14–18), 21/21 requirements mapped, 100% coverage. Files written: ROADMAP.md, STATE.md, REQUIREMENTS.md traceability updated. Ready to begin Phase 14.
-Resume with: `/gsd-plan-phase 14`
+Last session: 2026-06-26T22:30:00.000Z
+Stopped at: Completed Phase 14 Plan 05 (ThemeSelector 4-pill switcher + AppBar mount + switch-path test). Commits 6b53bf5 (component+styles+test) and bfce87b (AppBar mount); switch-path test clicks Noir and asserts documentElement --text becomes #f5eeff (THEME-02 live re-skin); ThemeSelector.test.tsx (3) + src/ui (59) + hygiene (2) green; tsc clean. Phase 14 — all 5 plans complete.
+Resume with: begin Phase 15 — Window Manager (WIN-01..05). Requires Phase 14 (theme CSS-var contract is now live).
 
 ## Operator Next Steps
 
-- Plan the first v2.0 phase: `/gsd-plan-phase 14` (Theme Foundation — THEME-01..05).
+- Phase 14 COMPLETE. Next: Phase 15 — Window Manager (WIN-01..05). Hand-roll useWindowManager (pointer-capture + rAF + root-lifecycle) and WindowFrame chrome that references the now-live theme CSS vars.

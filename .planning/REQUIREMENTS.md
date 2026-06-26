@@ -26,10 +26,10 @@ Requirements continue the v1.0/v1.1 REQ-ID families. All v1.0/v1.1 cross-cutting
 
 > A named-theme registry of CSS-variable sets, switchable live, persisted, applied to host **and** apps. (Research: `STACK.md` extend ThemeProvider, zero deps; `PITFALLS.md` documentElement/FOUC/alias-bridge.)
 
-- [ ] **THEME-01**: Four built-in themes (**Aurora / Aero / Aqua / Noir**) are selectable from an always-visible switcher in the menu bar.
-- [ ] **THEME-02**: Switching the theme **re-skins host chrome AND every open app window live** — no reload, no remount.
-- [ ] **THEME-03**: The active theme **persists** across reloads and is restored on first paint with **no flash** of the wrong theme (FOUC-safe).
-- [ ] **THEME-04**: Themes apply as CSS custom properties on the **document root**, so the styling reaches every app window's independently-mounted subtree.
+- [x] **THEME-01**: Four built-in themes (**Aurora / Aero / Aqua / Noir**) are selectable from an always-visible switcher in the menu bar.
+- [x] **THEME-02**: Switching the theme **re-skins host chrome AND every open app window live** — no reload, no remount.
+- [x] **THEME-03**: The active theme **persists** across reloads and is restored on first paint with **no flash** of the wrong theme (FOUC-safe).
+- [x] **THEME-04**: Themes apply as CSS custom properties on the **document root**, so the styling reaches every app window's independently-mounted subtree.
 - [ ] **THEME-05**: A backward-compat **alias bridge** maps prior style variables to the new theme contract so apps cached **before v2.0** still render correctly after the new variables land.
 
 ### CREATE — Search / launcher panel (find or describe → desktop)
@@ -76,10 +76,10 @@ Requirements continue the v1.0/v1.1 REQ-ID families. All v1.0/v1.1 cross-cutting
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| THEME-01 | Phase 14 — Theme Foundation | Pending |
-| THEME-02 | Phase 14 — Theme Foundation | Pending |
-| THEME-03 | Phase 14 — Theme Foundation | Pending |
-| THEME-04 | Phase 14 — Theme Foundation | Pending |
+| THEME-01 | Phase 14 — Theme Foundation | Complete |
+| THEME-02 | Phase 14 — Theme Foundation | Complete |
+| THEME-03 | Phase 14 — Theme Foundation | Complete |
+| THEME-04 | Phase 14 — Theme Foundation | Complete |
 | THEME-05 | Phase 14 — Theme Foundation | Pending |
 | WIN-01 | Phase 15 — Window Manager | Pending |
 | WIN-02 | Phase 15 — Window Manager | Pending |
