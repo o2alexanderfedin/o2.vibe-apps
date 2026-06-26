@@ -131,7 +131,10 @@ describe("useDrag", () => {
   });
 
   it("commits final position to state exactly once on pointerup", () => {
-    const onCommit = vi.fn();
+    const committed: [number, number][] = [];
+    const onCommit = vi.fn((x: number, y: number) => {
+      committed.push([x, y]);
+    });
     vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
     vi.spyOn(Element.prototype, "releasePointerCapture").mockImplementation(() => undefined);
 
@@ -149,13 +152,16 @@ describe("useDrag", () => {
     });
 
     expect(onCommit).toHaveBeenCalledTimes(1);
-    const [x, y] = onCommit.mock.calls[0] as [number, number];
+    const [x, y] = committed[0] as [number, number];
     expect(typeof x).toBe("number");
     expect(typeof y).toBe("number");
   });
 
   it("clamps to viewport edges", () => {
-    const onCommit = vi.fn();
+    const committed: [number, number][] = [];
+    const onCommit = vi.fn((x: number, y: number) => {
+      committed.push([x, y]);
+    });
     vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
     vi.spyOn(Element.prototype, "releasePointerCapture").mockImplementation(() => undefined);
 
@@ -173,14 +179,17 @@ describe("useDrag", () => {
       firePointerEvent(handle, "pointerup", { clientX: 5000, clientY: 5000 });
     });
 
-    const [x, y] = onCommit.mock.calls[0] as [number, number];
+    const [x, y] = committed[0] as [number, number];
     expect(x).toBeGreaterThanOrEqual(0);
     expect(y).toBeGreaterThanOrEqual(0);
     expect(x).toBeLessThanOrEqual(VIEWPORT_WIDTH - ELEMENT_WIDTH);
     expect(y).toBeLessThanOrEqual(VIEWPORT_HEIGHT - ELEMENT_HEIGHT);
 
     // Also verify negative clamping — use a fresh render scoped to its container
-    const onCommit2 = vi.fn();
+    const committed2: [number, number][] = [];
+    const onCommit2 = vi.fn((x2: number, y2: number) => {
+      committed2.push([x2, y2]);
+    });
 
     const { container: container2 } = render(<Harness initialX={200} initialY={200} onCommit={onCommit2} />);
     const handle2 = within(container2).getByTestId("handle");
@@ -195,7 +204,7 @@ describe("useDrag", () => {
       firePointerEvent(handle2, "pointerup", { clientX: -5000, clientY: -5000 });
     });
 
-    const [x2, y2] = onCommit2.mock.calls[0] as [number, number];
+    const [x2, y2] = committed2[0] as [number, number];
     expect(x2).toBeGreaterThanOrEqual(0);
     expect(y2).toBeGreaterThanOrEqual(0);
   });
