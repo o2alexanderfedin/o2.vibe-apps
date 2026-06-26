@@ -112,6 +112,46 @@ body {
   color: var(--color-accent-primary);
 }
 
+/* Inline row of named-theme pills. Temporary AppBar home (Phase 16 restyles
+   and relocates it). Kept minimal; the active pill is visually distinguished. */
+.theme-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.theme-selector__pill {
+  padding: 4px 10px;
+  border: 1px solid var(--bord);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.theme-selector__pill:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-primary);
+}
+
+.theme-selector__pill:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+/* Active pill marks the current theme selection. */
+.theme-selector__pill--active {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-primary);
+  background: var(--color-background-tertiary);
+}
+
 /* ─────────────────────── Storefront grid (UI-SPEC §1) ─────────────────── */
 .storefront-grid {
   display: grid;
