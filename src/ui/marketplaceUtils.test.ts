@@ -9,9 +9,9 @@ describe("rankPopular", () => {
       { cacheKey: "c", useCount: 3, updatedAt: 100 },
     ];
     const ranked = rankPopular(records);
-    expect(ranked[0].cacheKey).toBe("a");
-    expect(ranked[1].cacheKey).toBe("c");
-    expect(ranked[2].cacheKey).toBe("b");
+    expect(ranked[0]?.cacheKey).toBe("a");
+    expect(ranked[1]?.cacheKey).toBe("c");
+    expect(ranked[2]?.cacheKey).toBe("b");
   });
 
   it("breaks useCount tie by updatedAt descending", () => {
@@ -20,7 +20,7 @@ describe("rankPopular", () => {
       { cacheKey: "new", useCount: 3, updatedAt: 500 },
     ];
     const ranked = rankPopular(records);
-    expect(ranked[0].cacheKey).toBe("new");
+    expect(ranked[0]?.cacheKey).toBe("new");
   });
 
   it("breaks updatedAt tie by cacheKey ascending (fully deterministic)", () => {
@@ -29,7 +29,7 @@ describe("rankPopular", () => {
       { cacheKey: "a", useCount: 2, updatedAt: 200 },
     ];
     const ranked = rankPopular(records);
-    expect(ranked[0].cacheKey).toBe("a");
+    expect(ranked[0]?.cacheKey).toBe("a");
   });
 
   it("owns the membership filter — drops records with useCount < 1 (cold-start guard)", () => {
@@ -39,7 +39,7 @@ describe("rankPopular", () => {
     ];
     const result = rankPopular(records);
     expect(result.length).toBe(1);
-    expect(result[0].cacheKey).toBe("y");
+    expect(result[0]?.cacheKey).toBe("y");
 
     // All-zero input returns empty array (cold-start: nothing shown until first open)
     const allCold = [{ cacheKey: "x", useCount: 0, updatedAt: 100 }];
