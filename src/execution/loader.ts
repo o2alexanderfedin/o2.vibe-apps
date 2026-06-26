@@ -34,6 +34,7 @@ import type { Services } from "../services/services";
 import { evictUnderPressure } from "../registry/storagePressure";
 import { logger } from "../lib/logger";
 import { APP_REGISTRY } from "../data/appRegistry";
+import { titleCase } from "../ui/marketplaceUtils";
 
 /** Title-case a type slug for display on storefront cards (Phase 9, STORE-01).
  * Examples: "weather" → "Weather", "my-app" → "My App".
@@ -43,10 +44,7 @@ import { APP_REGISTRY } from "../data/appRegistry";
  * empty after trimming, returns the base title only.
  */
 function deriveDisplayName(type: string, userPrompt?: string): string {
-  const base = type
-    .split(/[-_]/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+  const base = titleCase(type);
   if (userPrompt) {
     const suffix = userPrompt.trim().slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, "").trim();
     return suffix ? `${base} (${suffix})` : base;
