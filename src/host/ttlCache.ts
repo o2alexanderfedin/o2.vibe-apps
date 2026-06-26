@@ -4,7 +4,10 @@
 // the same parameters return immediately without a network round-trip. Each entry
 // stores the raw parsed data plus an expiry timestamp computed from the injected
 // Clock at write time. Reads check the Clock against the expiry; expired entries
-// are deleted on access so the Map does not grow unboundedly.
+// are deleted on access (lazy eviction). Note that keys written but never read
+// again will persist in memory until the cache instance is reclaimed. For the
+// bounded allowlist key sets used by this project that is acceptable; add a
+// max-size eviction policy if the key space becomes unbounded.
 //
 // Clock is injected (DI) — the same pattern used by TokenBucket and backoff —
 // so tests drive time forward via createStubClock without any real timers.
