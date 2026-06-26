@@ -107,7 +107,7 @@ Plans:
 - [x] 12-04-PLAN.md — Seeded Weather + Currency apps: delegated module seeds (initialState/view/actionSpec) + seeded handler sources (weatherHandlers.ts, currencyHandlers.ts) + seeded-handler short-circuit in resolveHandlerJS
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 12-05-PLAN.md — Full test suite: broker unit tests (TTL hit/miss, allowlist rejection, param injection guard, non-2xx, network throw) + handler integration tests (weather/currency seeded handlers with real-shape API fixtures, no-broker fallback, fetch bypass proof)
+- [x] 12-05-PLAN.md — Full test suite: broker unit tests (TTL hit/miss, allowlist rejection, param injection guard, non-2xx, network throw) + handler integration tests (weather/currency seeded handlers with real-shape API fixtures, no-broker fallback, fetch bypass proof)
 
 ### Phase 13: Activate Widget Composition
 **Goal**: A delegated app can declare and render `@widget` sub-widgets as a first-class path — each widget isolated in its own shell, a failing widget never crashing its parent, and the composition depth bounded.
