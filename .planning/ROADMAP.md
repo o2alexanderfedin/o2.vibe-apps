@@ -61,8 +61,10 @@ Plans:
   2. A widget of type `chart` and an app of type `chart` resolve to distinct cache keys (kind is folded in), proven by a test, so they can never collide on the shared slug.
   3. A baseline app and its tweak variant resolve to distinct cache keys (prompt is folded in), and read and write use the same structured `registryKey(kind, type, prompt)` symmetrically — no bare `cacheKey()` survives in any registry path, proven by tests.
   4. The full suite stays green with no regression, the hygiene gate passes, and the build emits no source maps.
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 2 plans
+Plans:
+- [ ] 10-01-PLAN.md — Schema + LRU parity: replace WidgetRecord/HandlerRecord placeholders with explicit interfaces extending LruMeta; add useCount/updatedAt to widget write sites in widgetPrewarm.ts; verify tsc clean
+- [ ] 10-02-PLAN.md — Test migration + audit: migrate loader.test.ts + loaderGuardrails.test.ts from bare cacheKey(type) to registryKey("app", type); add WIDGET-08 collision-distinctness audit describe block to cacheKey.test.ts
 
 ### Phase 11: Reliability Hardening
 **Goal**: Produced delegated apps behave correctly more often — a mis-shaped result never blanks or sticks the app, unknown actions do nothing harmful, and none of this costs extra model round-trips.
@@ -114,7 +116,7 @@ v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 7. Storage & Cost Guardrails | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 8. Backend-Style Handlers | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 9. Richer Storefront | v1.1 | 0/3 | Planned | - |
-| 10. Widget Schema & Key Correctness | v1.1 | 0/TBD | Not started | - |
+| 10. Widget Schema & Key Correctness | v1.1 | 0/2 | Planned | - |
 | 11. Reliability Hardening | v1.1 | 0/TBD | Not started | - |
 | 12. Sanctioned Network-Data Path | v1.1 | 0/TBD | Not started | - |
 | 13. Activate Widget Composition | v1.1 | 0/TBD | Not started | - |
