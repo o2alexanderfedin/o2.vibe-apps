@@ -1,15 +1,37 @@
 # Feature Research
 
-**Domain:** Client-only generative app marketplace (Vibe App Store) — milestone v1.1 "Real & Robust"
-**Researched:** 2026-06-25
-**Confidence:** HIGH (general UX domains are well-established; client-only/devtools-hygiene constraints applied from PROJECT.md)
+**Domain:** Browser OS desktop shell — windowing, theme system, create panel (v2.0 Vibe OS)
+**Milestone:** v2.0 Vibe OS — layered on shipped v1.1
+**Researched:** 2026-06-26
+**Confidence:** HIGH — grounded in `design/VibeOS.dc.html` (complete reference prototype with full interaction logic) and `.planning/PROJECT.md`
 
-> **Scope note.** This file researches the *expected user-facing behavior* of four NEW v1.1 capabilities layered on a shipped v1.0:
-> **A.** Network-data path (Weather/Currency fetch real data) · **B.** Reliability hardening (produced behavior correct more often) · **C.** Richer storefront (persist displayName/prompt + "popular" row) · **D.** Activate widget composition (`@widget` first-class).
+> **Scope note.** This file researches the v2.0 Vibe OS milestone: multi-window manager, themed desktop surface, bottom dock, top menu bar, named-theme system, and visible create panel. The question is "what do users expect, what differentiates, and what should we explicitly not build?" Throughout, "existing features" refers to the shipped v1.1 capabilities (AppShell, produce loop, delegated thin-shell, WidgetShell, ContextualPrompt, ThemeProvider, resilience).
 >
-> Throughout, "table stakes" means *what a user of a polished weather/currency/dashboard app already assumes works* — not what the v1.0 store currently does. The hard non-negotiable on top of every row: **nothing the user sees may reveal that the app was made on demand** (HYGIENE-01..05, enforced by the CI lexicon gate).
->
-> *(Supersedes the v1.0 FEATURES.md for this milestone; v1.0 version preserved in git history.)*
+> *(Supersedes the v1.1 FEATURES.md for this milestone.)*
+
+---
+
+## Design Reference Behavior Summary (VibeOS.dc.html)
+
+The reference is a fully working prototype. All interactions below are derived directly from its code.
+
+**Windows**: positioned absolutely by `(x, y, z)` state; drag via `pointerdown/pointermove/pointerup` on the title bar; `z` is a monotonic counter (`ztop++`); `min: true` hides via `display:none`; close removes from the windows array. Re-opening an existing `kind` re-raises and un-minimizes instead of duplicating.
+
+**Initial placement**: cascade formula — `x = clamp(vw/2 - w/2 + 140 + n*26, 16, vw-w-16)`, `y = clamp(vh/2 - 200 + n*22, 58, vh)`. Bounds clamp: `y = Math.max(44, e.clientY - oy)` (can't drag behind menu bar).
+
+**Title bar chrome**: macOS-style traffic lights (close = red/gradient, minimize = amber/gradient, green circle present but non-interactive in reference).
+
+**No resize handle in reference.** Width is per-kind constant (`widthFor`). Height is content-driven.
+
+**Dock**: centered bottom strip; items added to `installed[]` on first open; store icon always present; running indicator = 4px dot below icon when `!min`; hover → `scale(1.22) translateY(-7px)`.
+
+**Menu bar**: 40px fixed top strip; left = wordmark + active-app name; right = 4-theme segmented control + `HH:MM` clock.
+
+**Theme system**: 4 named themes (Aurora/Aero/Aqua/Noir) as flat CSS-variable maps; applied inline on root shell `div`; switcher is segmented control in menu bar; no persistence in prototype (state-only) — IndexedDB persistence is the v2.0 requirement.
+
+**CSS-variable contract**: `--accentA`, `--accentB`, `--text`, `--glass`, `--glass2`, `--bord`, `--hi`, `--wall`, `--b1`–`--b4`.
+
+**Create panel**: always visible, centered on desktop (not a window); three states — idle (suggestion chips), vibing (shimmer skeleton + step labels + progress bar), result (app card with Open/Discard); Enter key or "Vibe it" button triggers; `onOpen` calls `openApp` which mounts a window.
 
 ---
 
@@ -17,127 +39,157 @@
 
 ### Table Stakes (Users Expect These)
 
-Features users assume exist. Missing these = the app feels broken or "fake."
+Features expected of any "desktop OS" metaphor. Missing = product feels broken.
 
-| # | Feature | Why Expected | Complexity | Notes / Dependency on existing v1.0 |
-|---|---------|--------------|------------|-------------------------------------|
-| **A1** | **Loading state on first data fetch** (skeleton/spinner, not a blank panel) | Every data app shows *something* while the first request is in flight | LOW | Reuses SHELL-02 neutral loading affordance. Must read as "loading data," not "generating app" (HYGIENE-01). |
-| **A2** | **Error state with retry** (network fail / non-200 / bad shape → message + "Try again") | A weather app that silently shows nothing on a dropped request feels broken | LOW–MEDIUM | New egress needs typed errors mirroring RESIL-01's pattern. Retry must not re-produce the app — only re-run the fetch. |
-| **A3** | **Empty / "no data" state** (e.g. unknown city, no rates for a pair) | Distinct from error: the request succeeded but returned nothing useful | LOW | A produced view must distinguish empty vs error or it looks buggy. |
-| **A4** | **Real data, correctly shaped** (actual temp/conditions, actual FX rate) | The entire point of the network-data path; a fallback constant reads as fake | MEDIUM | **Depends on the sanctioned network-data path** — the v1.0 handler scope is `fetch`-denied, so today these degrade to a fallback. This is the milestone's keystone. |
-| **A5** | **Client-side cache of fetched data with sane freshness** (don't re-hit the API on every keystroke/open) | Polished weather/currency apps reuse recent data; instant re-open | MEDIUM | Norm: **weather ~10 min TTL**, **currency/FX ~daily** (most free FX feeds update once/day; daily is honest and rate-limit-friendly). Separate store from the compiled-code cache. |
-| **A6** | **Manual refresh affordance** (a refresh control re-fetches now) | Users expect to force-update time-sensitive data | LOW | Refresh re-runs the *fetch*, not the produce loop. Should show A1 again (or a subtle stale-overlay, see A8). |
-| **A7** | **Rate-limit friendliness** (no hammering; backoff on 429) | A BYOK client app that burns a free-API quota gets the user blocked | LOW–MEDIUM | Reuse RESIL-02 backoff/token-bucket *concept* as a separate limiter for the data egress (the model token-bucket is a different budget). Prefer no-key/CORS APIs (Open-Meteo, Frankfurter/ExchangeRate-API open) so there's no quota to exhaust and no key to leak. |
-| **B1** | **Correct increments / state transitions** (a +1 button adds exactly 1; a toggle toggles) | The single most basic trust signal; off-by-one or no-op buttons scream "broken" | MEDIUM | Core of reliability hardening. Stronger action-spec contract + reducer validation on produced delegated handlers (HANDLER-01..03). |
-| **B2** | **No stuck states** (a button press always resolves to a visible result or a clean error — never a permanent spinner) | A control that "does nothing" or hangs is the worst failure mode | MEDIUM | Action handlers must always settle. On a mishandled action, fall through to a safe no-op + (silent) self-heal rather than freeze. Bounded like RESIL-04 (~3). |
-| **B3** | **Graceful handling of an action the reducer mishandles** (unknown/invalid action → previous state preserved, app stays usable) | Generated reducers will sometimes emit a bad transition; the app must not crash or corrupt | MEDIUM | FSM best practice: **guard transitions; unknown action returns current state unchanged (no-op), never throws.** Pair with RESIL-03 error boundary as the last line. |
-| **B4** | **Persisted state survives re-open** (a counter/notes app remembers its value) | Users assume their data sticks | LOW | Already largely covered by the registry/IndexedDB; reliability hardening must not regress it. |
-| **C1** | **Faithful re-produce / stable identity** (an app keeps its name and behaves the same after reload) | An app that renames itself or drifts on reload reads as unstable | LOW | **Depends on G5** — persist `displayName` + `prompt` (+ `widgetDeps`/`createdAt`). Today these are trimmed. |
-| **C2** | **Human-readable app name on cards** | A storefront of slug-only cards feels unfinished | LOW | `displayName` persisted (G5). |
-| **D1** | **A composed app renders all its parts** (an app made of sub-widgets shows them assembled, seamlessly) | If an app declares pieces, the user expects to see the whole | MEDIUM | Activates dormant WIDGET-01..03 (parse `@widget`, pre-warm, mount). Must look like one app, not a debug tree. |
-| **D2** | **A failing widget doesn't take down the app** (one broken piece → placeholder, rest works) | Partial failure beats total failure; standard dashboard expectation | LOW–MEDIUM | Already built as WIDGET-05 — v1.1 just needs to keep it true once composition is a real path. |
+| Feature | Why Expected | Complexity | Dependency on Existing Features | Notes |
+|---------|--------------|------------|----------------------------------|-------|
+| **Draggable windows (title-bar grab)** | Every windowing system since 1984; the defining interaction of a windowed OS | LOW | New: `WindowManager` state component | `pointerdown/pointermove/pointerup`; ~40 LOC in reference |
+| **Z-order / focus-raise on any click** | Clicking a background window must bring it front; violating this breaks the OS metaphor immediately | LOW | Drag (same state); monotonic `z` counter | `onMouseDown` on the whole window frame; updates `activeName` |
+| **Close button** | Every window must be dismissible | LOW | `WindowManager` | Removes window from array; no confirmation needed |
+| **Minimize to dock** | Expected on every macOS/Windows-style window | LOW | Dock (running indicator); `min` flag | `display:none` when `min: true` |
+| **Restore from dock** | Complement of minimize; clicking a dock icon restores | LOW | Dock | Same `openApp` path: re-raises + clears `min` |
+| **Window title bar (icon + name + traffic lights)** | Visual identity, drag surface, close/minimize affordance | LOW | AppShell refactor | Replace existing AppShell chrome with `WindowTitleBar` component |
+| **Multiple windows open concurrently** | The entire point of a windowing system | MEDIUM | Execution engine: N independent React roots; AppShell refactor | `createRoot` per window content div; already feasible per React 19 design |
+| **Bottom dock bar** | Standard OS chrome; running-app overview | LOW | `WindowManager` (installed list, min status) | Centered glass strip; always-present store icon + one icon per `installed` app |
+| **Running indicator on dock** | Dot below icon = app is open and not minimized; absent = closed/minimized | LOW | Dock + window state | `d.running = !!windows.find(w => w.kind === k && !w.min)` |
+| **Dock hover-scale animation** | macOS magnification is universally expected on a dock | LOW | Dock | CSS `transform: scale(1.22) translateY(-7px)` on `:hover`; reference already specifies `cubic-bezier(.2,.8,.2,1)` |
+| **Top menu bar** | Standard OS chrome: wordmark, active context, global controls | LOW | New layout shell | 40px fixed top; `backdrop-filter: blur` glass strip |
+| **Active app name in menu bar** | Shows focus context; expected in any macOS-style shell | LOW | Focus-raise (updates `activeName`) | Truncated with ellipsis for long names |
+| **Live clock in menu bar** | Users expect it in any OS-style shell; grounds the session | LOW | 1s `setInterval` tick | `HH:MM` tabular-numeric format |
+| **Initial placement / cascade** | New windows don't all stack on top of each other | LOW | `WindowManager` | Reference cascade formula; first window is roughly centered |
+| **Bounds clamping (top edge)** | Windows can't disappear behind the menu bar | LOW | Drag handler | `y = Math.max(44, e.clientY - oy)` |
+| **Deduplication: one window per app kind** | Re-opening same app raises it rather than spawning a duplicate | LOW | `WindowManager` | `exists = windows.find(w => w.kind === kind)` → raise instead of push |
+| **Theme switcher in menu bar** | Users expect a centrally-placed appearance control | LOW | ThemeProvider refactor | 4-button segmented control; inline in menu bar right section |
+| **Theme live-apply (instant, no reload)** | Any modern app; a reload for a theme change feels broken | LOW | CSS custom property injection on root element | `Object.assign(rootDiv.style, themeVars)` or equivalent |
+| **Theme persistence (IndexedDB)** | Users expect any preference to survive a page reload | LOW | Existing `idb` wrapper + registry init (LOOP-03) | Single `preferences` record; read on init, write on change |
+| **4 named built-in themes (Aurora/Aero/Aqua/Noir)** | A curated theme set is the v2.0 promise; users expect the switcher to actually switch to visually distinct looks | LOW | Theme system | Exact CSS-variable maps defined in reference; no guessing needed |
+| **Theme applied to host chrome AND app content** | A theme that only re-skins the menu bar and not the windows looks broken | LOW | CSS vars cascade via root element | CSS custom properties cascade into window content divs automatically |
+| **Create panel: idle state with suggestion chips** | Reduces blank-page anxiety; helps first-time users know what to type | LOW | Create panel | 5 static suggestions; click fills input and triggers vibe |
+| **Create panel: loading affordance during production** | User must see *something* is happening during a 2–5s LLM call; a frozen UI feels broken | LOW | Create panel + produce integration | Shimmer skeleton + step-label rotation + progress bar |
+| **Create panel: result card (Open / Discard)** | Confirm before opening; gives user agency; expected in any wizard-style flow | LOW | Create panel | App name, tag, prompt echo, Open/Discard buttons |
+| **Create panel → opens in window** | The logical conclusion of the create flow | LOW | `WindowManager.openApp` | `onOpen` → `openApp(kind)` → mounts window |
+| **AppShell inside windows (existing features work)** | The contextual prompt, error boundary, widget shells must survive the windowing redesign | MEDIUM | AppShell refactor | AppShell sheds full-page layout role; becomes a content-only component inside window's scroll div |
 
 ### Differentiators (Competitive Advantage)
 
-Features that set the product apart. Aligned with the Core Value (apps "just exist" and work).
+Features that go beyond expectations and make Vibe OS visually and functionally distinctive.
 
-| # | Feature | Value Proposition | Complexity | Notes |
-|---|---------|-------------------|------------|-------|
-| **A8** | **Stale-while-revalidate freshness** (show last-good data instantly on re-open, refresh silently in the background) | Feels instant *and* fresh — the SWR pattern that powers polished data apps; no spinner on a warm open | MEDIUM | Cached data renders immediately; background fetch updates in place. A subtle "updated just now"/faint stale tint is the polish. Reinforces "apps just exist and are fast." |
-| **A9** | **Graceful offline / last-known-good** (network down → show cached data labeled as last update, not an error) | A weather app showing yesterday's reading beats one showing a red error | LOW–MEDIUM | Builds on A5. Strong perceived-reliability win for near-zero cost. |
-| **B5** | **Invisible self-heal on bad behavior** (a mishandled action quietly re-produces a corrected handler; user just sees it work the second time — or it works first time after validation) | The reliability story *is* the differentiator: produced behavior that's right more often, failures hidden behind the illusion | MEDIUM–HIGH | Extends RESIL-04 self-heal from compile-time to behavior-time. Must stay silent (HYGIENE-01) — no "regenerating…" text. Bounded; on exhaustion, B3 no-op keeps it usable. |
-| **C3** | **"Popular on the platform" row** (most-opened apps surfaced on the storefront) | Gives the storefront depth and a sense of a living platform; classic discovery surface | LOW | **POP-01.** Drives off `useCount` already persisted for LRU (RESIL-06). Ranking/tie-break/count detailed below. |
-| **C4** | **Richer card metadata feeding discovery** (description, created-at, maybe a composition badge) | Cards that describe themselves are more inviting and more "real" | LOW | Persisted via G5. Enables better-looking rows than slug-only cards. |
-| **D3** | **Per-widget contextual menu / tweak** (each sub-widget independently tweakable/clonable/removable) | Composition becomes *interactive* depth, not just layout — tweak one piece without touching the rest | MEDIUM | WIDGET-04 already gives each widget its own shell+menu. Differentiator is coherence once widgets are real, with correct keys (G1-followups: fold `kind`+prompt so widget variants don't collide). |
-| **D4** | **Composition that pre-warms (no render waterfall)** (a composed app appears assembled at once, not piece-by-piece popping in) | Smooth assembly preserves the "it just exists" feel | MEDIUM | WIDGET-03 transitive pre-warm already exists; v1.1 keeps it honest under real composition. |
+| Feature | Value Proposition | Complexity | Dependency on Existing Features | Notes |
+|---------|-------------------|------------|----------------------------------|-------|
+| **Theme-aware generated apps** | Apps re-skin for free when the theme changes — the key product insight of v2.0 | MEDIUM | Produce system-prompt update; CSS-variable contract | The non-obvious load-bearing piece: produce prompt must mandate `var(--accentA)`, `var(--text)`, `var(--glass)` etc; existing apps will need re-production (cache-miss) to pick up the contract |
+| **Animated blob background (theme-matched)** | The desktop feels alive, not static; establishes Vibe OS as a visual product, not a browser wrapper | LOW | Theme system (`--b1–b4`) | 4 radial-gradient orbs with `vibeFloat` animation; colors from theme vars; already fully specified in reference |
+| **Glass morphism window chrome** | Signature aesthetic that establishes a coherent visual language across all apps | LOW | WindowManager | `backdrop-filter: blur(32px) saturate(195%)` + inner-highlight inset; CSS-only; reference CSS is complete |
+| **Window open animation (`vibeWin`)** | New windows fade+scale in; signals quality without being showy | LOW | WindowManager | `@keyframes vibeWin` already defined in reference; `animation: vibeWin .35s cubic-bezier(.2,.8,.2,1)` |
+| **Step-label progress ("Reading your vibe…")** | Branded, playful production feedback that normalizes the wait without naming the mechanic | LOW | Create panel + produce integration | Rotate through 5 steps during the real LLM call; steps in reference: "Reading your vibe… / Sketching the layout… / Wiring up the logic… / Pouring the glass… / Adding the shimmer…" |
+| **"Live" badge on create panel** | Signals the platform is online/ready; makes the panel feel like a live service without naming AI | LOW | Create panel | Pulsing green dot + "live" label; pure CSS; already in reference |
+| **Dock items persist across reloads** | Installed apps stay in dock after page reload; the platform remembers you | MEDIUM | IndexedDB; share `preferences` store with theme persistence | Store `installed[]` alongside `theme` in a single preferences record |
+| **Shimmer skeleton during production** | High-quality loading affordance; matches the glass aesthetic; doesn't feel like a generic spinner | LOW | Create panel | Icon shimmer + two text-line shimmers; `vibeSheen` animation; already in reference |
+| **Contextual prompt still works inside windows** | The existing tweak/clone/remove superpower is preserved in the new OS context | MEDIUM | ContextualPrompt z-index; AppShell refactor | Popover z-index must exceed any window's `z`; needs a z-ceiling above `ztop` |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
-Several would directly violate the project's hard constraints.
+Features to explicitly NOT build in v2.0.
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **Arbitrary user-typed URLs / "connect any API"** in produced apps | "Let the weather app call whatever the user wants" | Defeats CSP `connect-src` (SEC-04) the moment you widen it; turns the fetch-denied scope into an open exfil/SSRF surface for the user's key; unbounded CORS failures | **Curated allowlist** of no-key, CORS-enabled endpoints (Open-Meteo, Frankfurter/ExchangeRate-API open). Add to `connect-src` explicitly. The path is *sanctioned*, not open. |
-| **A visible "refresh/generating/AI" indicator that narrates fetching upstream** | "Show the user it's fetching live data" | A spinner saying *generating*, or a Network tab full of model/source streams, leaks the mechanic (HYGIENE-01..05) | Neutral "loading data" affordance only; keep produce calls non-streaming and out of the visible data-refresh path. A visible fetch to a *weather/FX* host is fine — it reveals "talks to a weather API," not the on-demand mechanic. |
-| **Real-time / websocket live updates** for weather & FX | "Make it live" | Free FX feeds update ~daily; weather ~10–60 min. Live polling burns quota and rate-limits with zero freshness gain | Poll-on-open + SWR + manual refresh, TTL matched to the source's real update cadence (A5/A8). |
-| **Global "trending" leaderboard / cross-user popularity** | "See what's popular everywhere" | No server, no cross-user sync (explicit Out-of-Scope); `useCount` is a **local-only** signal. Implying it's global is dishonest and impossible | "Popular **on the platform**" framed as *this browser's* most-opened; seed defaults so a fresh install isn't empty. Never claim cross-user data. |
-| **Ratings / reviews / download counts on cards** | App-store realism | No accounts, no server, no real userbase — fabricated numbers are deceptive and add UI with no signal | Use the honest local signal (`useCount` → "popular") + descriptive metadata (C4); skip fake social proof. |
-| **Deeply nested / recursive widget trees** | "Compose anything from anything" | Render waterfalls, exploding produce cost (RESIL-05 gate), cache-key collisions, debugging hell; each level multiplies failure surface | Cap composition depth (one level of `@widget`, maybe two); pre-warm (D4); enforce the cost cap. First-class ≠ unbounded. |
-| **Surfacing widget/handler internals (action specs, cache keys) in the UI** | "Power-user transparency" | Reveals the on-demand machinery → hygiene violation | Keep it all behind the storefront illusion; per-widget menu exposes *tweak/clone/remove* only, never the spec. |
-| **Streaming produced behavior into the running app** | "Faster perceived response" | Can't run partial code; SSE source stream is a Network-tab leak (explicit Out-of-Scope) | Non-streaming produce; O(1) cache hit on re-press is already the fast path. |
+| Feature | Why Requested | Why Problematic | Better Alternative |
+|---------|---------------|-----------------|-------------------|
+| **Window resize handles** | Users expect resizable windows in a "real OS" | High complexity: drag-resize logic, min/max constraints, content reflow; generated app bodies have fixed-width layouts that break when width changes arbitrarily; blocks milestone scope | Fixed per-kind widths (reference: `widthFor` map); content-driven height; defer post-v2 |
+| **Window maximize / full-screen** | Expected in a desktop OS | Conflicts with the glassmorphism partial-screen aesthetic where the desktop surface is always visible; adds state and edge cases for minimal gain at widget scale | Windows are intentionally partial-screen; defer |
+| **Snap / tiling (half-screen, quadrant layout)** | Power-user productivity feature | Over-engineered for a vibe aesthetic where apps are widget-scale, not document editors; adds drag-target detection, layout engine, keyboard handling | Deliberate anti-feature; the aesthetic is free-floating glass, not a tiling WM |
+| **Multi-desktop / virtual desktops** | macOS Spaces / Windows virtual desktops | Adds a navigation model far beyond milestone scope; existing apps are small enough that one desktop surface is fine | Out of scope; one desktop surface |
+| **Window layout persistence (positions on reload)** | "Remember where my windows were" | Transient window positions add complex state; apps re-produce or cache-hit instantly on re-open; saving/restoring absolute pixel positions across viewport changes adds bugs | Restore which apps were in the dock (`installed[]`) but not positions; re-opening is already fast |
+| **Focus-follows-cursor (X11-style)** | Advanced power-user preference | Conflicts with click-to-focus expectation; confusing for the majority of users coming from macOS/Windows conventions | Click-to-focus only (already in reference) |
+| **Custom user-created themes** | "I want to pick my own colors" | Out of scope for v2.0 per PROJECT.md; requires a theme editor, color picker, IndexedDB schema extension, validation, and conflict-free naming | Built-in themes only (Aurora/Aero/Aqua/Noir); custom themes deferred to v3 |
+| **Streaming code generation visible as progress** | "Show progress during creation" | SSE source stream is a Network-tab hygiene leak; can't compile partial JSX | Non-streaming produce; step labels provide branded progress without exposing the mechanic |
+| **Naming the mechanic in create panel copy** | Transparency / honesty | Violates devtools-hygiene (HYGIENE-01–05) and the premise that apps simply exist; banned-token gate still enforced | Branded copy only: "Vibe it ✦", "Vibe Store", "vibed just now" — mechanic never named |
+| **Per-theme CSS class names or `data-theme` attributes that reveal intent** | Developer ergonomics | Mechanic-adjacent naming leaks the OS-shell nature in source; neutral names required | Neutral CSS variable names (`--accentA`, `--glass`) not `--ai-accent`, `--generated-bg` |
 
 ---
 
 ## Feature Dependencies
 
 ```
-A4 (real data correctly shaped)
-    └──requires──> Sanctioned network-data path (CSP connect-src + allowlisted no-key CORS APIs)
-                       └──requires──> SEC-04 CSP (exists) widened deliberately, not opened
+[Theme CSS-variable contract (--accentA, --accentB, --text, --glass, --glass2, --bord, --hi, --wall, --b1–b4)]
+    └──required-by──> [Theme-aware generated apps]        (produce prompt mandates vars)
+    └──required-by──> [Glass morphism window chrome]      (windows use --glass, --bord, --hi)
+    └──required-by──> [Animated blob background]          (orbs use --b1–b4)
+    └──required-by──> [Dock glass strip]                  (uses same glass vars)
+    └──required-by──> [Create panel glass card]           (create panel is also a glass surface)
 
-A5 (client data cache) ──enables──> A8 (stale-while-revalidate) ──enables──> A9 (offline last-known-good)
-A2 (error+retry) + A6 (manual refresh) ──share──> data-egress error model (mirrors RESIL-01) + data rate limiter (mirrors RESIL-02)
+[WindowManager state (windows[], installed[], activeName, z-counter)]
+    └──required-by──> [Drag + z-order + focus-raise]
+    └──required-by──> [Close + Minimize + Restore]
+    └──required-by──> [Dock running indicators]
+    └──required-by──> [Active app name in menu bar]
+    └──required-by──> [Multiple concurrent app mounts]    (one React root per window)
 
-B3 (graceful mishandled action: guard → no-op, never throw)
-    └──is the floor under──> B1 (correct increments) and B2 (no stuck states)
-B5 (invisible self-heal on bad behavior)
-    └──requires──> B3 (safe no-op fallback) + RESIL-04 (bounded self-heal) + RESIL-03 (error boundary)
+[Multiple concurrent React roots (N createRoot calls)]
+    └──requires──>    [AppShell refactor]                 (AppShell must be content-only, not full-page layout)
+    └──requires──>    [ContextualPrompt z-index hardening] (must float above all windows)
 
-C3 (popular row)
-    └──requires──> useCount (exists, persisted for RESIL-06 LRU)
-C1/C2/C4 (faithful re-produce, name, description)
-    └──requires──> G5 (persist displayName/prompt/widgetDeps/createdAt)
+[AppShell refactor]
+    └──enables──>     [WidgetShell inside windows]        (WidgetShell lives inside AppShell; both work unchanged)
+    └──enables──>     [ContextualPrompt inside windows]   (contextual menu trigger lives in AppShell)
 
-D1 (composed app renders parts)
-    └──requires──> WIDGET-01/02/03 (parse @widget, pre-warm, mount — built but dormant)
-    └──requires──> G3 (real WidgetRecord/HandlerRecord schemas, replace placeholder types)
-    └──requires──> G1-followups (fold kind + prompt-hash into cacheKey so widget variants don't collide)
-D3 (per-widget tweak) ──requires──> WIDGET-04 (per-widget shell+menu, exists) + G1-followups (distinct keys per variant)
-D2 (widget failure isolation) ──is──> WIDGET-05 (exists) — must remain true once composition is live
+[Create panel — produce integration]
+    └──requires──>    [Existing: producer, resilience, cacheKey, instantiate] (LOOP-01–08, GEN-01–05, RESIL-01–06)
+    └──requires──>    [WindowManager.openApp]             (result "Open app" mounts a window)
+    └──constrains──>  [Loading step labels]               (HYGIENE-01: no banned tokens in step copy)
 
-HYGIENE-01..05 ──constrains──> EVERY feature above (no visible mechanic; banned lexicon; key only to api.anthropic.com)
+[Theme persistence (IndexedDB)]
+    └──requires──>    [Existing idb wrapper + registry init] (LOOP-03)
+
+[Dock persistence (installed[])]
+    └──requires──>    [Theme persistence]                 (share same preferences store/record)
+
+[Devtools hygiene gate (HYGIENE-01–05)]
+    └──constrains──>  [Create panel copy]                 (no AI/LLM/generate/synthesize/mock/fake)
+    └──constrains──>  [CSS variable + class names]        (neutral names only)
+    └──constrains──>  [Window/dock/store identifiers]     (neutral naming in source/logs/IndexedDB keys)
 ```
 
 ### Dependency Notes
 
-- **A4 is the milestone keystone.** Everything else in track A (caching, refresh, SWR, offline) is decoration on top of "the fetch actually happens." The blocker is the `fetch`-denied handler scope; the fix is a *narrow, allowlisted* egress added to CSP — not a general unlock.
-- **B3 underpins B1 and B2.** "Correct increments" and "no stuck states" both follow from a reducer that guards transitions and treats unknown actions as no-ops instead of throwing/hanging. Build the guard contract first; correctness and non-stuckness follow.
-- **C-track is cheap because the signals already exist.** `useCount` is persisted (for LRU); G5 metadata is a schema/persistence change, not new machinery. POP-01 is mostly a sort + a row.
-- **D-track is "activate, don't build."** The widget machinery (parse/pre-warm/mount/per-widget shell/failure isolation) shipped dormant in v1.0. The real work is **cache-key correctness (G1-followups)** and **real schemas (G3)** so activated widgets don't collide on a bare `SHA-256(type)`.
-- **Hygiene conflicts with naive implementations everywhere.** Any visible "generating/refreshing-via-AI" affordance, any exposed action spec, any streamed source breaks the premise. Each track must route its loading/error/empty UI through neutral, data-framed (not mechanic-framed) language.
+- **AppShell refactor is the critical prerequisite.** The existing `AppShell` owns the full-page layout including the `AppBar`. It must be decomposed into: (a) a content-only `AppContent` component that sits inside a window's scroll div, and (b) all layout chrome moving to the new desktop shell. This unblocks multiple concurrent windows.
+- **Theme-aware generated apps is the non-obvious load-bearing piece.** The integration is simple (one system-prompt update), but the consequence is significant: all produce calls after the change will produce apps that use `var(--accentA)` etc; existing cached apps (pre-v2.0) will not re-skin until their cache is invalidated. A cache-busting strategy (e.g. cache-key includes a `contractVersion` salt) should be considered.
+- **Dock persistence and theme persistence should share a single IndexedDB record** (`preferences: { theme, installed[] }`) to avoid schema proliferation. They use the same `idb` wrapper already in the stack.
+- **ContextualPrompt z-index**: with a monotonic `ztop` counter driving windows, the contextual prompt popover must use a z-index guaranteed to exceed any window's `z`. Use a fixed ceiling (e.g. `z-index: 99999`) on the popover.
+- **Create panel position**: the create panel is NOT a window (it has no drag handle, no title bar, no close button in the reference). It's a fixed centered panel on the desktop surface, always visible behind open windows. This is intentional — it is the "home" of the OS.
 
 ---
 
 ## MVP Definition
 
-### Launch With (v1.1)
+### Launch With (v2.0 milestone scope)
 
-Minimum to make the milestone's promise ("real & robust") true.
+All items below are table stakes for the Vibe OS premise to feel real:
 
-- [ ] **A4 — Sanctioned network-data path** (allowlisted no-key CORS endpoints in CSP; Weather via Open-Meteo, Currency via Frankfurter/ExchangeRate-API open) — *the keystone; without it the network apps stay fake.*
-- [ ] **A1/A2/A3 — Loading / error+retry / empty states for fetched data** — *a data app without these reads as broken.*
-- [ ] **A5 — Client-side data cache with TTL** (weather ~10 min, FX ~daily) — *rate-limit friendliness + instant re-open.*
-- [ ] **B3 — Guarded reducer / unknown-action no-op (never throw, never hang)** — *the floor under all reliability.*
-- [ ] **B1/B2 — Correct increments + no stuck states** — *most basic trust signals.*
-- [ ] **C1 + G5 — Persist displayName/prompt for faithful re-produce + stable identity** — *storefront depth's prerequisite.*
-- [ ] **C3 + POP-01 — "Popular on the platform" row from useCount** — *cheap, high-visibility depth.*
-- [ ] **D1 + G3 + G1-followups — Composed app renders its declared widgets, with correct cache keys + real schemas** — *makes composition first-class.*
-- [ ] **D2 — Keep widget failure isolation true under real composition** (WIDGET-05) — *partial failure must not become total.*
+- [ ] **Desktop surface** — fullscreen, themed background with animated blobs (`vibeFloat`), replacing the flat storefront page
+- [ ] **Top menu bar** — wordmark + active-app name + theme segmented control (4 themes) + live clock
+- [ ] **WindowManager** — `windows[]`, `installed[]`, `activeName`, z-counter; open/close/minimize/restore/focus-raise
+- [ ] **Draggable glass windows** — title-bar drag, traffic-light buttons (close + minimize; green non-interactive), cascade placement, bounds clamp
+- [ ] **Dock** — centered bottom glass strip, store icon always present, per-installed-app icons, running dot, hover-scale
+- [ ] **Theme system** — 4 named themes as CSS-variable maps, live-apply to root element, IndexedDB persistence
+- [ ] **Theme applied to host chrome AND all window content** — CSS vars cascade; no extra per-window theming needed
+- [ ] **Create panel** — idle/vibing/result states, wired to real produce path, Enter key + button trigger, `onDiscard` clears
+- [ ] **Create panel → window** — `onOpen` calls `openApp`, produced component mounts in a new window
+- [ ] **AppShell refactor** — content-only inside window div; existing contextual prompt, error boundary, widget shells still work
+- [ ] **Theme-aware generated apps** — produce system-prompt updated to mandate CSS-variable contract
+- [ ] **Multiple concurrent app mounts** — N independent React roots; each window gets its own `createRoot`
+- [ ] **Devtools hygiene holds** — create panel step labels, window titles, dock labels, CSS vars all use neutral/branded language; banned-token gate green
 
-### Add After Validation (v1.x)
+### Add After Validation (v2.x)
 
-- [ ] **A8 — Stale-while-revalidate** — *add once A5 caching is proven; turns "fast" into "fast and fresh."*
-- [ ] **A9 — Offline last-known-good labeling** — *trigger: users hit flaky networks.*
-- [ ] **A6 — Manual refresh control** — *trigger: users want to force-update before the TTL elapses.*
-- [ ] **B5 — Invisible behavior self-heal** — *trigger: B-track metrics show residual mishandled-action rate worth the produce cost.*
-- [ ] **C4 — Richer card metadata (description, composition badge)** — *trigger: storefront feels sparse after C1/C3.*
-- [ ] **D3 — Per-widget contextual tweak as a coherent path** — *trigger: composition is used and users want piece-level edits.*
+- [ ] **Dock persistence** — restore `installed[]` on page reload; reuse `preferences` IndexedDB record
+- [ ] **Cache-key contract versioning** — add a `contractVersion` salt to bust pre-v2 cached apps and force re-production with the CSS-variable contract
+- [ ] **Window resize handles** — defer until usage confirms users want resizable windows at widget scale
 
-### Future Consideration (v2+)
+### Future Consideration (v3+)
 
-- [ ] **HARD-01 — iframe sandbox isolation** — *deferred per MVP-first; the correct end-state for running now-network-capable produced code, but out of v1.1.*
-- [ ] **Multi-level widget composition (depth > 1)** — *only after single-level composition proves stable and cost is bounded.*
-- [ ] **G2 — Unified Intent contract** — *internal refactor; defer unless it blocks the above.*
+- [ ] **Custom user-created themes** — theme editor, color picker, named custom themes saved to IndexedDB
+- [ ] **HARD-01 `<iframe sandbox>` isolation** — security end-state; each window becomes an iframe; key never enters frame
+- [ ] **Snap / tiling** — deliberate anti-feature; revisit only if core use cases emerge
+- [ ] **Multi-desktop / virtual desktops** — only if usage patterns justify
+- [ ] **Window layout persistence** — positions across reloads; low user value
 
 ---
 
@@ -145,95 +197,58 @@ Minimum to make the milestone's promise ("real & robust") true.
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| A4 Sanctioned network-data path | HIGH | MEDIUM | P1 |
-| A1/A2/A3 Loading/error/empty states | HIGH | LOW | P1 |
-| A5 Client data cache + TTL | HIGH | MEDIUM | P1 |
-| B3 Guarded reducer / no-op fallback | HIGH | MEDIUM | P1 |
-| B1/B2 Correct increments / no stuck states | HIGH | MEDIUM | P1 |
-| C1 + G5 Persist displayName/prompt | MEDIUM | LOW | P1 |
-| C3 + POP-01 Popular row | MEDIUM | LOW | P1 |
-| D1 + G3 + G1-followups Composed render + keys/schemas | HIGH | MEDIUM | P1 |
-| D2 Widget failure isolation (keep true) | HIGH | LOW | P1 |
-| A8 Stale-while-revalidate | MEDIUM | MEDIUM | P2 |
-| A6 Manual refresh | MEDIUM | LOW | P2 |
-| A9 Offline last-known-good | MEDIUM | LOW | P2 |
-| B5 Invisible behavior self-heal | MEDIUM | HIGH | P2 |
-| C4 Richer card metadata | LOW | LOW | P2 |
-| D3 Per-widget tweak coherence | MEDIUM | MEDIUM | P2 |
-| HARD-01 iframe isolation | HIGH (security) | HIGH | P3 |
-| Multi-level composition | LOW | HIGH | P3 |
+| Desktop surface + blob background | HIGH | LOW | P1 |
+| Top menu bar (wordmark, clock, theme switcher) | HIGH | LOW | P1 |
+| WindowManager (windows[], z, min, activeName) | HIGH | MEDIUM | P1 |
+| Draggable glass windows + traffic lights | HIGH | LOW | P1 |
+| Bottom dock + running indicators + hover-scale | HIGH | LOW | P1 |
+| Theme system: 4 named themes, live-apply, persistence | HIGH | LOW | P1 |
+| Theme applied to chrome AND app content | HIGH | LOW | P1 |
+| Create panel: 3 states wired to real produce | HIGH | MEDIUM | P1 |
+| Create panel → opens window | HIGH | LOW | P1 |
+| AppShell refactor (content-only) | HIGH | MEDIUM | P1 — prerequisite for windowing |
+| Theme-aware generated apps (prompt update) | HIGH | MEDIUM | P1 — load-bearing, non-obvious |
+| Multiple concurrent React roots | HIGH | MEDIUM | P1 |
+| Window open animation (vibeWin) | MEDIUM | LOW | P2 |
+| Animated blob background | MEDIUM | LOW | P2 |
+| Step-label progress copy (branded) | MEDIUM | LOW | P2 |
+| Dock persistence (installed[]) | MEDIUM | LOW | P2 |
+| ContextualPrompt z-index hardening | HIGH | LOW | P2 — easy but must not be forgotten |
+| Cache-key contract versioning | MEDIUM | MEDIUM | P2 |
+| Window resize handles | LOW | HIGH | P3 — defer |
+| Custom themes | LOW | HIGH | P3 — defer |
+| Snap / tiling WM | LOW | HIGH | P3 — anti-feature |
 
-**Priority key:** P1 = must have for v1.1 launch · P2 = should have, add when possible · P3 = future.
-
----
-
-## "Popular on the Platform" Row — Pattern Detail (C3 / POP-01)
-
-A focused dig because the question asks specifically about it:
-
-- **How many:** A single horizontal row of **4–6 cards** is the discovery-row norm (enough to feel curated, few enough to scan). With only ~8 seeded app types, **~4–5** keeps "popular" meaningfully *selective* rather than "almost all of them."
-- **Ranking:** Sort by `useCount` descending (the same field RESIL-06 already persists for LRU). No download counts, no ratings — `useCount` is the only honest local signal.
-- **Ties:** Break deterministically so the row doesn't reshuffle on every render — e.g. tie-break by most-recently-used (last-open/`createdAt`) then by stable name. Avoid random tie-breaks (looks buggy).
-- **Cold start:** A fresh install has all-zero counts → an empty or arbitrary row. Seed with a sensible default ordering (or hide the row until N opens) so it never looks broken on day one.
-- **Privacy of a local-only signal:** `useCount` is **per-browser, never synced** (no server, Out-of-Scope). Frame the row honestly as platform/local popularity; do **not** imply cross-user trending (anti-feature). No PII, no transmission — fully consistent with the client-only model and HYGIENE-05.
-- **What richer metadata buys (G5):** `displayName` makes the row legible (not slugs); `description` makes cards inviting; persisting `prompt` enables faithful re-produce so a "popular" app behaves the same each open (C1). Without G5, the row is slug cards with drifting behavior.
+**Priority key:** P1 = must have for v2.0 launch · P2 = should have, add when possible · P3 = future.
 
 ---
 
-## Data-State Norms Cheat-Sheet (Track A)
+## Existing Features: What Carries Forward vs What Changes
 
-For the produced weather/currency apps to read as "polished":
-
-| State | Weather | Currency / FX |
-|-------|---------|---------------|
-| Loading (first fetch) | Skeleton/spinner, neutral copy | Skeleton/spinner |
-| Error (network/non-200/bad shape) | Message + Retry (re-fetch only) | Message + Retry |
-| Empty (valid request, no data) | "City not found" | "No rate for that pair" |
-| Stale / cached | SWR: show last-good instantly, refresh in bg; optional "updated X ago" | Same; show rate date |
-| Refresh cadence / TTL | **~10 min** (weather updates 10–60 min upstream) | **~daily** (most free feeds update once/day) |
-| Rate-limit posture | Poll-on-open + cache; no live polling; backoff on 429 | Same; FX especially gains nothing from frequent polls |
-
-Recommended no-key, CORS-enabled endpoints (must be added to CSP `connect-src` explicitly): **Open-Meteo** (weather, no key, CORS on, ~10k free calls/day, requires attribution text near the display), **Frankfurter** or **ExchangeRate-API open endpoint** (FX, no key, CORS on, daily ECB rates). The reliability/optimistic-feedback track (B1/B2) can lean on React 19's built-in `useOptimistic` already in the stack.
-
----
-
-## Competitor Feature Analysis
-
-| Feature | Real app store (Apple/Google) | Polished data app (e.g. a weather PWA) | Our Approach |
-|---------|-------------------------------|----------------------------------------|--------------|
-| Popularity surface | Server-aggregated Top/Trending across all users | n/a | Local-only `useCount` framed as "popular on the platform"; never cross-user |
-| Data freshness | n/a | SWR + TTL (~10 min weather), manual refresh | Same SWR/TTL norms, but fetch routed through a *sanctioned* allowlist under CSP |
-| Failure isolation | Whole-app crash → store relaunch | Per-widget error boundaries on a dashboard | WIDGET-05 per-widget placeholder; one widget fails, app survives |
-| Behavior correctness | Ships vetted binaries | Hand-written, deterministic | Produced-on-demand + guarded reducers + invisible self-heal (the differentiator and the risk) |
-| Composition | Static layouts | Module-federation micro-frontends | `@widget` composition, depth-capped, pre-warmed, hygiene-hidden |
+| Existing Feature | v2.0 Fate | Notes |
+|-----------------|-----------|-------|
+| Marketplace storefront grid | **Replaced** by desktop surface + always-visible create panel | Grid browsing → always-on create panel + dock for running apps |
+| AppShell (full-page) | **Refactored** → content-only inside window div | Must shed full-page layout, AppBar inclusion; keep error boundary, contextual menu trigger, loading affordance |
+| WidgetShell | **Unchanged** | Still renders inside AppShell content area, which is now inside a window |
+| ContextualPrompt | **Unchanged logic** — **z-index hardening needed** | Must float above all windows; use z-ceiling > any `ztop` value |
+| ThemeProvider (light/dark/system) | **Superseded** by named-theme system | Remove or demote the existing light/dark/system toggle; named themes take over completely |
+| AppBar (existing top bar) | **Replaced** by new menu bar | New menu bar has wordmark, active-app name, theme switcher, clock |
+| KeyDialog | **Carries forward** — surface via menu bar action | Key configuration must remain accessible; move trigger to menu bar or a settings icon |
+| Produce path + resilience + cache (LOOP, GEN, RESIL) | **Unchanged** — wired to create panel | Core loop is untouched; create panel calls the existing producer |
+| IndexedDB registry (apps/widgets/handlers stores) | **Extended** — add `preferences` store | Existing stores untouched; new `preferences` object store for `{ theme, installed[] }` |
+| Delegated thin-shell + per-action handlers | **Unchanged** — works inside windows | Each app window mounts the same delegated shell; handler production still happens per-action |
+| Devtools hygiene gate (CI lexicon test) | **Unchanged + extended** | New surfaces (create panel copy, window titles, CSS vars, dock labels) all pass through the same gate |
 
 ---
 
 ## Sources
 
-Data-state & SWR patterns:
-- [UI best practices for loading, error, and empty states in React — LogRocket](https://blog.logrocket.com/ui-design-best-practices-loading-error-empty-state-react/)
-- [Stale-While-Revalidate — newline](https://www.newline.co/courses/react-data-fetching-beyond-the-basics/stale-while-revalidate)
-- [Handling API Errors & Loading States in React — DEV](https://dev.to/addwebsolutionpvtltd/handling-api-errors-loading-states-in-react-clean-ux-approach-54o7)
-- [Weather data caching / TTL norms — QWeather best practices](https://dev.qweather.com/en/docs/best-practices/cache/) · [Weather API common usage / Cache-Control](https://developer.weather.com/docs/api-common-usage-guide)
-
-No-key, CORS-enabled APIs:
-- [Open-Meteo — free weather API, no key, CORS](https://open-meteo.com/) · [Open-Meteo GitHub](https://github.com/open-meteo/open-meteo)
-- [ExchangeRate-API open endpoint, no key](https://www.exchangerate-api.com/docs/free) · [Frankfurter / exchangerate.host](https://exchangerate.host/) · [Best free currency APIs 2026 — AllRatesToday](https://allratestoday.com/blog/best-free-currency-exchange-api-2026/)
-
-Reliability / FSM / optimistic UI:
-- [A Guide to Finite State Machines — BLT](https://bltinc.com/2024/11/04/finite-state-machines-guide/) (guards, error states, unknown-action = invalid/discarded)
-- [useOptimistic — React docs](https://react.dev/reference/react/useOptimistic) · [Optimistic UI patterns — murtazaweb](https://murtazaweb.com/blog/2026-03-22-optimistic-ui-updates-patterns/) (instant feedback, explicit rollback, no stuck states)
-
-Discovery / popularity:
-- [App Store Ranking Factors — Moburst](https://www.moburst.com/blog/app-store-ranking-factors/) · [ASO Ranking Factors 2026 — App Radar](https://appradar.com/academy/app-store-ranking-factors)
-
-Widget composition / isolation:
-- [Error Boundaries in Micro-frontend Architecture — Medium/DevXtalks](https://medium.com/devxtalks/error-boundaries-in-micro-frontend-architecture-5b5dd2c71541) · [Building Resilient Micro Frontends — Habsi Tech](https://blog.habsi.net/building-resilient-micro-frontends-a-practical-guide-to-composable-web-architectures/)
-
-Project context:
-- `/Volumes/Unitek-B/Projects/o2.vibe-apps/.planning/PROJECT.md` (v1.1 milestone, Validated v1.0 requirements, constraints, hygiene gate)
+- `design/VibeOS.dc.html` — complete reference implementation; all windowing, dock, menu bar, theme, create panel interactions derived directly from source code (HIGH confidence — primary reference)
+- `.planning/PROJECT.md` — v2.0 milestone scope, deferred items, existing feature inventory, devtools-hygiene constraints (HIGH confidence)
+- `CLAUDE.md` (project) — tech stack, constraints, hygiene rules, AppShell/WidgetShell/ContextualPrompt module map (HIGH confidence)
+- Desktop windowing conventions: macOS Human Interface Guidelines, Windows UX design principles — drag/z-order/minimize/restore/dock/menu-bar behavior norms (well-established, HIGH confidence from general knowledge)
 
 ---
-*Feature research for: client-only generative app marketplace — v1.1 "Real & Robust"*
-*Researched: 2026-06-25 · Confidence: HIGH (UX domains verified across multiple current sources; constraints applied from PROJECT.md)*
+
+*Feature research for: v2.0 Vibe OS — windowing, theme system, create panel*
+*Researched: 2026-06-26 · Confidence: HIGH*
