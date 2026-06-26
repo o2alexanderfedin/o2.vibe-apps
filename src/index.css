@@ -25,6 +25,13 @@
   --color-destructive:          #FF6B6B;
 }
 
+/* Backward-compat alias bridge — keeps pre-v2.0 cached apps rendering; maps prior style variables to the current theme contract (THEME-05) */
+:root {
+  --color-surface: var(--glass);
+  --color-text: var(--text);
+  --color-accent: var(--accentA);
+}
+
 /* Base styles — font stack and body defaults */
 :root {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

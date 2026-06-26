@@ -13,10 +13,15 @@
 // the Phase 7 LRU fields. No DB version bump; old records lacking these fields
 // satisfy the interface via the `[key: string]: unknown` catch-all and the
 // optional typing; consumers provide fallbacks on read.
+//
+// Phase 14 (THEME-01): schema bumps to VERSION 3; adds the `settings` object
+// store for persistent named-theme preference and any future user preferences.
+// The upgrade is additive — existing apps/widgets/handlers stores and their data
+// are untouched; the new store is created only when absent.
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
-/** DB version — bumped to 2 in Phase 7 for the LRU bookkeeping fields. */
-export const REGISTRY_DB_VERSION = 2;
+/** DB version — bumped to 3 in Phase 14 for the settings store. */
+export const REGISTRY_DB_VERSION = 3;
 
 /**
  * LRU bookkeeping shared by every stored record (Phase 7, RESIL-06). Optional on
@@ -73,10 +78,18 @@ export interface HandlerRecord extends LruMeta {
   [key: string]: unknown; // allow forward-compat extra fields
 }
 
+/** User preference record stored in the `settings` object store (Phase 14). */
+export interface SettingRecord {
+  key: string;
+  value: unknown;
+  [key: string]: unknown;
+}
+
 export interface RegistrySchema extends DBSchema {
   apps: { key: string; value: AppRecord };
   widgets: { key: string; value: WidgetRecord };
   handlers: { key: string; value: HandlerRecord };
+  settings: { key: string; value: SettingRecord }; // Phase 14
 }
 
 export function openRegistry(): Promise<IDBPDatabase<RegistrySchema>> {
@@ -88,6 +101,7 @@ export function openRegistry(): Promise<IDBPDatabase<RegistrySchema>> {
       if (!db.objectStoreNames.contains("apps")) db.createObjectStore("apps");
       if (!db.objectStoreNames.contains("widgets")) db.createObjectStore("widgets");
       if (!db.objectStoreNames.contains("handlers")) db.createObjectStore("handlers");
+      if (!db.objectStoreNames.contains("settings")) db.createObjectStore("settings");
     },
   });
 }
