@@ -11,6 +11,7 @@ import type { ApiKeyGetter, Services } from "./services";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
 import type { ProduceGate } from "../host/produceGate";
 import type { StoragePressureSeam } from "../host/storageEstimate";
+import type { DataFetchBroker } from "../data/dataBroker";
 
 /** Build an in-memory Registry backed by a Map per store. */
 export function createInMemoryRegistry(): Registry {
@@ -73,6 +74,8 @@ export interface TestServicesOverrides {
   produceGate?: ProduceGate;
   /** Inject a stub storage seam to exercise LRU eviction / pressure. */
   storage?: StoragePressureSeam;
+  /** Inject a canned broker for handler integration tests. */
+  fetchDataBroker?: DataFetchBroker;
 }
 
 /**
@@ -91,5 +94,29 @@ export function createTestServices(overrides: TestServicesOverrides = {}): Servi
     getApiKey,
     produceGate: overrides.produceGate ?? passthroughProduceGate,
     storage: overrides.storage ?? noPressureStorageSeam,
+    fetchDataBroker: overrides.fetchDataBroker,
   };
 }
+
+/**
+ * A broker that returns a fixed response — for handler integration tests.
+ * Mirrors the cannedTransport pattern.
+ */
+export function cannedBroker(response: {
+  data?: unknown;
+  error?: string;
+}): DataFetchBroker {
+  return {
+    fetch: (_sourceId: string, _params: unknown) => Promise.resolve(response),
+  };
+}
+
+/**
+ * A broker that should never be called — mirrors unusedTransport.
+ * Use in tests that do not exercise the data-fetch path.
+ */
+export const unusedBroker: DataFetchBroker = {
+  fetch: () => {
+    throw new Error("DataFetchBroker was invoked unexpectedly");
+  },
+};

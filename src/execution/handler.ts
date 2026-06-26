@@ -100,6 +100,7 @@ const NEUTRAL_HANDLER_ERROR = "This operation could not be completed.";
  */
 async function executeHandler(
   transpiledJS: string,
+  fetchData: (sourceId: string, params: unknown) => Promise<{ data?: unknown; error?: string }>,
   input: unknown,
 ): Promise<HandlerResult> {
   const mod: { exports: Record<string, unknown> } = { exports: {} };
@@ -112,13 +113,15 @@ async function executeHandler(
   };
 
   // Parameter list: the CJS shims, then EVERY denied global (shadowed to
-  // undefined), then `input`. A reference to e.g. `fetch` inside the body binds to
+  // undefined), then `fetchData` (the sanctioned data accessor, DATA-01),
+  // then `input`. A reference to e.g. `fetch` inside the body binds to
   // the parameter (undefined) — never the real global (HANDLER-03).
   const params = [
     "module",
     "exports",
     "require",
     ...DENIED_GLOBALS,
+    "fetchData",
     "input",
   ];
 
@@ -135,9 +138,10 @@ async function executeHandler(
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const fn = new Function(...params, body);
 
-  // Positional args: the CJS shims, one `undefined` per denied global, then input.
+  // Positional args: the CJS shims, one `undefined` per denied global,
+  // then the services-bound fetchData closure, then input.
   const deniedArgs = DENIED_GLOBALS.map(() => undefined);
-  const result = await fn(mod, mod.exports, requireShim, ...deniedArgs, input);
+  const result = await fn(mod, mod.exports, requireShim, ...deniedArgs, fetchData, input);
 
   // Normalize: a well-behaved handler returns `{ data }` or `{ error }`. Anything
   // else (a bare value, null) is wrapped as `{ data }` so the caller's contract
@@ -262,8 +266,15 @@ export async function runHandler(
     return { error: NEUTRAL_HANDLER_ERROR };
   }
 
+  // Bind the data broker to a closure — the handler receives fetchData(sourceId, params)
+  // and never sees the Services object (DATA-01). When the broker is absent the closure
+  // returns a neutral { error } without throwing, preserving the core loop (T-12-03-C).
+  const boundFetchData = (sourceId: string, params: unknown) =>
+    services.fetchDataBroker?.fetch(sourceId, params) ??
+    Promise.resolve({ error: "Data not available." });
+
   try {
-    return await executeHandler(transpiledJS, input);
+    return await executeHandler(transpiledJS, boundFetchData, input);
   } catch (err) {
     // The handler threw at instantiation or execution time. The thrown detail is
     // diagnostics-only (gated logger); the caller sees neutral copy (HANDLER-01).
@@ -283,5 +294,9 @@ export async function executeHandlerSource(
   input: unknown,
 ): Promise<HandlerResult> {
   const transpiledJS = transpileHandler(source, { filename: "handler.ts" });
-  return executeHandler(transpiledJS, input);
+  // No-op stub: tests using this escape hatch do not exercise the data path,
+  // so the stub returns a neutral { error } if a handler happens to call fetchData.
+  const noOpFetchData = (_sourceId: string, _params: unknown) =>
+    Promise.resolve({ error: "Data not available." });
+  return executeHandler(transpiledJS, noOpFetchData, input);
 }

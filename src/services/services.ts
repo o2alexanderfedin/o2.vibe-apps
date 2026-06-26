@@ -22,6 +22,7 @@ import {
 import { STORAGE_KEY_API } from "../lib/storage";
 import type { Registry } from "./registry";
 import { realRegistry } from "./realRegistry";
+import { createDataBroker, type DataFetchBroker } from "../data/dataBroker";
 
 /** Reads the access key. Returns null when unavailable. */
 export type ApiKeyGetter = () => string | null;
@@ -44,6 +45,11 @@ export interface Services {
    * estimate, driving LRU eviction when the registry approaches quota.
    */
   storage: StoragePressureSeam;
+  /**
+   * Data-fetch broker for the sanctioned network-data path (DATA-01).
+   * Optional — core flow unaffected when absent.
+   */
+  fetchDataBroker?: DataFetchBroker;
 }
 
 /**
@@ -95,5 +101,7 @@ export function createServices(): Services {
     produceGate: createProduceGate({ clock: realClock }),
     // RESIL-06: the real navigator.storage seam (guarded persist + estimate).
     storage: navigatorStorageSeam,
+    // DATA-01: real broker wired with manifest + limiter + ttlCache + realClock.
+    fetchDataBroker: createDataBroker({ clock: realClock }),
   };
 }
