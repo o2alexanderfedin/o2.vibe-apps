@@ -3,10 +3,11 @@
 // The handlers call fetchData(sourceId, params). Tests inject a canned broker
 // that returns fixture-shaped data — no real network.
 //
-// The seeded handler short-circuit (Task 3) is not yet in place for these unit
-// tests. Instead, we pre-seed the in-memory registry with the transpiled handler
-// source so runHandler takes the cache-hit path and executes the seeded code
-// with the injected fetchDataBroker.
+// Two test strategies are used:
+//   1. Short-circuit tests (lines 60-111): empty registry, confirms the seeded
+//      handler fires before any registry lookup or model call.
+//   2. Behavior tests (lines 115+): pre-seeded registry, exercises handler logic
+//      with specific fixture shapes.
 
 import { describe, it, expect } from "vitest";
 import { WEATHER_HANDLER_SOURCES } from "./weatherHandlers";
