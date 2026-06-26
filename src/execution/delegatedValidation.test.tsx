@@ -96,6 +96,20 @@ describe("deriveStateSchema — lenient schema from initialState", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts a known number field receiving NaN or Infinity (any JS number)", () => {
+    // NaN and Infinity are valid `number` values in JS. A numeric known field
+    // computing one of them (e.g. 0/0, an overflow) must NOT have its whole
+    // update dropped — that would re-introduce the stuck-state failure the gate
+    // exists to prevent. The validator type-checks the field, nothing stricter.
+    const schema = deriveStateSchema({ result: 0 });
+    expect(schema.safeParse({ result: NaN }).success).toBe(true);
+    expect(schema.safeParse({ result: Infinity }).success).toBe(true);
+    expect(schema.safeParse({ result: -Infinity }).success).toBe(true);
+    expect(schema.safeParse({ result: 42 }).success).toBe(true);
+    // A non-number value for the same field is still rejected.
+    expect(schema.safeParse({ result: "nope" }).success).toBe(false);
+  });
+
   it("rejects a known boolean field receiving a number", () => {
     const schema = deriveStateSchema({ active: false });
     const result = schema.safeParse({ active: 1 });

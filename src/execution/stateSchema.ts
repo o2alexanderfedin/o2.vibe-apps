@@ -16,7 +16,12 @@ import { z } from "zod/mini";
 /** Map each top-level initialState value to its lenient validator. */
 function validatorFor(value: unknown): z.ZodMiniType {
   if (typeof value === "string") return z.string();
-  if (typeof value === "number") return z.number();
+  // Accept ANY JS number, including NaN and Infinity. z.number() rejects
+  // non-finite values, which would over-reject a legitimate numeric update
+  // (e.g. 0/0 or an overflow) and silently keep prior state — the exact
+  // "stuck app" failure this gate exists to prevent. The contract is
+  // "type-check known fields only," so anything of type number is valid.
+  if (typeof value === "number") return z.custom<number>((v) => typeof v === "number");
   if (typeof value === "boolean") return z.boolean();
   if (Array.isArray(value)) return z.array(z.unknown());
   // null, undefined, or plain object → lenient (any type accepted)
