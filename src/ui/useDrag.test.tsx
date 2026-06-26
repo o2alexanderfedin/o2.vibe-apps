@@ -1,7 +1,20 @@
-import { render, act } from "@testing-library/react";
+import { render, act, cleanup } from "@testing-library/react";
+import { within } from "@testing-library/dom";
 import { useRef } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useDrag } from "./useDrag";
+
+// jsdom does not implement pointer capture APIs — install stubs before any test
+// so vi.spyOn can wrap them per-test.
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => undefined;
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => undefined;
+}
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+}
 
 // Harness component that wires up the hook and exposes the handle div
 interface HarnessProps {
@@ -78,6 +91,7 @@ describe("useDrag", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -98,9 +112,9 @@ describe("useDrag", () => {
     const onCommit = vi.fn();
     vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
 
-    const { getByTestId } = render(<Harness initialX={50} initialY={60} onCommit={onCommit} />);
-    const handle = getByTestId("handle");
-    const windowEl = getByTestId("window");
+    const { container } = render(<Harness initialX={50} initialY={60} onCommit={onCommit} />);
+    const handle = within(container).getByTestId("handle");
+    const windowEl = within(container).getByTestId("window");
 
     act(() => {
       firePointerEvent(handle, "pointerdown", { clientX: 100, clientY: 100 });
@@ -121,8 +135,8 @@ describe("useDrag", () => {
     vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
     vi.spyOn(Element.prototype, "releasePointerCapture").mockImplementation(() => undefined);
 
-    const { getByTestId } = render(<Harness initialX={50} initialY={60} onCommit={onCommit} />);
-    const handle = getByTestId("handle");
+    const { container } = render(<Harness initialX={50} initialY={60} onCommit={onCommit} />);
+    const handle = within(container).getByTestId("handle");
 
     act(() => {
       firePointerEvent(handle, "pointerdown", { clientX: 100, clientY: 100 });
@@ -145,8 +159,8 @@ describe("useDrag", () => {
     vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
     vi.spyOn(Element.prototype, "releasePointerCapture").mockImplementation(() => undefined);
 
-    const { getByTestId } = render(<Harness initialX={0} initialY={0} onCommit={onCommit} />);
-    const handle = getByTestId("handle");
+    const { container } = render(<Harness initialX={0} initialY={0} onCommit={onCommit} />);
+    const handle = within(container).getByTestId("handle");
 
     act(() => {
       firePointerEvent(handle, "pointerdown", { clientX: 100, clientY: 100 });
@@ -165,13 +179,11 @@ describe("useDrag", () => {
     expect(x).toBeLessThanOrEqual(VIEWPORT_WIDTH - ELEMENT_WIDTH);
     expect(y).toBeLessThanOrEqual(VIEWPORT_HEIGHT - ELEMENT_HEIGHT);
 
-    // Also verify negative clamping
+    // Also verify negative clamping — use a fresh render scoped to its container
     const onCommit2 = vi.fn();
-    vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
-    vi.spyOn(Element.prototype, "releasePointerCapture").mockImplementation(() => undefined);
 
-    const { getByTestId: getByTestId2 } = render(<Harness initialX={200} initialY={200} onCommit={onCommit2} />);
-    const handle2 = getByTestId2("handle");
+    const { container: container2 } = render(<Harness initialX={200} initialY={200} onCommit={onCommit2} />);
+    const handle2 = within(container2).getByTestId("handle");
 
     act(() => {
       firePointerEvent(handle2, "pointerdown", { clientX: 100, clientY: 100 });
@@ -190,8 +202,8 @@ describe("useDrag", () => {
 
   it("does not preventDefault on the window body", () => {
     vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
-    const { getByTestId } = render(<Harness />);
-    const windowEl = getByTestId("window");
+    const { container } = render(<Harness />);
+    const windowEl = within(container).getByTestId("window");
 
     // Fire pointerdown directly on the window frame (not the handle)
     const preventDefaultSpy = vi.fn();
@@ -216,8 +228,8 @@ describe("useDrag", () => {
     const releaseSpy = vi.spyOn(Element.prototype, "releasePointerCapture").mockImplementation(() => undefined);
     vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
 
-    const { getByTestId } = render(<Harness />);
-    const handle = getByTestId("handle");
+    const { container } = render(<Harness />);
+    const handle = within(container).getByTestId("handle");
 
     act(() => {
       firePointerEvent(handle, "pointerdown", { pointerId: 7 });
