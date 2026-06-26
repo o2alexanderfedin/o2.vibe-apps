@@ -210,4 +210,15 @@ describe("Handler constrained scope — fetch bypass proof (DATA-01, HANDLER-03)
     expect(data.fetchIsUndefined).toBe(true);
     expect(data.xhrIsUndefined).toBe(true);
   });
+
+  it("WebSocket is undefined in the handler scope", async () => {
+    const source = `
+      async function handler(input) {
+        return { data: { wsIsUndefined: typeof WebSocket === 'undefined' } };
+      }
+    `;
+    const result = await executeHandlerSource(source, {});
+    expect(result.error).toBeUndefined();
+    expect((result.data as { wsIsUndefined: boolean }).wsIsUndefined).toBe(true);
+  });
 });

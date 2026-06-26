@@ -84,6 +84,7 @@ export interface HandlerResult {
 export const DENIED_GLOBALS: readonly string[] = [
   "fetch",
   "XMLHttpRequest",
+  "WebSocket",
   "localStorage",
   "sessionStorage",
   "indexedDB",
