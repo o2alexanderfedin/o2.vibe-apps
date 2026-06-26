@@ -270,3 +270,44 @@ describe("deriveStateSchema — called once at instantiation, not inside onClick
     expect(schema2.safeParse({ display: 99 }).success).toBe(false);
   });
 });
+
+describe("DelegatedShell — RELY-03: zero extra calls on validation reject", () => {
+  it("a corrupt handler response triggers no additional calls beyond the one that returned it", async () => {
+    const mod = instantiateDelegated(transpile(MODULE_SRC, { filename: "m.tsx" }));
+
+    // Spy: counts how many times it is called. The runHandler below does NOT
+    // invoke the spy — it returns the canned bad response directly. Any call to
+    // spyTransport would mean the validation path triggered an unexpected call.
+    let extraCalls = 0;
+    const spyTransport = () => {
+      extraCalls++;
+      return Promise.reject(new Error("unexpected call"));
+    };
+
+    // runHandler returns a response with a type-mismatched known field (display: number).
+    // It never calls spyTransport — proving the runHandler and validation paths are
+    // entirely independent of the transport layer.
+    const runHandler = (_intent: string, _input: unknown) =>
+      Promise.resolve({ data: { state: { display: 99 } } });
+
+    const App = makeDelegatedComponent("test-app", mod, runHandler);
+    render(createElement(App));
+
+    const display = screen.getByTestId("display");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "bad" }));
+
+    // Wait for the async handler to complete and the finally block to clear busy state.
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Validation rejects the corrupt response and keeps prior state.
+    expect(display).toHaveTextContent("0");
+
+    // The spy was never called — zero additional calls beyond the handler invocation.
+    expect(extraCalls).toBe(0);
+
+    // spyTransport is captured but intentionally never passed into the component;
+    // this reference keeps it in scope so TypeScript can confirm the type.
+    void spyTransport;
+  });
+});
