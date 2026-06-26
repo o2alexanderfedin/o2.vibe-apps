@@ -138,6 +138,28 @@ async function instantiateWithWidgets(
 }
 
 /**
+ * Instantiate a DELEGATED module, pre-warming its declared `@widget` deps first so
+ * the produced `view(state)` can compose sub-widgets synchronously (WIDGET-06). The
+ * delegated analog of `instantiateWithWidgets`: prewarm → `makeUseWidget` → inject
+ * the accessor into the module scope (so `view` closes over it) → bind runHandler →
+ * mount via DelegatedShell. An app that declares no widgets gets an empty map
+ * (`useWidget` → null), so beyond a cheap source parse this is a no-op for the common
+ * case — every pre-Phase-13 delegated app mounts byte-identically.
+ */
+async function instantiateDelegatedWithWidgets(
+  source: string,
+  transpiledJS: string,
+  appType: string,
+  services: Services,
+): Promise<ComponentType> {
+  const widgetMap = await prewarmWidgets(source, services);
+  const module = instantiateDelegated(transpiledJS, makeUseWidget(widgetMap));
+  const boundRunHandler = (intent: string, input: unknown) =>
+    runHandler(intent, input, services);
+  return makeDelegatedComponent(appType, module, boundRunHandler);
+}
+
+/**
  * Instantiate an app's pieces by mode. A "delegated" app is a behavior-free module
  * mounted through the permanent DelegatedShell (its on-demand behavior is bound to
  * THIS app's services-backed runHandler — the app never sees services). An "app" is
@@ -154,10 +176,7 @@ async function instantiateApp(
 ): Promise<ComponentType> {
   if (mode === "delegated") {
     try {
-      const module = instantiateDelegated(transpiledJS);
-      const boundRunHandler = (intent: string, input: unknown) =>
-        runHandler(intent, input, services);
-      return makeDelegatedComponent(appType, module, boundRunHandler);
+      return await instantiateDelegatedWithWidgets(source, transpiledJS, appType, services);
     } catch (err) {
       // Graceful fallback: if the payload is not actually a delegated module (it
       // exports no `view` — e.g. a monolithic component), mount it as a monolith.
@@ -181,11 +200,8 @@ async function instantiateApp(
   } catch (err) {
     if (err instanceof InstantiateError) {
       try {
-        const module = instantiateDelegated(transpiledJS);
-        const boundRunHandler = (intent: string, input: unknown) =>
-          runHandler(intent, input, services);
         logger.info("Loader: app payload is a delegated module — mounting via DelegatedShell");
-        return makeDelegatedComponent(appType, module, boundRunHandler);
+        return await instantiateDelegatedWithWidgets(source, transpiledJS, appType, services);
       } catch {
         // Not a delegated module either — surface the original monolith error so the
         // failure mode is unchanged for genuinely broken payloads.
