@@ -122,7 +122,10 @@ body {
 
 .theme-selector__pill {
   padding: 4px 10px;
-  border: 1px solid var(--bord);
+  /* --bord is set at runtime by the named-theme engine; fall back to the
+     statically-defined border var so the pill keeps a border if those vars
+     are ever absent (e.g. the inline first-paint script is blocked). */
+  border: 1px solid var(--bord, var(--color-border-secondary));
   border-radius: 999px;
   background: transparent;
   color: var(--color-text-secondary);
