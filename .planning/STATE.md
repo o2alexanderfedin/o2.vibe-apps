@@ -2,13 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Real & Robust
-status: ready
-last_updated: "2026-06-26T04:10:00.000Z"
-last_activity: 2026-06-26
+status: executing
+stopped_at: Session resumed via /gsd-resume-work — clean checkpoint confirmed (develop synced with origin, no incomplete plans/handoff). Proceeding to plan Phase 9 (Richer Storefront).
+last_updated: "2026-06-26T09:27:22.939Z"
+last_activity: 2026-06-26 -- Phase 09 planning complete
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -26,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-06-26)
 
 Phase: 9 (Richer Storefront) — READY TO PLAN
 Plan: —
-Status: Roadmap complete; Phase 9 not started
-Last activity: 2026-06-26 — v1.1 roadmap created (5 phases, 12/12 requirements mapped)
+Status: Ready to execute
+Last activity: 2026-06-26 -- Phase 09 planning complete
 
 Progress: [░░░░░░░░░░] 0% (0 of 5 v1.1 phases)
 
@@ -50,8 +51,10 @@ handlers produced on demand and cached) and quick task **260625-q08** closed gap
 `registryKey` cache-key contract that folds kind+prompt for the shipped surface).
 
 Known limits carried into v1.1 (the v1.1 work addresses these):
+
 - Network-dependent apps (Weather/Currency) can't `fetch` in the sandboxed handler scope →
   Phase 12.
+
 - Produced delegated reducers can have state-machine quirks → Phase 11.
 - The bare `SHA-256(type)` collision risk is latent until widgets activate → Phases 10 + 13.
 
