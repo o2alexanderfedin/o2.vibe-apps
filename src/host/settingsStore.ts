@@ -49,6 +49,9 @@ export const realSettingsStore: SettingsStore = {
       const db = await openRegistry();
       const record = await db.get("settings", SETTINGS_KEY);
       db.close();
+      // `record` is undefined when the key is absent. The schema now types
+      // `value` as string, but IndexedDB is an untyped runtime boundary, so a
+      // defensive typeof keeps the read path safe against stale/foreign data.
       if (record && typeof record.value === "string") {
         return record.value;
       }

@@ -81,7 +81,12 @@ export interface HandlerRecord extends LruMeta {
 /** User preference record stored in the `settings` object store (Phase 14). */
 export interface SettingRecord {
   key: string;
-  value: unknown;
+  /**
+   * Stored preference value. The store contract is string-only (the sole writer
+   * and the SettingsStore port both deal exclusively in strings); the index
+   * signature below still allows forward-compat extra fields.
+   */
+  value: string;
   [key: string]: unknown;
 }
 
