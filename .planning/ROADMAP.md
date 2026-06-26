@@ -81,7 +81,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 **Wave 1**
-- [ ] 11-01-PLAN.md — zod dep + stateSchema helper + wire validation into the merge step in delegated.tsx (RELY-01, RELY-03)
+- [x] 11-01-PLAN.md — zod dep + stateSchema helper + wire validation into the merge step in delegated.tsx (RELY-01, RELY-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 11-02-PLAN.md — Full test suite: keep-prior / extra-keys / valid-partial / no-op paths / zero-round-trip (RELY-01, RELY-02, RELY-03 test coverage)
@@ -126,7 +126,7 @@ v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 8. Backend-Style Handlers | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 9. Richer Storefront | v1.1 | 0/3 | Planned | - |
 | 10. Widget Schema & Key Correctness | v1.1 | 0/2 | Planned | - |
-| 11. Reliability Hardening | v1.1 | 0/2 | Planned | - |
+| 11. Reliability Hardening | v1.1 | 1/2 | In Progress|  |
 | 12. Sanctioned Network-Data Path | v1.1 | 0/TBD | Not started | - |
 | 13. Activate Widget Composition | v1.1 | 0/TBD | Not started | - |
 
