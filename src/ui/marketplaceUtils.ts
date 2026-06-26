@@ -39,7 +39,7 @@ export function rankPopular<
       if (ucDiff !== 0) return ucDiff;
       const uaDiff = (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
       if (uaDiff !== 0) return uaDiff;
-      return a.cacheKey < b.cacheKey ? -1 : 1;
+      return a.cacheKey < b.cacheKey ? -1 : a.cacheKey > b.cacheKey ? 1 : 0;
     })
     .slice(0, topN);
 }
