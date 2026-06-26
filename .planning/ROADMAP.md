@@ -63,7 +63,10 @@ Plans:
   4. The full suite stays green with no regression, the hygiene gate passes, and the build emits no source maps.
 **Plans**: 2 plans
 Plans:
+**Wave 1**
 - [ ] 10-01-PLAN.md — Schema + LRU parity: replace WidgetRecord/HandlerRecord placeholders with explicit interfaces extending LruMeta; add useCount/updatedAt to widget write sites in widgetPrewarm.ts; verify tsc clean
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 10-02-PLAN.md — Test migration + audit: migrate loader.test.ts + loaderGuardrails.test.ts from bare cacheKey(type) to registryKey("app", type); add WIDGET-08 collision-distinctness audit describe block to cacheKey.test.ts
 
 ### Phase 11: Reliability Hardening
