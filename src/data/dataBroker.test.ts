@@ -210,6 +210,26 @@ describe("DataFetchBroker — host data orchestrator (DATA-01, DATA-04)", () => 
       expect(lastFetchedUrl).toContain("https://geocoding-api.open-meteo.com");
     });
 
+    it("includes allowed params and drops unknown extras in the same call", async () => {
+      // Verifies that allowed keys (name, count) ARE encoded and unknown keys
+      // (injectedKey) are dropped — both conditions in one fetch call.
+      const fetchFn = okFetch(GEOCODE_FIXTURE);
+      const broker = makeBroker(fetchFn);
+
+      lastFetchedUrl = "";
+      await broker.fetch("weather-geocode", {
+        name: "London",
+        injectedKey: "bad",
+        count: 1,
+      });
+
+      // Allowed params present in URL
+      expect(lastFetchedUrl).toContain("name=London");
+      expect(lastFetchedUrl).toContain("count=1");
+      // Unknown param dropped
+      expect(lastFetchedUrl).not.toContain("injectedKey");
+    });
+
     it("encodes only allowedParams for fx-latest", async () => {
       const fetchFn = okFetch(FX_FIXTURE);
       const broker = makeBroker(fetchFn);
