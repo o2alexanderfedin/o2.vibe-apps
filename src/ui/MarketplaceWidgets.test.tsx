@@ -126,7 +126,7 @@ describe("Marketplace — composed app: all declared widgets render on first pai
   function servicesForComposedApp(): TestServicesOverrides {
     return {
       transport: compositionTransport(
-        { weather: appComposingWidgets(WIDGETS) },
+        { calculator: appComposingWidgets(WIDGETS) },
         {
           "line-chart": rawWidgetFixture("line-chart"),
           "data-table": rawWidgetFixture("data-table"),
@@ -139,9 +139,9 @@ describe("Marketplace — composed app: all declared widgets render on first pai
   it("renders the host app AND all three real widgets on first paint (no pop-in)", async () => {
     const { user } = renderMarketplace(servicesForComposedApp());
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // Host app rendered.
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
     // No pop-in: ALL three widget shells are present synchronously on the SAME
@@ -163,8 +163,8 @@ describe("Marketplace — composed app: all declared widgets render on first pai
   it("each widget is in its OWN WidgetShell with an independent ⋮ menu (WIDGET-04)", async () => {
     const { user } = renderMarketplace(servicesForComposedApp());
 
-    await openApp(user, "Weather");
-    await screen.findByRole("region", { name: "Weather" });
+    await openApp(user, "Calculator");
+    await screen.findByRole("region", { name: "Calculator" });
 
     // Each widget gets its own group region labeled by type, each with a ⋮ button.
     for (const type of WIDGETS) {
@@ -212,12 +212,12 @@ describe("Marketplace — composed app: all declared widgets render on first pai
 
     const { user } = renderMarketplace({ transport: countingTransport });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
     await screen.findByText("Line Chart");
 
     // Force the registry path on the second open by clearing in-memory caches.
     _clearCachesForTesting();
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
     expect((await screen.findAllByText("Stat Card")).length).toBeGreaterThanOrEqual(1);
 
     // Each widget type was produced exactly once — the second open reused the
@@ -238,7 +238,7 @@ describe("Marketplace — a widget that throws at render is isolated (WIDGET-05)
   it("the throwing widget shows a neutral placeholder; the app + sibling widgets keep working", async () => {
     const { user } = renderMarketplace({
       transport: compositionTransport(
-        { weather: appComposingWidgets(["stat-card", "data-table"]) },
+        { calculator: appComposingWidgets(["stat-card", "data-table"]) },
         {
           "stat-card": THROWING_WIDGET,
           "data-table": rawWidgetFixture("data-table"),
@@ -246,9 +246,9 @@ describe("Marketplace — a widget that throws at render is isolated (WIDGET-05)
       ),
     });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // The host app still rendered.
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
     // The sibling (data-table) still rendered its real content (findByText waits
@@ -278,7 +278,7 @@ describe("Marketplace — a widget that fails to produce is isolated (WIDGET-05)
     // parent app keeps working (no crash, no blank).
     const { user } = renderMarketplace({
       transport: compositionTransport(
-        { weather: appComposingWidgets(["stat-card", "broken-widget"]) },
+        { calculator: appComposingWidgets(["stat-card", "broken-widget"]) },
         {
           "stat-card": rawWidgetFixture("stat-card"),
           "broken-widget": GARBAGE_WIDGET,
@@ -286,9 +286,9 @@ describe("Marketplace — a widget that fails to produce is isolated (WIDGET-05)
       ),
     });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // Host app rendered, good widget rendered.
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
     expect(within(region).getByText("Stat Card")).toBeInTheDocument();
@@ -321,9 +321,9 @@ describe("Marketplace — a widget that fails to produce is isolated (WIDGET-05)
 
     const { user } = renderMarketplace({ transport: truncated });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // Host survives; the widget that couldn't be produced is simply absent.
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
     expect(

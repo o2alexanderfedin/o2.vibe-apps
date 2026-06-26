@@ -95,7 +95,19 @@ Plans:
   2. Each data app shows neutral, data-framed loading / empty / error states (never mechanic-framed); a retry re-runs the fetch rather than re-producing the app, and any fetch failure maps to a neutral fallback that never reveals the mechanic or exposes the API key.
   3. Re-opening a data app is instant and rate-limit-friendly because fetched data is TTL-cached client-side (weather ~10 min, FX ~daily).
   4. Egress is contained: `connect-src` is widened to exactly the finite keyless, CORS-open, read-only origins the broker calls (never `*`), asserted in `csp.test.ts`; a `sourceId` not on the allowlist is rejected by the broker; the API key is never sent anywhere but `api.anthropic.com`.
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 1** *(independent — run in parallel)*
+- [x] 12-01-PLAN.md — Data infrastructure: sourceManifest.ts (3-entry curated allowlist) + ttlCache.ts (Clock-DI in-memory cache) + dataBroker.ts (host-side fetch with manifest URL build, param filter, TTL cache, rate-limit wrap, neutral errors)
+- [x] 12-02-PLAN.md — CSP + assertions: widen index.html connect-src to 4 allowlisted origins; add connectSrcDirective helper + 5-case DATA-02 describe block to csp.test.ts
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 12-03-PLAN.md — Services wiring + handler scope: add fetchDataBroker? to Services; wire real broker in createServices(); add cannedBroker/unusedBroker to testServices.ts; inject fetchData before input in handler constrained scope
+- [x] 12-04-PLAN.md — Seeded Weather + Currency apps: delegated module seeds (initialState/view/actionSpec) + seeded handler sources (weatherHandlers.ts, currencyHandlers.ts) + seeded-handler short-circuit in resolveHandlerJS
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 12-05-PLAN.md — Full test suite: broker unit tests (TTL hit/miss, allowlist rejection, param injection guard, non-2xx, network throw) + handler integration tests (weather/currency seeded handlers with real-shape API fixtures, no-broker fallback, fetch bypass proof)
 
 ### Phase 13: Activate Widget Composition
 **Goal**: A delegated app can declare and render `@widget` sub-widgets as a first-class path — each widget isolated in its own shell, a failing widget never crashing its parent, and the composition depth bounded.
@@ -127,7 +139,7 @@ v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 9. Richer Storefront | v1.1 | 0/3 | Planned | - |
 | 10. Widget Schema & Key Correctness | v1.1 | 0/2 | Planned | - |
 | 11. Reliability Hardening | v1.1 | 2/2 | Complete   | 2026-06-26 |
-| 12. Sanctioned Network-Data Path | v1.1 | 0/TBD | Not started | - |
+| 12. Sanctioned Network-Data Path | v1.1 | 2/5 | In Progress|  |
 | 13. Activate Widget Composition | v1.1 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**

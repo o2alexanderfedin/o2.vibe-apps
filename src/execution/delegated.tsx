@@ -178,10 +178,29 @@ export function DelegatedShell({ appType, module, runHandler, stateSchema }: Del
       const action = el.getAttribute("data-action");
       if (!action) return; // empty or missing → not an actionable target
       if (busy) return; // ignore presses while an action is in flight
+
+      // Capture user-entered field values BEFORE running the action. The view marks
+      // its inputs with `data-field="<stateKey>"`; the shell reads each one's current
+      // `.value` and folds it into the state the handler sees, so a handler reads
+      // `state.query` etc. from what the user actually typed. Generic: any delegated
+      // app gets field capture for free. Text inputs / selects via `.value` cover v1;
+      // checkboxes/radios are not special-cased (their `.value` is still readable).
+      const container = e.currentTarget;
+      const fields: Record<string, string> = {};
+      container.querySelectorAll("[data-field]").forEach((node) => {
+        const key = node.getAttribute("data-field");
+        if (!key) return;
+        const value = (node as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value;
+        if (typeof value === "string") fields[key] = value;
+      });
+
       setBusy(action); // action is now guaranteed non-empty
       try {
         const intent = buildActionIntent(appType, module.actionSpec, action);
-        const res = await runHandler(intent, { state: stateRef.current, payload: action });
+        const res = await runHandler(intent, {
+          state: { ...stateRef.current, ...fields },
+          payload: action,
+        });
         const next = (res as { data?: { state?: DelegatedState } })?.data?.state;
         if (next && typeof next === "object") {
           const parsed = stateSchema.safeParse(next);

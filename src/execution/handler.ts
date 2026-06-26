@@ -43,6 +43,20 @@ import type { Services } from "../services/services";
 import type { HandlerRecord } from "../registry/db";
 import { registryKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
+import { WEATHER_HANDLER_SOURCES } from "../apps/weatherHandlers";
+import { CURRENCY_HANDLER_SOURCES } from "../apps/currencyHandlers";
+
+/**
+ * Aggregated seeded handler sources. The map keys are the exact intent strings
+ * buildActionIntent produces for each seeded app action. A match here short-circuits
+ * the registry lookup and the model call — these handlers are host-authored and always
+ * available with zero cost (DATA-03). To add more seeded handlers, spread their
+ * ReadonlyMap into this array.
+ */
+const SEEDED_HANDLER_SOURCES: ReadonlyMap<string, string> = new Map([
+  ...WEATHER_HANDLER_SOURCES,
+  ...CURRENCY_HANDLER_SOURCES,
+]);
 
 /**
  * The neutral result a handler returns. Exactly one of `data` / `error` is set
@@ -70,6 +84,7 @@ export interface HandlerResult {
 export const DENIED_GLOBALS: readonly string[] = [
   "fetch",
   "XMLHttpRequest",
+  "WebSocket",
   "localStorage",
   "sessionStorage",
   "indexedDB",
@@ -100,6 +115,7 @@ const NEUTRAL_HANDLER_ERROR = "This operation could not be completed.";
  */
 async function executeHandler(
   transpiledJS: string,
+  fetchData: (sourceId: string, params: unknown) => Promise<{ data?: unknown; error?: string }>,
   input: unknown,
 ): Promise<HandlerResult> {
   const mod: { exports: Record<string, unknown> } = { exports: {} };
@@ -112,13 +128,15 @@ async function executeHandler(
   };
 
   // Parameter list: the CJS shims, then EVERY denied global (shadowed to
-  // undefined), then `input`. A reference to e.g. `fetch` inside the body binds to
+  // undefined), then `fetchData` (the sanctioned data accessor, DATA-01),
+  // then `input`. A reference to e.g. `fetch` inside the body binds to
   // the parameter (undefined) — never the real global (HANDLER-03).
   const params = [
     "module",
     "exports",
     "require",
     ...DENIED_GLOBALS,
+    "fetchData",
     "input",
   ];
 
@@ -135,9 +153,10 @@ async function executeHandler(
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const fn = new Function(...params, body);
 
-  // Positional args: the CJS shims, one `undefined` per denied global, then input.
+  // Positional args: the CJS shims, one `undefined` per denied global,
+  // then the services-bound fetchData closure, then input.
   const deniedArgs = DENIED_GLOBALS.map(() => undefined);
-  const result = await fn(mod, mod.exports, requireShim, ...deniedArgs, input);
+  const result = await fn(mod, mod.exports, requireShim, ...deniedArgs, fetchData, input);
 
   // Normalize: a well-behaved handler returns `{ data }` or `{ error }`. Anything
   // else (a bare value, null) is wrapped as `{ data }` so the caller's contract
@@ -158,13 +177,14 @@ async function touchHandler(
   services: Services,
   key: string,
   record: HandlerRecord,
+  nowFn: () => number = Date.now,
 ): Promise<void> {
   try {
     const useCount =
       typeof record.useCount === "number" ? record.useCount + 1 : 1;
     await services.registry.put(
       "handlers",
-      { ...record, useCount, updatedAt: Date.now() },
+      { ...record, useCount, updatedAt: nowFn() },
       key,
     );
   } catch (err) {
@@ -186,14 +206,25 @@ async function touchHandler(
 async function resolveHandlerJS(
   intent: string,
   services: Services,
+  nowFn: () => number = Date.now,
 ): Promise<string> {
+  // Seeded-handler short-circuit: host-authored handler sources for known intents.
+  // Fires BEFORE the registry lookup and BEFORE any model call (DATA-03). The
+  // seeded source is transpiled locally on every call — no registry write needed,
+  // as seeded handlers are stateless and cost nothing to re-transpile.
+  const seededSource = SEEDED_HANDLER_SOURCES.get(intent);
+  if (seededSource) {
+    logger.info("Handler: seeded handler hit");
+    return transpileHandler(seededSource, { filename: "seeded-handler.ts" });
+  }
+
   const key = await registryKey("handler", intent);
 
   // Cache HIT: reuse the stored transpiled JS, no model call (HANDLER-02).
   const stored = await services.registry.get("handlers", key);
   if (stored && typeof stored.transpiledJS === "string") {
     logger.info("Handler: cache hit");
-    await touchHandler(services, key, stored);
+    await touchHandler(services, key, stored, nowFn);
     return stored.transpiledJS;
   }
 
@@ -220,7 +251,7 @@ async function resolveHandlerJS(
       source: produced.source,
       transpiledJS: produced.transpiledJS,
       useCount: 0,
-      updatedAt: Date.now(),
+      updatedAt: nowFn(),
     },
     key,
   );
@@ -246,15 +277,20 @@ async function resolveHandlerJS(
  * @param input     The handler's only input — passed straight through.
  * @param services  Injected dependency bundle (transport, registry, getApiKey,
  *                  produceGate). Tests substitute doubles for all four.
+ * @param nowFn     Injectable time source for LRU bookkeeping timestamps. Defaults
+ *                  to `Date.now`; tests pass a stub clock for deterministic
+ *                  `updatedAt` values (consistent with the Clock-DI seam used by
+ *                  TokenBucket / TtlCache / ProduceGate).
  */
 export async function runHandler(
   intent: string,
   input: unknown,
   services: Services,
+  nowFn: () => number = Date.now,
 ): Promise<HandlerResult> {
   let transpiledJS: string;
   try {
-    transpiledJS = await resolveHandlerJS(intent, services);
+    transpiledJS = await resolveHandlerJS(intent, services, nowFn);
   } catch (err) {
     // Produce / compile / throttle failure → neutral error, mechanic hidden.
     // (A ProduceThrottledError, ProduceError, or TranspileError all land here.)
@@ -262,8 +298,15 @@ export async function runHandler(
     return { error: NEUTRAL_HANDLER_ERROR };
   }
 
+  // Bind the data broker to a closure — the handler receives fetchData(sourceId, params)
+  // and never sees the Services object (DATA-01). When the broker is absent the closure
+  // returns a neutral { error } without throwing, preserving the core loop (T-12-03-C).
+  const boundFetchData = (sourceId: string, params: unknown) =>
+    services.fetchDataBroker?.fetch(sourceId, params) ??
+    Promise.resolve({ error: "Data not available." });
+
   try {
-    return await executeHandler(transpiledJS, input);
+    return await executeHandler(transpiledJS, boundFetchData, input);
   } catch (err) {
     // The handler threw at instantiation or execution time. The thrown detail is
     // diagnostics-only (gated logger); the caller sees neutral copy (HANDLER-01).
@@ -283,5 +326,9 @@ export async function executeHandlerSource(
   input: unknown,
 ): Promise<HandlerResult> {
   const transpiledJS = transpileHandler(source, { filename: "handler.ts" });
-  return executeHandler(transpiledJS, input);
+  // No-op stub: tests using this escape hatch do not exercise the data path,
+  // so the stub returns a neutral { error } if a handler happens to call fetchData.
+  const noOpFetchData = (_sourceId: string, _params: unknown) =>
+    Promise.resolve({ error: "Data not available." });
+  return executeHandler(transpiledJS, noOpFetchData, input);
 }

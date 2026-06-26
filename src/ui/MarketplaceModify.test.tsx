@@ -252,8 +252,8 @@ describe("Marketplace — a widget `⋮` tweak re-resolves just that widget in p
     };
     const { user } = renderMarketplace({ transport });
 
-    await openApp(user, "Weather"); // unseeded → routes through transport
-    const region = await screen.findByRole("region", { name: "Weather" });
+    await openApp(user, "Calculator"); // unseeded → routes through transport
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // The original widget rendered inside its own group.
     const group = await within(region).findByRole("group", { name: "gauge" });
     expect(await within(group).findByText("Original Gauge")).toBeInTheDocument();
@@ -270,6 +270,6 @@ describe("Marketplace — a widget `⋮` tweak re-resolves just that widget in p
     expect(await within(region).findByText("Tweaked Gauge")).toBeInTheDocument();
     expect(within(region).queryByText("Original Gauge")).not.toBeInTheDocument();
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
-    expect(screen.getAllByRole("region", { name: "Weather" })).toHaveLength(1);
+    expect(screen.getAllByRole("region", { name: "Calculator" })).toHaveLength(1);
   });
 });
