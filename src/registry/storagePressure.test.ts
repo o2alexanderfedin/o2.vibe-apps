@@ -167,8 +167,9 @@ describe("LRU eviction — loop control (RESIL-06)", () => {
   it("evicts across ALL THREE stores (apps, widgets, handlers), oldest first", async () => {
     const registry = createInMemoryRegistry();
     await registry.put("apps", appRecord("app1", 300, 0), "app1");
-    await registry.put("widgets", { updatedAt: 100, useCount: 0 }, "wid1");
-    await registry.put("handlers", { updatedAt: 200, useCount: 0 }, "hdl1");
+    // Phase 10 (WIDGET-07): WidgetRecord/HandlerRecord now require named fields.
+    await registry.put("widgets", { cacheKey: "wid1", type: "w", source: "// s", transpiledJS: "// j", updatedAt: 100, useCount: 0 }, "wid1");
+    await registry.put("handlers", { cacheKey: "hdl1", intent: "h", source: "// s", transpiledJS: "// j", updatedAt: 200, useCount: 0 }, "hdl1");
 
     // quota 3, 3 entries → 1.0; need < 0.9 → ≤ 2 entries → evict 1 (the oldest = widget).
     const seam = shrinkingSeam(registry, 3, 1);

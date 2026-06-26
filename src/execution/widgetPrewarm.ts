@@ -96,9 +96,11 @@ async function resolveWidget(
   }
 
   // Persist both pieces so the next open is an instant registry hit (GEN-04 parity).
+  // Phase 10 (WIDGET-07d): include LRU bookkeeping fields on first write for parity
+  // with the handler and app write paths (useCount: 0 = no hits yet; updatedAt = now).
   await services.registry.put(
     "widgets",
-    { cacheKey: key, type: widgetType, source, transpiledJS },
+    { cacheKey: key, type: widgetType, source, transpiledJS, useCount: 0, updatedAt: Date.now() },
     key,
   );
   return { source, transpiledJS };
@@ -153,9 +155,11 @@ export async function resolveWidgetTweak(
       );
       source = produced.source;
       transpiledJS = produced.transpiledJS;
+      // Phase 10 (WIDGET-07d): include LRU bookkeeping fields on first write for parity
+      // with the handler and app write paths (useCount: 0 = no hits yet; updatedAt = now).
       await services.registry.put(
         "widgets",
-        { cacheKey: key, type: widgetType, source, transpiledJS },
+        { cacheKey: key, type: widgetType, source, transpiledJS, useCount: 0, updatedAt: Date.now() },
         key,
       );
     }
