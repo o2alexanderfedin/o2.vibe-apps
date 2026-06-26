@@ -240,7 +240,7 @@ describe("WEATHER_HANDLER_SOURCES — handler behavior", () => {
     expect(state?.status).toBe("error");
   });
 
-  it("returns unchanged state when query is empty", async () => {
+  it("resets status to idle when query is empty", async () => {
     const { registry } = await seedRegistry(weatherIntent, weatherSource);
     const broker = routingBroker({});
     const services = createTestServices({ registry, fetchDataBroker: broker });
@@ -252,9 +252,26 @@ describe("WEATHER_HANDLER_SOURCES — handler behavior", () => {
     );
     expect(result.error).toBeUndefined();
     const state = (result.data as { state: Record<string, unknown> })?.state;
-    // Empty query → no fetchData call, state returned as-is
+    // Empty query → no fetchData call, status reset to idle, other fields preserved
     expect(state?.place).toBe("London, United Kingdom");
     expect(state?.tempC).toBe(12);
+    expect(state?.status).toBe("idle");
+  });
+
+  it("resets status to idle when query is empty and status was loading", async () => {
+    const { registry } = await seedRegistry(weatherIntent, weatherSource);
+    const broker = routingBroker({});
+    const services = createTestServices({ registry, fetchDataBroker: broker });
+    const inputState = { query: "", place: "", tempC: null, condition: "", status: "loading" };
+    const result = await runHandler(
+      weatherIntent,
+      { state: inputState, payload: "search" },
+      services,
+    );
+    expect(result.error).toBeUndefined();
+    const state = (result.data as { state: Record<string, unknown> })?.state;
+    // Empty query with stuck loading status must reset to idle — never echo loading back
+    expect(state?.status).toBe("idle");
   });
 });
 

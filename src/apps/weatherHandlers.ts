@@ -28,7 +28,7 @@ async function handler(input) {
   var query = typeof state.query === "string" ? state.query.trim() : "";
 
   if (!query) {
-    return { data: { state: Object.assign({}, state) } };
+    return { data: { state: Object.assign({}, state, { status: "idle" }) } };
   }
 
   // Step 1: geocode the location name → lat/lng
