@@ -277,15 +277,20 @@ async function resolveHandlerJS(
  * @param input     The handler's only input — passed straight through.
  * @param services  Injected dependency bundle (transport, registry, getApiKey,
  *                  produceGate). Tests substitute doubles for all four.
+ * @param nowFn     Injectable time source for LRU bookkeeping timestamps. Defaults
+ *                  to `Date.now`; tests pass a stub clock for deterministic
+ *                  `updatedAt` values (consistent with the Clock-DI seam used by
+ *                  TokenBucket / TtlCache / ProduceGate).
  */
 export async function runHandler(
   intent: string,
   input: unknown,
   services: Services,
+  nowFn: () => number = Date.now,
 ): Promise<HandlerResult> {
   let transpiledJS: string;
   try {
-    transpiledJS = await resolveHandlerJS(intent, services);
+    transpiledJS = await resolveHandlerJS(intent, services, nowFn);
   } catch (err) {
     // Produce / compile / throttle failure → neutral error, mechanic hidden.
     // (A ProduceThrottledError, ProduceError, or TranspileError all land here.)

@@ -173,6 +173,24 @@ describe("runHandler — HANDLER-02 (dual-cache in handlers store, reuse on hit)
     expect((await registry.get("handlers", key))?.useCount).toBe(2);
   });
 
+  it("stamps updatedAt from the injected nowFn seam (deterministic, not Date.now)", async () => {
+    const registry = createInMemoryRegistry();
+    const services = createTestServices({
+      transport: cannedTransport(ECHO_HANDLER),
+      registry,
+    });
+    const key = await registryKey("handler", "clocked handler");
+
+    // MISS write must use the injected clock, not Date.now — a fixed stub value
+    // proves the seam reaches resolveHandlerJS through the public runHandler API.
+    await runHandler("clocked handler", { n: 1 }, services, () => 1000);
+    expect((await registry.get("handlers", key))?.updatedAt).toBe(1000);
+
+    // HIT path (touchHandler) must also honor the injected clock.
+    await runHandler("clocked handler", { n: 1 }, services, () => 2000);
+    expect((await registry.get("handlers", key))?.updatedAt).toBe(2000);
+  });
+
   it("distinct intents cache under distinct opaque keys (no collision)", async () => {
     const registry = createInMemoryRegistry();
     const services = createTestServices({
