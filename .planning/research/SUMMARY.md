@@ -1,252 +1,185 @@
 # Project Research Summary
 
-**Project:** Vibe App Store
-**Domain:** Client-side generative-UI app marketplace (browser-only, BYOK, runtime-compiled React)
-**Researched:** 2026-06-24
+**Project:** Vibe App Store — Milestone v1.1 "Real & Robust"
+**Domain:** Client-only, browser-only generative app marketplace — four additive features on a shipped v1.0
+**Researched:** 2026-06-25
 **Confidence:** HIGH
+
+> **Scope.** This summary synthesizes the four v1.1 research files (STACK-v1.1, FEATURES, ARCHITECTURE, PITFALLS-v1.1) into roadmap-ready decisions. It covers ONLY the four NEW capabilities — **A.** sanctioned network-data path · **B.** reliability hardening of produced reducers · **C.** richer storefront · **D.** activate widget composition — layered on the settled v1.0 stack (Vite 8, React 19.2, `@babel/standalone` v7 classic, `idb` 8, Haiku via browser fetch). The hard non-negotiable across every feature: **nothing the user or devtools sees may reveal the on-demand mechanic** (the banned token family is never written into any visible surface, including comments).
 
 ## Executive Summary
 
-The Vibe App Store is a novel product that inverts the standard generative-UI pattern: instead of exposing an AI prompt surface, it hides the generation mechanic entirely so that apps appear to simply "exist" on the platform. React components are produced on demand by Claude Haiku via direct browser fetch using the user's own API key, compiled in-browser with `@babel/standalone`, instantiated via `new Function()`, and cached in IndexedDB. The result is a marketplace where clicking an app opens it instantly on a cache hit or seamlessly on a cache miss — with nothing in devtools narrating that the app was manufactured. There is no comparable shipped product combining all three constraints (generative UI + marketplace framing + hard "no visible AI" rule), so this research draws from adjacent products (v0, Claude Artifacts, websim) and verified technical foundations.
+v1.1 turns a working-but-faking marketplace into a "real & robust" one without adding infrastructure. The single highest-judgment piece is the **sanctioned network-data path (Feature A)**: today's handler scope shadows `fetch`, so the Weather and Currency apps fabricate fallback data. The research converges hard on one design — a **host-brokered, allowlisted `fetchData(sourceId, params)`** injected into the handler/delegated scope as a bound closure (the same proven pattern as `runHandler`). The HOST builds the URL from a curated manifest and fetches against a finite set of **keyless, CORS-`*` public read APIs (Open-Meteo + Frankfurter, both verified live)**; raw `fetch` stays shadowed in generated scope, the Anthropic key never enters app scope, and CSP `connect-src` widens to an **explicit, enumerable origin set — never `*`**. This converts "arbitrary egress" into "three inert keyless GET sinks," which is the only thing that prevents the key-exfiltration trap.
 
-The recommended approach is a layered pipeline — Intent Resolver → Registry (IndexedDB + in-memory caches) → Generation (Haiku fetch + Babel transpile) → Execution (new Function + ReactDOM) — built as a series of vertical slices where each slice delivers an end-to-end working capability rather than a horizontal layer. The critical cross-cutting constraint is that classic JSX runtime (`runtime: "classic"`) must be pinned in Babel so the transpiler emits `React.createElement`, which resolves to the host-injected `React` argument in the `new Function` scope. Automatic runtime (Babel 8 default) emits an unresolvable `import`, breaking every generated component. Three other load-bearing invariants: the `anthropic-dangerous-direct-browser-access: true` header is mandatory for browser CORS; cache keys must use SHA-256 rather than `btoa` (Unicode-safe, collision-resistant, opaque); and source maps must never ship to production (they are the master switch that exposes every internal symbol and comment).
+The stack delta is deliberately tiny: **one new runtime dependency, `zod@^4` used via the `zod/mini` subpath (~1.9 KB gzip)**, for validating produced state and the actionSpec contract; **zero new deps for the data path** (the APIs are keyless HTTP, so the "install" is a CSP edit, not a package). Everything else is in-house host code, schema/type changes, and config edits. There is an explicit DO-NOT-ADD list: no application server/proxy/BFF, no generic CORS proxy, no auth/OAuth SDK, no key-bearing data providers, and no full `zod` in the shipped bundle.
 
-The principal risks are: (1) the "no visible AI" illusion breaking via any of 15 enumerated devtools vectors — enforced by CI lint from Slice 0, not audited retrospectively; (2) `new Function` is not a sandbox — global-shadowing denylist and static rejection are v1 mitigations, with `<iframe sandbox>` as the deferred production end-state behind a single swappable seam designed in Slice 1; (3) error boundaries do not catch async/event-handler throws — a global `window.onerror` + React 19 `onUncaughtError` backstop is required to prevent revealing messages from reaching the user. These risks are well-understood and have concrete mitigations; none blocks v1 if the mitigations are applied in the right slice.
-
----
+The risk profile is dominated by five traps, all preventable by construction: (1) **CSP key-exfiltration** — solved by the broker + finite allowlist, never widen to wildcard; (2) **CORS/keyless-only** — only browser-verified keyless CORS origins may be allowlisted; (3) **widget-activation scope regression** — `instantiateDelegated` injects NO `useWidget`, so naively activating composition in the delegated path throws, and the dormant widget machinery goes live on real model output for the first time (the project's top regression frustration); (4) **the reliability paradox** — over-constraining the prompt or over-strict validation makes a small model fail MORE often, so validate-and-keep-prior at the merge step beats prose constraints, and self-heal stays compile-error-only (no runtime-error round-trips that burn the cost cap); (5) **storefront honesty** — `useCount` is a local-only signal that cannot truthfully claim "popular on the platform." The dependency-driven build order is **C → D-typing/key-audit → B → A → D-widget-activation**, with two hard constraints: **B before A** (the merge step must validate before it starts merging live network-derived state) and **D-typing before D-activation** (activation must land on real typed records).
 
 ## Key Findings
 
 ### Recommended Stack
 
-See `.planning/research/STACK.md` for full detail. The host app is a Vite 6+ SPA with React 19 and TypeScript 5.7+. Generated code relies on the same React instance (injected by reference, never re-imported) and on `@babel/standalone` for in-browser JSX-to-JS transpilation. IndexedDB is managed via `idb@8`. All Anthropic calls use raw `fetch` (not the SDK) to minimize bundle weight and devtools fingerprint.
+The v1.1 surface adds exactly **one runtime dependency** and a CSP config edit. The data path needs no library because the chosen APIs are keyless HTTP endpoints reached through ~150 LOC of first-party host code (a manifest + a broker that reuses the existing `src/host/` backoff/token-bucket primitives). Validation uses `zod/mini` — the same validation engine as full zod at ~7× smaller, negligible next to Babel's ~400-500 KB — and the same schemas double as the source of truth for Feature D's `WidgetRecord`/`HandlerRecord` typing (`z.infer`). See [STACK-v1.1.md](./STACK-v1.1.md).
 
-**Core technologies:**
+**Core technologies (NEW for v1.1):**
+- **`zod@^4` via `zod/mini`** (`import * as z from "zod/mini"`, ~1.9 KB gzip): runtime validation of produced reducer-state shape + actionSpec; turns silent drift into structured, model-readable diagnostics. The ONLY new npm dependency.
+- **Open-Meteo** (`api.open-meteo.com` + `geocoding-api.open-meteo.com`): real weather data — keyless, CORS-`*` verified live. NO npm dep.
+- **Frankfurter** (`api.frankfurter.dev`): real FX rates (ECB / 84 central banks) — keyless, CORS-`*` verified live. NO npm dep.
+- **In-house fetch broker** (~50-100 LOC, native `fetch`): timeout via `AbortController`, retry/limit reusing existing `src/host/` primitives, IndexedDB short-TTL response cache. NO HTTP client library.
 
-- **React 19.2.x + react-dom 19.2.x** — renders apps, widgets, and the shell; supplies hooks to all generated code via a single shared instance injected by reference into every `new Function` scope. Must be version-locked to each other; a second React copy triggers "Invalid hook call" on every generated component.
-- **@babel/standalone pinned to `^7.26`** (or `8.x` with explicit `runtime: "classic"`) — in-browser JSX transpiler; superior error messages feed the self-heal loop. Load eagerly at init. Config: `presets: [["react", { runtime: "classic" }]]` — non-negotiable; classic runtime is what makes the `new Function` scope model work.
-- **idb@8** — typed promise wrapper over IndexedDB; eliminates a large class of transaction bugs for ~1 KB gzip. Store only `transpiledJS` strings, never compiled functions.
-- **Vite 6+** — host app build only; `build.sourcemap: false` in production is mandatory. Never touches generated code (two separate compile paths).
-- **Raw `fetch` to `api.anthropic.com/v1/messages`** — required headers: `x-api-key`, `anthropic-version: 2023-06-01`, `content-type: application/json`, `anthropic-dangerous-direct-browser-access: true`. Model: `claude-haiku-4-5-20251001` (dated id preferred over alias for cache-key stability). Non-streaming only: partial JSX cannot be compiled.
-- **Sucrase 3.35.x** — post-v1 upgrade path for the transpiler (~20x faster, far smaller); keep Babel behind a `generation/transpile.ts` seam so the swap is one module.
+**DO-NOT-ADD (explicit):** any application server / proxy / BFF · any generic CORS proxy (corsproxy.io, allorigins) · any auth/OAuth/accounts SDK · any API-key-bearing weather/FX provider (OpenWeatherMap etc.) · full `zod` in the shipped hot path · a second transpiler. Each would either break the client-only / zero-infra / never-proxy-the-key constraints or re-open the exfiltration surface.
 
-**What not to use:** `@babel/standalone@8` with default presets (automatic runtime breaks instantiation); the Anthropic SDK in the hot path; streaming for code generation; Next.js or any SSR framework; production source maps.
+**The CSP edit (the real "install" for Feature A):**
+```
+connect-src 'self' https://api.anthropic.com
+  -> 'self' https://api.anthropic.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://api.frankfurter.dev
+```
+`src/csp.test.ts` must be updated in the same change to pin the exact origin set (no wildcard, no `https:`/`http:` token) or CI fails by design.
 
 ### Expected Features
 
-See `.planning/research/FEATURES.md` for full detail. The distinguishing insight: every comparable product (v0, Artifacts, websim) makes the AI mechanic the headline. This product is the inverse. Competitor UX chrome (prompt boxes, "Generate" buttons, model pickers, streaming code, version history) is the exact set of anti-features.
+Track A is the keystone; B is the trust backbone; C is cheap visible depth; D is "activate, don't build." See [FEATURES.md](./FEATURES.md).
 
-**Must have (table stakes — v1):**
+**Must have (table stakes / v1.1 launch — all P1):**
+- **A4 — Sanctioned network-data path** (Weather via Open-Meteo, Currency via Frankfurter): the keystone — without it the network apps stay fake.
+- **A1/A2/A3 — Loading / error+retry / empty states** for fetched data: a data app without these reads as broken (retry re-runs the fetch, never re-produces the app).
+- **A5 — Client-side data cache + TTL** (weather ~10 min, FX ~daily): rate-limit friendliness + instant re-open.
+- **B3 — Guarded reducer / unknown-action no-op** (never throw, never hang): the floor under all reliability.
+- **B1/B2 — Correct increments + no stuck states**: the most basic trust signals.
+- **C1 + G5 — Persist `displayName`/`prompt`** for faithful re-produce and stable identity: prerequisite for storefront depth.
+- **C3 + POP-01 — Popularity row from `useCount`**: cheap, high-visibility depth (honest local copy only).
+- **D1 + G3 + G1-followups — Composed app renders its declared widgets** with correct cache keys + real schemas.
+- **D2 — Keep widget failure isolation true** under real composition (WIDGET-05 must remain true).
 
-- Open-and-render loop (resolve → cache → produce → compile → render) — the product itself
-- IndexedDB registry (`apps`/`widgets`/`handlers`) with stable SHA-256 cache keys and prompt normalization
-- Instant re-open on cache hit (session in-memory transpiled cache; compile once per session)
-- Skeleton / "Opening…" neutral loading state on cache miss (never "Generating…")
-- App shell with contextual `⋮` menu as the only NL surface
-- Contextual natural-language tweak, clone (client-side, no model call), remove
-- Error boundary + self-heal retry (<=3, Babel compiler error fed back, not runtime error)
-- API-key onboarding framed as "activation" not "paste your AI key"
-- Graceful degradation: 401 → reconfigure inline; 429 → backoff + neutral error; no IndexedDB → in-memory Map fallback
-- Theming (light/dark/system) via CSS variables on `:root` — generated apps must look native
-- No-visible-AI hygiene applied as acceptance criterion on every feature above
+**Should have (differentiators, add after validation — P2):**
+- **A8 — Stale-while-revalidate** (instant warm open, silent background refresh) and **A9 — offline last-known-good** labeling.
+- **A6 — Manual refresh** control.
+- **B5 — Invisible behavior self-heal** (silent re-produce of a corrected handler) — only if metrics justify the produce cost.
+- **C4 — Richer card metadata** (description, composition badge); **D3 — per-widget contextual tweak** as a coherent path.
 
-**Should have (competitive — v1.x after single-app loop proven):**
+**Defer (v2+ / P3):**
+- **HARD-01 — iframe sandbox isolation** (the correct end-state for running now-network-capable code, but deferred per MVP-first).
+- **Multi-level widget composition (depth > 1)** — only after single-level proves stable and bounded.
+- **G2 — Unified Intent contract** — internal refactor, defer unless it blocks the above.
 
-- Widget composition: `@widget` dep parser, transitive pre-warm, `makeUseWidget` injection, per-widget shell + error boundary
-- Transparent backend handlers (`runHandler` resolve-or-produce-then-exec)
-- In-place tweak that replaces without surfacing history (the `root.render()` re-use model makes this natural)
-
-**Defer (v2+):**
-
-- `<iframe sandbox>` isolation — correct security end-state; design the mount seam now so the swap is one module
-- Implicit popularity row from `useCount` — cheap polish; needs enough usage to populate
-- Multi-user sync / sharing — needs infra and risks exposing the mechanic
-
-**Anti-features (deliberately not built):** Visible prompt box, "Generate" / "AI is thinking" language anywhere in UI, streaming code into view, server-side anything, real accounts/auth/billing, ratings/reviews, devtools-visible diagnostic attributes or log messages.
+**Anti-features (would break hard constraints):** arbitrary user-typed URLs / "connect any API" (defeats CSP) · a visible "generating/refreshing-via-AI" indicator (hygiene leak) · real-time/websocket polling for slow-changing data · global/cross-user "trending" leaderboard (no server; `useCount` is local-only) · fake ratings/reviews/download counts · deeply-nested recursive widget trees · surfacing widget/handler internals in the UI · streaming produced behavior into the running app.
 
 ### Architecture Approach
 
-See `.planning/research/ARCHITECTURE.md` for full detail. A six-layer pipeline with two defining boundaries: an async/sync boundary at the top of the Execution Engine (everything inside a React render must be synchronous — no `await`) and a single network boundary (`host/modelClient.ts`) that is the only place that constructs requests to Anthropic. State lives in exactly three places: `localStorage` (config), IndexedDB (durable registry), and session in-memory Maps (roots, transpiled strings, live components).
+v1.1 extends a real, mapped substrate; the work is integration at known seams, not greenfield. The execution engine resolves through a 3-tier cache (live -> session -> registry -> produce), instantiates by mode (`"app"` monolithic vs `"delegated"` thin-shell), and runs generated code in a `new Function` scope that is containment-by-convention. The **IoC `Services` bundle is the only place a new capability (`fetchData`) is wired**, which preserves the offline-test invariant. See [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-**Major components:**
-
-1. **`host/modelClient.ts`** — single `fetch` to `api.anthropic.com`; all mandatory headers assembled here; the only place a prompt leaves the browser; gated logger lives here. Single-egress is both a hygiene chokepoint and a security control.
-2. **`registry/` (cacheKey.ts + registry.ts + caches.ts)** — opaque SHA-256 cache-key derivation; three-tier resolve (component Map → transpiledJS Map → IndexedDB → model); normalize prompt before hashing, identically on write and read.
-3. **`generation/` (transpile.ts + selfHeal.ts + app.ts + widget.ts)** — Babel classic-runtime wrapper; self-heal loop (<=3, Babel error fed back, early-stop on identical consecutive errors); `@widget` dep parser; prompt assembly. Fully async; never called from render.
-4. **`execution/` (instantiate.ts + mount.ts + prewarm.ts + useWidget.ts + ErrorBoundary.tsx)** — synchronous island; `new Function` scope injection with global-shadowing denylist; mounted-roots Map (create once, `root.render()` to update, `root.unmount()` to remove); transitive pre-warm before every mount; `useWidget` as a pure `Map.get`; per-shell ErrorBoundary; global async backstop via `window.onerror` + `onUncaughtError`.
-5. **`intent/` (resolver.ts + classifier.ts + router.ts)** — action-to-Intent mapping; keyword routing for remove/clone (no model call) vs mutate; static type map with optional Haiku classifier fallback (cache classifier results).
-6. **`ui/` (Marketplace.tsx + AppShell.tsx + WidgetShell.tsx + ContextualPrompt.tsx)** — shell rendering; the `⋮` popover is the only NL surface; AppShell owns the container `<div>` passed to `createRoot`.
+**Major components (touch points for v1.1):**
+1. **`dataBroker.fetchData` + `dataSources` manifest** (NEW, `src/host/`) — the single external-read egress chokepoint (mirrors `modelClient` as the single Anthropic egress); host builds the URL from a template, generated code supplies only `sourceId` + params, key never enters the path.
+2. **`stateContract.validateTransition`** (NEW, `src/execution/`) — pure validation of returned state against `module.initialState` (the SSOT shape) at the `DelegatedShell` merge step; merge only known keys with matching types, keep-prior otherwise.
+3. **Registry + `Marketplace`** (MODIFY) — additive `AppRecord` fields (`displayName`/`prompt`/`createdAt`), a `topByUseCount` query, and a "Popular" row above the grid.
+4. **`db.ts` record types + `instantiateDelegated`** (MODIFY) — real `WidgetRecord`/`HandlerRecord` schemas (data already matches; types lag), and a `useWidget` accessor + pre-warm wired into the delegated `view` scope (the load-bearing risk in D).
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for full enumeration (7 critical pitfalls, 15 devtools-leak vectors, full recovery strategies).
+Top traps from [PITFALLS-v1.1.md](./PITFALLS-v1.1.md), all preventable by construction:
 
-1. **Classic JSX runtime not pinned** — Babel 8 defaults to automatic runtime, emitting `import { jsx } from "react/jsx-runtime"` which is unresolvable inside `new Function`. Fix: `presets: [["react", { runtime: "classic" }]]` locked in `generation/transpile.ts`; unit test asserts `React.createElement` present in output and no `jsx-runtime` import.
-
-2. **`btoa`-based cache key** — throws on Unicode (emoji/CJK in any prompt), collides after slicing, leaks the type slug (hygiene violation). Fix: `crypto.subtle.digest("SHA-256", utf8Bytes(normalizedInput))` → hex; normalize (lowercase, trim, collapse whitespace, NFC) identically on write and read. Never acceptable; replace before first real use.
-
-3. **Production source maps shipped** — expose every internal symbol name and comment verbatim, defeating the entire devtools hygiene effort. Fix: `build.sourcemap: false` in Vite prod config (master switch behind 14 of 15 devtools-leak vectors); CI lexicon grep (`synthesize|generate|fake|mock|\bAI\b|llm` in identifiers, comments, CSS, `data-*`, prompt strings) gates every merge from Slice 0.
-
-4. **Error boundaries miss async/event-handler throws** — a throw in an `onClick` or async effect escapes the boundary, potentially surfacing a revealing message at `window.onerror`. Fix: global `window.addEventListener("error")` + `unhandledrejection` → neutral "couldn't load" UI; React 19 `createRoot(container, { onUncaughtError })` to route uncaught errors to neutral handling.
-
-5. **`new Function` is not a sandbox** — named parameters add bindings; they do not remove ambient globals. Generated code can reach `window`, `localStorage` (including the API key), `fetch`. Fix: shadow dangerous globals as `undefined` in `argNames` denylist (`window, document, globalThis, localStorage, sessionStorage, indexedDB, fetch, XMLHttpRequest, eval, Function, ...`); add static-reject pass on `transpiledJS` before instantiation; architect the mount seam as a single swappable module so `<iframe sandbox>` is a one-module swap in production.
-
-6. **`anthropic-dangerous-direct-browser-access: true` missing** — CORS preflight rejects every request without it. Include on every call in `host/modelClient.ts`. The header reveals "this app talks to Anthropic from the browser" (which the user already knows since they supplied the key) but does not narrate the on-demand mechanic.
-
-7. **IndexedDB private-mode / Safari eviction** — Safari private mode grants ~zero quota (first write throws); Safari ITP evicts IndexedDB after 7 days of no interaction. Fix: probe write at startup; on failure degrade to in-memory Map; `navigator.storage.persist()` at init; LRU eviction using `useCount`/`updatedAt` before quota is hit.
-
----
+1. **CSP key-exfiltration (Pitfall 1, Feature A)** — widening `connect-src` to let apps fetch turns the policy into an exfiltration highway for the Anthropic key in `localStorage`. **Avoid:** never un-shadow `fetch`, never widen to `*`/`https:`; route all egress through the host broker; widen CSP only to the enumerable keyless origins the broker itself calls; `csp.test.ts` pins the exact set and bans wildcard.
+2. **CORS / keyless-only (Pitfalls 2 & 3, Feature A)** — a familiar API that needs a key or isn't CORS-open passes a curl/Node test and is broken for every browser user (the failure hides behind the neutral `{error}`); a key-bearing source reintroduces a second exfiltratable secret. **Avoid:** allowlist ONLY browser-verified keyless CORS-`*` origins; record the CORS check next to each entry; the broker strips any auth the model emits and there is no key-storage path at all.
+3. **Widget-activation scope regression (Pitfalls 4 & 5, Feature D)** — `instantiateDelegated` injects NO `useWidget` (only the monolithic `instantiate` does), so a delegated `view` calling it throws; activating composition also runs the dormant pre-warm/instantiate/isolate path on real model output for the first time, and a dropped-`prompt` cache-key read serves the wrong artifact. **Avoid:** decide the composing scope explicitly and extend `instantiateDelegated` to inject a pre-warmed widget map; audit every key derivation for symmetric `registryKey(kind,type,prompt)` (never the bare `cacheKey` primitive); add an end-to-end `// @widget` test and run the full suite for zero regressions.
+4. **The reliability paradox (Pitfall 6, Feature B)** — "make it more reliable" naively means "constrain harder / validate stricter," but a small model has a complexity budget (over-constrain -> MORE fallbacks) and a strict validator has a false-positive budget (reject working apps). **Avoid:** validate the RETURNED state shape at the merge step and keep-prior on mismatch (zero round-trips, invisible); reserve self-heal for COMPILE errors only (runtime-error self-heal is less actionable and burns the produce-gate cost cap); the success metric is "correct more often AND produce-success not lower."
+5. **Storefront honesty (Pitfalls 7 & 8, Feature C)** — `useCount` is per-browser and overloaded (LRU touches count machinery, not user opens), so "popular on the platform" is a lie; pre-G5 records and normalized-vs-raw prompt cause blank/duplicate titles and re-produce drift. **Avoid:** honest copy ("Recently opened" / "Your most-used"), scope the count to app opens, hide the row on cold start; store the RAW prompt for re-produce (normalize only for the key), fall back to the type slug for pre-migration records, name tweak variants distinctly.
 
 ## Implications for Roadmap
 
-The build order below is the Vertical-MVP framing converged on independently by the architecture and pitfalls researchers. Each slice delivers a working, end-to-end user-visible capability. Do not flatten into horizontal "build all of layer N" phases.
+Based on combined research, the suggested phase structure follows the dependency-aware order **C -> D-typing/key-audit -> B -> A -> D-widget-activation**. The only hard ordering constraints are **B before A** (validate before merging live data) and **D-typing before D-activation**; the rest minimizes merge-conflict churn on `delegated.tsx`/`producer.ts` and front-loads the cheap, visible win.
 
-**The "no-visible-AI illusion" is a cross-cutting NFR, not a phase.** It is an acceptance criterion attached to every feature's definition of done, enforced by CI lint from Slice 0 forward.
+### Phase 1: Richer Storefront (Feature C)
+**Rationale:** No dependencies, lowest risk, immediately visible; establishes the additive-schema-change muscle. `useCount` already persists, so the popular row is nearly free.
+**Delivers:** Persisted `displayName`/`prompt`/`createdAt` on `AppRecord`; `topByUseCount` query; a "Popular"/"Recently opened" row above the grid.
+**Addresses:** C1, C2, C3 (POP-01), G5.
+**Avoids:** Pitfall 7 (honest local copy, app-open-scoped count, cold-start hide) and Pitfall 8 (raw prompt stored, pre-G5 records render, tweak variants named distinctly).
 
-### Slice 0: Hygiene Shell (Foundation)
+### Phase 2: Schema & Key Hardening (Feature D, typing + cache-key audit)
+**Rationale:** Foundation gate for D and a guardrail for everything that reads the widget/handler stores; must precede widget activation so it lands on typed records. Pure typing/tests, de-risks later phases.
+**Delivers:** Real `WidgetRecord`/`HandlerRecord` schemas replacing the `Record<string,unknown>` stubs (derived from the `zod/mini` schemas); cache-key collision audit + tests (app `chart` != widget `chart`; baseline != tweak; read/write symmetric; no `cacheKey(` in a registry path).
+**Uses:** `zod/mini` (`z.infer` for the record types).
+**Implements:** `db.ts` record typing; `registryKey` call-site audit (the primitive is already correct — do NOT rewrite it).
+**Avoids:** Pitfall 4 (cache-key collisions).
 
-**Rationale:** Devtools hygiene constraints (opaque keys, neutral naming, gated logger, source-map-off build config, CORS header) are cheaper to bake in than to retrofit once data and modules exist.
+### Phase 3: Reliability Hardening (Feature B)
+**Rationale:** Depends on nothing new and MUST precede the network path so live-data transitions are validated by an already-trusted merge step.
+**Delivers:** NEW `stateContract.validateTransition(initialState, next)` (pure, offline-testable); wired into the `DelegatedShell` merge step to merge only known keys and keep-prior on mismatch. Optionally ONE self-heal retry, gated behind the produce-gate, only if real-Haiku fixtures show frequent recoverable drift.
+**Uses:** `zod/mini` (the schema; `module.initialState` is the de-facto schema).
+**Avoids:** Pitfall 6 (validate-and-keep-prior over prose constraints; no runtime-error self-heal; measure produce-success doesn't drop).
 
-**Delivers:** Marketplace shell renders; AppBar with API-key config + theme toggle; neutral CSS variables on `:root`; gated logger (off by default, `localStorage.debug` gate, neutral copy only); opaque `cacheKey()` (SHA-256, normalized input); `host/modelClient.ts` stub (header assembly including `anthropic-dangerous-direct-browser-access: true`); IndexedDB init with probe write + in-memory fallback; `navigator.storage.persist()` call; CI lexicon grep gate; `build.sourcemap: false` in Vite prod config.
+### Phase 4: Sanctioned Network-Data Path (Feature A) — the hard one
+**Rationale:** Highest-judgment piece, built last on a validated base (Phase 3's trusted merge prevents live data from drifting state; Phase 2's typed records back the handlers).
+**Delivers:** NEW `dataSources` manifest + `dataBroker.fetchData(sourceId, params)`; `Services.fetchData` wired (test-injectable); `fetchData` injected into the handler/delegated scope as a bound closure with `fetch`/`XMLHttpRequest` kept shadowed; CSP widened to the explicit keyless allowlist (+ `csp.test.ts` updated); producer prompts taught the `fetchData` global with enumerated sourceIds and a NO-OP rule; a mount `load` action for initial data via the existing merge step. Broker carries its own throttle + short-TTL cache.
+**Addresses:** A4 (keystone), A1/A2/A3, A5, A7.
+**Avoids:** Pitfall 1 (host-brokered, finite allowlist, never `*`, key never in scope), Pitfall 2 (keyless CORS-verified origins only), Pitfall 3 (no key-storage; strip auth), Pitfall 9 (broker throttle + TTL cache), Pitfall 10 (hygiene gate over new files, neutral error copy).
 
-**Avoids:** Key leak via log/header (Pitfall 2), IndexedDB private-mode failure (Pitfall 4), all 15 devtools hygiene vectors (Pitfall 5), btoa cache-key trap (Pitfall 4).
-
-**Research flags:** Standard patterns — no additional research needed.
-
-### Slice 1: Open One Static App End to End (The Loop, Minus the Model)
-
-**Rationale:** Prove the resolve → compile → instantiate → render core with model risk removed. De-risks the novel runtime mechanics (Babel classic, `new Function` scope, `createRoot` map) before adding nondeterminism.
-
-**Delivers:** IndexedDB `apps` store; Intent Resolver (static type map); three-tier registry resolve (component Map → transpiledJS Map → IndexedDB); Babel classic-runtime transpile; `new Function` instantiation with global-shadowing denylist + static-reject pass; mounted-roots Map (`createRoot` once, `root.render()` to update, `root.unmount()` to remove); AppShell with per-app ErrorBoundary; global async backstop (`window.onerror` + `onUncaughtError`); one seeded app's `sourceJSX` (no model call yet); `<iframe sandbox>` seam designed (not yet wired).
-
-**Uses:** React 19, `@babel/standalone` (classic), `idb@8`.
-
-**Avoids:** Babel footguns — classic runtime, single React, no stored functions (Pitfall 3); double `createRoot`, cleanup leaks, async error gap (Pitfall 7); untrusted code escaping `new Function` scope (Pitfall 1).
-
-**Research flags:** Well-documented React/Babel mechanics — no additional research needed.
-
-### Slice 2: Cache-Miss Generation (The Real On-Demand Loop)
-
-**Rationale:** Turns the static loop of Slice 1 into the real product. Core value ("opens an app and it works, instant on hit, seamless on miss") is met at the end of this slice.
-
-**Delivers:** Widget-less app generation via `host.modelClient`; robust JSX extraction (largest balanced code region, not just fence-stripping); self-heal loop (<=3 attempts, Babel compiler error fed back, early-stop on identical consecutive errors); store `{sourceJSX, transpiledJS}` to `apps`; skeleton/"Opening…" loading state. An app the user opens that is not seeded gets produced, compiled, cached, rendered.
-
-**Avoids:** Generation unreliability — prose/fences, non-compiling JSX, wasteful self-heal, 429s (Pitfall 6). Feed Babel error, not runtime error.
-
-**Research flags:** Standard Haiku generation loop patterns — no additional research needed. Confirm: neutral `prompt` copy stored in the IndexedDB record (devtools vector #9).
-
-### Slice 3: Widget Composition + Pre-Warm + Sync `useWidget`
-
-**Rationale:** The three hard concerns (sync `useWidget`, transitive pre-warm, per-widget isolation) are meaningless individually and must ship together. This is what separates "feels native" from "feels generated."
-
-**Delivers:** `widgets` IndexedDB store; `@widget` dep parser; transitive `prewarm()` (recurse with cycle guard, `Promise.all` for siblings, concurrency cap <=2 to avoid 429 storms); `makeUseWidget` injection (pure `Map.get`, synchronous); WidgetShell with its own ErrorBoundary and `⋮` menu.
-
-**Avoids:** Uncapped parallel pre-warm → 429 storms (Pitfall 6); render waterfall (pre-warm-before-mount); one bad widget crashing the parent app (Pitfall 7).
-
-**Research flags:** Confirm whether dynamic (undeclared) widgets are needed. If yes, `useWidget` needs a skeleton-then-async fallback path; if no (all widgets statically declared), the implementation is fully sync. This is a product decision with a concrete implementation fork.
-
-### Slice 4: Contextual Modification (Remove / Clone / Tweak)
-
-**Rationale:** Needs live instances (Slices 1–3) and the mounted-roots Map to act on. First slice where the user shapes apps, not just opens them.
-
-**Delivers:** ContextualPrompt popover (shared by app + widget shells); keyword router (remove/clone client-side with no model call, mutate → new cache key → resolve → `root.render(newTree)` reusing the existing root); correct `root.unmount()` on remove followed by DOM detach; clone as new instance id with same cache key (no model call).
-
-**Avoids:** Unmount-before-DOM-detach; root reuse on tweak prevents double `createRoot` (Pitfall 7).
-
-**Research flags:** Standard patterns — no additional research needed.
-
-### Slice 5: Resilience + Graceful Degradation
-
-**Rationale:** Can only harden paths that exist. Dedicated slice forces a neutral-copy hygiene review across the full error surface at once.
-
-**Delivers:** 401 → inline API-key reconfiguration prompt; 429 → exponential backoff with jitter + `retry-after` header, shared token-bucket at the single egress chokepoint; neutral error copy audit across all 15 devtools vectors; cost guardrail (soft-cap with neutral messaging after N cache misses per time window); `navigator.storage.estimate()` + LRU eviction by `useCount`/`updatedAt`.
-
-**Avoids:** 429 backoff, cost blowup, pre-warm concurrency (Pitfall 6); IndexedDB quota eviction (Pitfall 4).
-
-**Research flags:** Define concrete cost-guardrail threshold (N misses per time window) before shipping this slice. No external research needed.
-
-### Slice 6: Backend-Style Handlers (Optional Additive Layer)
-
-**Rationale:** Fully independent of the UI loop; reuses the resolve-or-produce engine wholesale. Nothing above depends on it.
-
-**Delivers:** `handlers` IndexedDB store; `runHandler(intent, input)` resolve-or-produce-then-exec; handler prompt template. Handlers run mock/local logic only — no `fetch` or `localStorage` in handler scope.
-
-**Avoids:** Handlers constructing their own Anthropic requests or reaching the API key (Pitfall 2).
-
-**Research flags:** Confirm exact allowed globals in handler scope — handlers need enough capability for local data operations (sort, filter, compute) without any network or storage access. The denylist for handlers may differ from the app/widget denylist.
+### Phase 5: Activate Widgets in Delegated Views (Feature D, activation)
+**Rationale:** Depends on D's typing (Phase 2) and benefits from a stable producer prompt (Phases 3-4 already edited prompts). Last because it touches the delegated render path Phases 3-4 also evolve — sequencing it after avoids churn/merge conflicts on `delegated.tsx`.
+**Delivers:** `prewarmWidgets` + a `useWidget` accessor wired into the delegated `view` scope; the delegated prompt updated to permit `// @widget`; a code-enforced widget cap + transitive-depth bound; an end-to-end `// @widget`-declaring app test through the chosen scope.
+**Addresses:** D1, D3, D4; keeps D2 true.
+**Avoids:** Pitfall 5 (explicit scope decision; extend `instantiateDelegated`; full-suite regression gate) and Pitfall 11 (code-enforced cap, cycle guard + concurrency cap hold on a deeper tree).
 
 ### Phase Ordering Rationale
 
-- **Hygiene scaffolding (Slice 0) before any model call or stored key** — opaque keys and the mandatory CORS header are painful to retrofit once data exists.
-- **Static loop (Slice 1) before live generation (Slice 2)** — de-risks the novel `new Function` + Babel + `createRoot` mechanics before adding model nondeterminism.
-- **Generation (Slice 2) before composition (Slice 3)** — widgets are produced the same way apps are; composition cannot exist until the generation engine does.
-- **Composition (Slice 3) before modification (Slice 4)** — tweak/clone/remove operate on live composed instances and the roots Map; WidgetShells with `⋮` menus are delivered in Slice 3.
-- **Resilience (Slice 5) after happy paths exist** — you can only harden error paths that exist.
-- **Handlers (Slice 6) last** — isolated additive layer; core value is met at Slice 2.
+- **B before A is a hard constraint:** the network path starts merging live, network-derived state into the delegated SSOT; that merge must already be validated (Phase 3) before live data flows through it (Phase 4), or drift corrupts state silently.
+- **D-typing before D-activation is a hard constraint:** activated widgets must read typed `WidgetRecord`/`HandlerRecord` and go through audited symmetric cache keys; activating onto stubbed types + an unaudited key path is how the wrong cached artifact gets served.
+- **C first** because it is independent, the cheapest, and the most visible — a quick win that builds the additive-schema muscle the later phases reuse.
+- **A before D-activation** is a soft constraint (both touch `delegated.tsx`/`producer.ts`); serializing them and compounding the prompt edits avoids merge churn.
 
 ### Research Flags
 
-**Phases needing deeper research during planning:**
+Phases likely needing deeper research / a focused design pass during planning:
+- **Phase 4 (Network-data path):** the highest-judgment phase. The broker design, the manifest shape, the param-validation/URL-build contract, the broker throttle, and the mount-`load`-action pattern warrant a focused design pass — though the core decision (host-brokered allowlist) is already settled and verified.
+- **Phase 5 (Widget activation):** the highest-regression-risk phase. The "which scope composes widgets" decision and extending `instantiateDelegated` to inject a pre-warmed widget map need an explicit design step + an end-to-end test plan before touching the load-bearing runtime.
 
-- **Slice 3 (Composition):** Confirm whether dynamic (undeclared) widgets are needed. Product decision with a concrete implementation fork in `useWidget`.
-- **Slice 6 (Handlers):** Confirm exact allowed globals in handler scope. Handler denylist may differ from app/widget denylist.
-
-**Phases with well-established patterns (skip research-phase):**
-
-- **Slice 0:** Pure build config + CSS + key storage — standard Vite + localStorage patterns.
-- **Slice 1:** React `createRoot` + Babel standalone + `new Function` — all verified against official docs in STACK.md and ARCHITECTURE.md.
-- **Slice 2:** Haiku generation + self-heal loop — pattern is well-documented; Babel error feedback is the key insight, already verified.
-- **Slice 4:** Contextual modification — client-side operations on a roots Map; standard React patterns.
-- **Slice 5:** Error handling + backoff — standard patterns with verified `retry-after` header support.
-
----
+Phases with standard / already-settled patterns (skip a research-phase):
+- **Phase 1 (Storefront):** additive `idb` schema fields + a sort + a row; fully settled.
+- **Phase 2 (Schema/key typing):** pure type tightening + an audit; `registryKey` is already correct.
+- **Phase 3 (Reliability):** the merge-step validate-and-keep-prior pattern is well-defined; `initialState` is the schema.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All versions verified against npm registry (2026-06-24); Anthropic headers verified against platform.claude.com/docs and simonwillison.net; Babel 8 automatic-runtime trap verified against babeljs.io migration docs |
-| Features | MEDIUM-HIGH | HIGH on comparable-product landscape and illusion UX research. MEDIUM on exact table-stakes line for this specific product combination (no exact competitor); categorization reasoned from blueprint + analogous products |
-| Architecture | HIGH | Runtime/React/Babel/Anthropic mechanics verified against current docs; build order and devtools-hygiene trade-offs reasoned from verified constraints |
-| Pitfalls | HIGH | Key time-sensitive claims verified: CORS header (simonwillison.net + GitHub issues), multiple-React-instance trap (react.dev), `createRoot` double-call (react.dev), error-boundary async gap (react.dev), Safari ITP eviction (webkit.org blog) |
+| Stack | HIGH | Data-API CORS verified empirically via live `curl` (2026-06-25); `zod@4.4.3` `./mini` export and bundle sizes verified live via npm registry + cross-confirmed comparisons. |
+| Features | HIGH | Data-state/SWR, FSM/guarded-reducer, and discovery-row patterns are well-established and cross-sourced; constraints applied directly from PROJECT.md and the existing code. |
+| Architecture | HIGH | Every integration point cites a real file read from the repo; the two keyless data endpoints verified live; the broker pattern reuses the proven `runHandler` bound-closure mechanism. |
+| Pitfalls | HIGH | Security/CSP and CORS pitfalls verified against live `csp.test.ts`/`handler.ts`/`instantiate.ts` and CSP-exfiltration literature; cache-key/widget/reliability pitfalls read directly from source. MEDIUM only where a failure mode depends on runtime model output. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Dynamic widget fallback scope:** Research is silent on whether the product needs widgets declared at render-time vs statically in source. This is a product decision (Slice 3 planning) with a concrete implementation fork in `useWidget`.
-- **IndexedDB record hygiene — `prompt`/`sourceJSX` fields:** Both are fully inspectable in the Storage tab (devtools vector #9). Decision required before Slice 1 stores the first record. Recommendation: keep `sourceJSX` (it looks like ordinary React source); store only a neutral, product-framed version of the prompt — never raw user text that contains anything narrating the mechanic.
-- **Haiku classifier fallback caching:** The Intent Resolver static type map has an optional Haiku classifier fallback for ambiguous intents. Classifier results should themselves be cached by input string to avoid repeated model calls for the same phrasing. Implied by the architecture but not explicitly designed.
-- **Cost guardrail threshold:** PITFALLS.md recommends a soft-cap "after N generations in a short window" without defining N. A concrete number (e.g., 10 cache misses per 5-minute window) must be decided before Slice 5 ships.
-
----
+- **Live CORS holds in the real browser (not jsdom):** the keyless-CORS verification was via `curl`; jsdom can't prove browser CORS. Add a documented manual browser smoke-check per allowlisted source during Phase 4, and an integration test that parses a real-shape response.
+- **Frankfurter currency coverage (~30 fiat):** if crypto/metals or >30 currencies are requested, the documented fallback is `@fawazahmed0/currency-api` (CDN, keyless, CORS) — but it costs one more CSP `connect-src` entry, so add only on demonstrated need.
+- **Reliability self-heal (hook 3) necessity:** whether one runtime self-heal retry is worth the produce cost depends on real-Haiku fixture drift rates; ship merge-step validate-and-keep-prior (hook 1) first and measure before adding any round-trip.
+- **Widget-composing scope decision:** the delegated-path `useWidget` injection is the load-bearing unknown; resolve it explicitly in Phase 5 planning with the end-to-end test before touching `instantiateDelegated`.
 
 ## Sources
 
 ### Primary (HIGH confidence)
+- Live `curl` of `api.open-meteo.com` + `geocoding-api.open-meteo.com` (2026-06-25) — HTTP 200, `access-control-allow-origin: *`, keyless.
+- Live `curl` of `api.frankfurter.dev/v1/latest` + `/v1/currencies` (2026-06-25) — HTTP 200, CORS-`*`, keyless, ECB-sourced.
+- npm registry (live 2026-06-25) — `zod@4.4.3` (`./mini` export confirmed), `valibot@1.4.1`, `arktype@2.2.1`.
+- Existing repo code (read 2026-06-25) — `src/execution/{loader.ts,delegated.tsx,handler.ts,instantiate.ts,producer.ts,widgetParse.ts,widgetPrewarm.ts}`, `src/registry/{db.ts,cacheKey.ts,registry.ts}`, `src/services/services.ts`, `src/host/modelClient.ts`, `src/data/appRegistry.ts`, `src/ui/Marketplace.tsx`, `index.html` + `src/csp.test.ts`, `.planning/PROJECT.md`.
+- zod.dev/packages/mini + zod.dev/v4 — `zod/mini` functional/tree-shakeable API, ~1.9 KB gzip.
+- open-meteo.com/en/docs + frankfurter.dev — keyless, CORS, endpoint shapes.
+- CSP exfiltration literature — centralcsp.com `connect-src`, HackTricks/Cobalt CSP-bypass ("any wildcard leads to data exfiltration").
+- react.dev — `useOptimistic`, `createRoot` multi-root model.
 
-- npm registry (verified 2026-06-24) — current versions: React/react-dom 19.2.7, @babel/standalone 8.0.2, idb 8.0.3, sucrase 3.35.1, @anthropic-ai/sdk 0.106.0, vite 8.1.0, typescript 6.0.3
-- platform.claude.com/docs — Haiku model id `claude-haiku-4-5-20251001`, context window, pricing, required headers, `anthropic-version: 2023-06-01`
-- simonwillison.net/2024/Aug/23/anthropic-dangerous-direct-browser-access — `anthropic-dangerous-direct-browser-access: true` header requirement; BYOK browser pattern; "nasty anti-pattern" key-in-browser warning
-- babeljs.io/docs/babel-preset-react — Babel 8 automatic-runtime default; classic runtime config; `@babel/standalone` browser transform API
-- react.dev/reference/react-dom/client/createRoot — create-once/render-to-update/unmount contract; double-call warning; `onUncaughtError` root option
-- react.dev/warnings/invalid-hook-call-warning — single React instance requirement; dispatcher mismatch
-- webkit.org/blog/14403/updates-to-storage-policy — Safari ITP 7-day IndexedDB eviction; private-mode zero quota
-- MDN Web Docs — Storage quotas, `navigator.storage.persist()`, `navigator.storage.estimate()`, `QuotaExceededError`
-- Project blueprint: `docs/vibeappstore.md`; `.planning/PROJECT.md`
+### Secondary (MEDIUM confidence)
+- builder.io + souvenirlist/pockit zod-vs-valibot bundle comparisons (2026) — full zod ~12-15 KB vs zod-mini ~1.9 KB vs valibot ~1.2-1.4 KB gzip (cross-confirmed).
+- LogRocket / newline / DEV — loading/error/empty-state + stale-while-revalidate React patterns.
+- BLT / murtazaweb — finite-state-machine guards, optimistic-UI rollback patterns.
+- Moburst / App Radar — discovery/popularity-row norms.
+- Micro-frontend error-boundary write-ups (Medium/DevXtalks, Habsi Tech) — per-widget failure isolation.
 
-### Secondary (MEDIUM-HIGH confidence)
+### Tertiary (LOW confidence)
+- `@fawazahmed0/currency-api` as a documented fallback — keyless+CORS verified via curl, but unused unless Frankfurter's coverage proves insufficient; revalidate before adopting.
 
-- github.com/alangpierce/sucrase — ~20x faster JSX transform, `jsxRuntime: "classic"` config, browser-build caveat
-- iws.io/2022/invalid-hook-multiple-react-instances — hooks + multiple React instances in `new Function` context
-- blog.logrocket.com — skeleton screen UX: 3s skeleton perceived ≈ 1.5s spinner; neutral-motion-mirror-shape guidelines
-- rilna.net/blog — BYOK onboarding UX; why raw key-paste framing is "usually fatal for consumer apps"
-- aiqnahub.com — determinism-at-the-interface: caching first success vs temperature=0 non-determinism
-
-### Tertiary (MEDIUM confidence)
-
-- Competitor product surveys (v0, Claude Artifacts, websim, 21st.dev, Shopify) — feature landscape and anti-feature identification; no direct technical specs
+### Detailed research files
+- [STACK-v1.1.md](./STACK-v1.1.md) · [FEATURES.md](./FEATURES.md) · [ARCHITECTURE.md](./ARCHITECTURE.md) · [PITFALLS-v1.1.md](./PITFALLS-v1.1.md)
 
 ---
-*Research completed: 2026-06-24*
+*Research completed: 2026-06-25*
 *Ready for roadmap: yes*

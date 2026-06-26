@@ -1,25 +1,15 @@
 # Feature Research
 
-**Domain:** Client-side generative-UI app marketplace (on-demand React apps/widgets, BYOK, IndexedDB cache, "no visible AI")
-**Researched:** 2026-06-24
-**Confidence:** MEDIUM-HIGH
+**Domain:** Client-only generative app marketplace (Vibe App Store) — milestone v1.1 "Real & Robust"
+**Researched:** 2026-06-25
+**Confidence:** HIGH (general UX domains are well-established; client-only/devtools-hygiene constraints applied from PROJECT.md)
 
-Confidence is HIGH on the comparable-product feature landscape and on the illusion/perceived-performance UX research (multiple credible sources agree). It is MEDIUM on the precise table-stakes/anti-feature line for *this specific* product, because no shipped competitor combines all three constraints at once — generative UI **and** a marketplace framing **and** a hard "no visible AI" rule. That combination is novel, so categorization below is reasoned from the blueprint plus analogous products, not copied from an existing one.
-
----
-
-## Comparable Products Surveyed
-
-| Product | Category | What it does | What this product borrows / rejects |
-|---------|----------|--------------|--------------------------------------|
-| **v0 (Vercel)** | "AI builds the UI" | Text → React + Tailwind + shadcn component; conversational refine loop ("make sidebar collapsible", "add a loading skeleton") | Borrows: incremental conversational tweak loop, live preview. Rejects: visible prompt-in/code-out UI, export-to-codebase flow. |
-| **Claude Artifacts** | Generative-UI / canvas | Substantial output auto-renders live in a side panel; iterate in plain English in place; publish + **remix** (editable copy) | Borrows: render-in-place, plain-English in-place edit, remix == clone. Rejects: chat transcript visible, "this was AI-generated" framing. |
-| **ChatGPT Canvas** | Generative-UI / canvas | Inline editable doc/code surface with targeted edits | Borrows: targeted in-place edit rather than full regenerate. Rejects: visible AI authorship. |
-| **websim** | Generative web / simulated internet | NL prompt or fictive URL → live HTML/CSS/JS site in a simulated browser; dynamic content generated on navigation; Claude Sonnet under the hood | Closest analog to the *runtime* model (generate-on-navigate, interactive immediately). Rejects: websim *celebrates* the hallucinated-internet mechanic; this product hides it entirely. |
-| **21st.dev / component marketplaces** | Component/widget marketplace | Storefront grid, search, categories, live preview, seamless install, ratings/usage analytics | Borrows: storefront grid, categories, live preview, "open and it just works." Rejects: install step, ratings/comments, creator monetization, hosting/CDN. |
-| **Shopify Search & Discovery / app stores** | Storefront discovery | Search, filters, categories, recommendations, featured | Borrows: discovery surface conventions. Rejects: reviews, pricing tiers, accounts. |
-
-**Cross-cutting finding:** Every generative product surveyed makes the AI mechanic *the headline feature* (a prompt box, a "Generate" button, a visible chat, version history of attempts). **This product is the inverse** — the same engine, the mechanic deliberately invisible. So competitor *features* are useful, but their *UX chrome* (prompt boxes, generation progress, "AI is thinking", regenerate buttons, model pickers) is the exact set of things this product must NOT copy. That inversion is the single most important framing for the table below.
+> **Scope note.** This file researches the *expected user-facing behavior* of four NEW v1.1 capabilities layered on a shipped v1.0:
+> **A.** Network-data path (Weather/Currency fetch real data) · **B.** Reliability hardening (produced behavior correct more often) · **C.** Richer storefront (persist displayName/prompt + "popular" row) · **D.** Activate widget composition (`@widget` first-class).
+>
+> Throughout, "table stakes" means *what a user of a polished weather/currency/dashboard app already assumes works* — not what the v1.0 store currently does. The hard non-negotiable on top of every row: **nothing the user sees may reveal that the app was made on demand** (HYGIENE-01..05, enforced by the CI lexicon gate).
+>
+> *(Supersedes the v1.0 FEATURES.md for this milestone; v1.0 version preserved in git history.)*
 
 ---
 
@@ -27,140 +17,127 @@ Confidence is HIGH on the comparable-product feature landscape and on the illusi
 
 ### Table Stakes (Users Expect These)
 
-Missing any of these and either the core loop fails or the "apps just exist" illusion breaks.
+Features users assume exist. Missing these = the app feels broken or "fake."
 
-| Feature | Why Expected | Complexity | Notes / Dependencies |
-|---------|--------------|------------|----------------------|
-| **Storefront grid of app types** | Every marketplace opens on a browsable storefront; without it there's nothing to "exist on the platform" | LOW | Static catalog of known app types maps to intent classifier's static map. No dynamic discovery needed for v1. |
-| **Open-and-render loop (resolve→cache→produce→compile→render)** | This *is* the product. Click an app, it renders and works | HIGH | The core engine. Depends on registry (cache), Haiku call (produce), Babel (compile), `new Function()`+ReactDOM (render). Everything else hangs off this. |
-| **Instant re-open on cache hit** | Once "installed" feeling, an app must reopen with zero perceptible delay or the illusion of a real installed app collapses | MEDIUM | Depends on IndexedDB registry + session in-memory transpiled cache. "Compile once, never recompile twice in a session" is the load-bearing rule. |
-| **Skeleton / "Opening…" state on cache miss** | A blank screen during a multi-second model call reads as "broken." Skeletons are the proven perceived-performance technique (users rate a 3s skeleton ≈ a 1.5s spinner) | LOW-MEDIUM | Must mirror the app/widget shape and be neutral-colored with subtle motion. Copy must be neutral ("Opening…", "Just a moment…") — never "Generating…". Depends on the shell. |
-| **App shell with contextual `⋮` menu** | Apps need a frame, a name, and an affordance to act on them; standard app-window convention | LOW | Wraps every top-level app. Hosts the contextual-prompt entry point. |
-| **Contextual natural-language tweak** | The "change anything by asking" affordance is the headline interaction of every generative tool (v0, Artifacts) | MEDIUM | Free-form prompt → new cache key → resolve → replace in place. Depends on the loop + registry. |
-| **Clone / duplicate** | Marketplace + artifact convention (Artifacts "remix"); users expect to fork a working thing | LOW | Resolved client-side, **no model call** — copy the stored record under a new key. Depends on registry only. |
-| **Remove / close** | Basic window management; can't have apps you can't dismiss | LOW | Client-side, no model call. Unmount root + drop from open set. |
-| **Widget composition inside an app** | Real apps are composed of parts (charts, tables); a flat single-blob app feels toy-like | HIGH | App declares `@widget` deps → pre-warm before mount → `useWidget()` returns synchronously at render. Pre-warm depends on dep parsing; `useWidget` sync depends on pre-warm. |
-| **Per-widget shell + independent `⋮`** | Once widgets compose, users expect to tweak a chart without touching the whole app | MEDIUM | Each widget gets its own shell, error boundary, and contextual menu. Depends on widget composition. |
-| **Error boundary with retry (render errors)** | Generated code *will* sometimes throw; one bad component must not white-screen the page | MEDIUM | Boundary per app AND per widget. A failing widget shows a placeholder, parent keeps rendering. Copy must be neutral ("Couldn't load this app. Try again."). |
-| **Self-heal retry on produce/compile failure** | First-shot generation isn't reliable; a single bad attempt should not surface as a dead app | MEDIUM | Bounded (~3) retries feeding the **compiler** error (not runtime error) back into the next attempt. Depends on the produce + compile steps. |
-| **API-key onboarding (set / change / clear)** | Without a key nothing renders; this is the unavoidable BYOK gate | MEDIUM | The hardest table-stakes UX problem here (see Pitfalls). Key in `localStorage`, sent only to `api.anthropic.com`. Must be framed as account/activation, not "paste your AI key." |
-| **Graceful degradation on key/rate/storage failure** | 401, 429, and IndexedDB-unavailable are guaranteed to occur; each must degrade without revealing the mechanic | MEDIUM | 401 → reconfigure key inline; 429 → backoff then neutral error; no IndexedDB → in-memory Map fallback. All copy neutral. Depends on the loop + key store. |
-| **Theming (light / dark / system) via CSS variables** | Baseline modern-app expectation; also required so generated apps look native to the platform | LOW | CSS vars on `:root`; generated code instructed to consume `var(--color-*)`. Theme consistency is what makes disparate generated apps feel like one platform. |
+| # | Feature | Why Expected | Complexity | Notes / Dependency on existing v1.0 |
+|---|---------|--------------|------------|-------------------------------------|
+| **A1** | **Loading state on first data fetch** (skeleton/spinner, not a blank panel) | Every data app shows *something* while the first request is in flight | LOW | Reuses SHELL-02 neutral loading affordance. Must read as "loading data," not "generating app" (HYGIENE-01). |
+| **A2** | **Error state with retry** (network fail / non-200 / bad shape → message + "Try again") | A weather app that silently shows nothing on a dropped request feels broken | LOW–MEDIUM | New egress needs typed errors mirroring RESIL-01's pattern. Retry must not re-produce the app — only re-run the fetch. |
+| **A3** | **Empty / "no data" state** (e.g. unknown city, no rates for a pair) | Distinct from error: the request succeeded but returned nothing useful | LOW | A produced view must distinguish empty vs error or it looks buggy. |
+| **A4** | **Real data, correctly shaped** (actual temp/conditions, actual FX rate) | The entire point of the network-data path; a fallback constant reads as fake | MEDIUM | **Depends on the sanctioned network-data path** — the v1.0 handler scope is `fetch`-denied, so today these degrade to a fallback. This is the milestone's keystone. |
+| **A5** | **Client-side cache of fetched data with sane freshness** (don't re-hit the API on every keystroke/open) | Polished weather/currency apps reuse recent data; instant re-open | MEDIUM | Norm: **weather ~10 min TTL**, **currency/FX ~daily** (most free FX feeds update once/day; daily is honest and rate-limit-friendly). Separate store from the compiled-code cache. |
+| **A6** | **Manual refresh affordance** (a refresh control re-fetches now) | Users expect to force-update time-sensitive data | LOW | Refresh re-runs the *fetch*, not the produce loop. Should show A1 again (or a subtle stale-overlay, see A8). |
+| **A7** | **Rate-limit friendliness** (no hammering; backoff on 429) | A BYOK client app that burns a free-API quota gets the user blocked | LOW–MEDIUM | Reuse RESIL-02 backoff/token-bucket *concept* as a separate limiter for the data egress (the model token-bucket is a different budget). Prefer no-key/CORS APIs (Open-Meteo, Frankfurter/ExchangeRate-API open) so there's no quota to exhaust and no key to leak. |
+| **B1** | **Correct increments / state transitions** (a +1 button adds exactly 1; a toggle toggles) | The single most basic trust signal; off-by-one or no-op buttons scream "broken" | MEDIUM | Core of reliability hardening. Stronger action-spec contract + reducer validation on produced delegated handlers (HANDLER-01..03). |
+| **B2** | **No stuck states** (a button press always resolves to a visible result or a clean error — never a permanent spinner) | A control that "does nothing" or hangs is the worst failure mode | MEDIUM | Action handlers must always settle. On a mishandled action, fall through to a safe no-op + (silent) self-heal rather than freeze. Bounded like RESIL-04 (~3). |
+| **B3** | **Graceful handling of an action the reducer mishandles** (unknown/invalid action → previous state preserved, app stays usable) | Generated reducers will sometimes emit a bad transition; the app must not crash or corrupt | MEDIUM | FSM best practice: **guard transitions; unknown action returns current state unchanged (no-op), never throws.** Pair with RESIL-03 error boundary as the last line. |
+| **B4** | **Persisted state survives re-open** (a counter/notes app remembers its value) | Users assume their data sticks | LOW | Already largely covered by the registry/IndexedDB; reliability hardening must not regress it. |
+| **C1** | **Faithful re-produce / stable identity** (an app keeps its name and behaves the same after reload) | An app that renames itself or drifts on reload reads as unstable | LOW | **Depends on G5** — persist `displayName` + `prompt` (+ `widgetDeps`/`createdAt`). Today these are trimmed. |
+| **C2** | **Human-readable app name on cards** | A storefront of slug-only cards feels unfinished | LOW | `displayName` persisted (G5). |
+| **D1** | **A composed app renders all its parts** (an app made of sub-widgets shows them assembled, seamlessly) | If an app declares pieces, the user expects to see the whole | MEDIUM | Activates dormant WIDGET-01..03 (parse `@widget`, pre-warm, mount). Must look like one app, not a debug tree. |
+| **D2** | **A failing widget doesn't take down the app** (one broken piece → placeholder, rest works) | Partial failure beats total failure; standard dashboard expectation | LOW–MEDIUM | Already built as WIDGET-05 — v1.1 just needs to keep it true once composition is a real path. |
 
 ### Differentiators (Competitive Advantage)
 
-What makes THIS product compelling versus v0/Artifacts/websim. The unifying differentiator is **the absence of the AI surface** — it's the only product in the space that hides the mechanic, which is what lets it feel like a *real* marketplace of real apps rather than a "look what the AI made" demo.
+Features that set the product apart. Aligned with the Core Value (apps "just exist" and work).
 
-| Feature | Value Proposition | Complexity | Notes / Dependencies |
-|---------|-------------------|------------|----------------------|
-| **The "no visible AI" illusion (cross-cutting)** | Apps *exist*; there's no prompt box, no "Generate", no model picker, no chat, no "AI is thinking." This is the entire differentiation and the product's identity | HIGH | Not a feature you build once — a constraint enforced across naming, logs, IndexedDB keys, network payloads, comments, CSS, error copy, and the literal banned word "synthesize." Touches every other feature. |
-| **Determinism-at-the-interface (cache the first good output forever)** | Industry-recognized way to make a non-deterministic generator *feel* like stable software: normalize prompt → stable key → store first success → serve it identically forever | MEDIUM | This is *why* an "installed" app reopens identically. Stable cache-key construction is load-bearing; same type+normalized prompt must always hash the same. Depends on registry + key normalization. |
-| **Transparent backend handlers** | Apps can "export CSV", "fetch stats", "save form" and a data handler is produced/cached on first need — apps feel full-stack with zero backend | MEDIUM-HIGH | `runHandler(intent,input)` hides cache→produce→execute. Optional layer; depends on the same engine. Defer past first vertical slice. |
-| **In-place tweak that replaces, not re-chats** | v0/Artifacts show a growing transcript; here a tweak just *becomes* the new app, in place, no history clutter — reinforces "this is the app now" | LOW (given the loop) | Differentiator is the *framing*, not new tech. Depends on contextual tweak + registry. |
-| **Widget-level pre-warm (no render waterfalls)** | Composed apps appear fully-formed instead of popping widgets in one by one — critical to the "it just exists" feel | MEDIUM | Parse `@widget` deps, resolve all, then mount. Depends on widget composition + dep parser. This is what separates "feels native" from "feels generated." |
-| **Use-count / implicit popularity surfacing** (later) | `useCount` already tracked; could power a "popular on the platform" storefront row, deepening the marketplace illusion cheaply | LOW | Pure read of existing data. Pure cosmetic differentiator; defer. |
+| # | Feature | Value Proposition | Complexity | Notes |
+|---|---------|-------------------|------------|-------|
+| **A8** | **Stale-while-revalidate freshness** (show last-good data instantly on re-open, refresh silently in the background) | Feels instant *and* fresh — the SWR pattern that powers polished data apps; no spinner on a warm open | MEDIUM | Cached data renders immediately; background fetch updates in place. A subtle "updated just now"/faint stale tint is the polish. Reinforces "apps just exist and are fast." |
+| **A9** | **Graceful offline / last-known-good** (network down → show cached data labeled as last update, not an error) | A weather app showing yesterday's reading beats one showing a red error | LOW–MEDIUM | Builds on A5. Strong perceived-reliability win for near-zero cost. |
+| **B5** | **Invisible self-heal on bad behavior** (a mishandled action quietly re-produces a corrected handler; user just sees it work the second time — or it works first time after validation) | The reliability story *is* the differentiator: produced behavior that's right more often, failures hidden behind the illusion | MEDIUM–HIGH | Extends RESIL-04 self-heal from compile-time to behavior-time. Must stay silent (HYGIENE-01) — no "regenerating…" text. Bounded; on exhaustion, B3 no-op keeps it usable. |
+| **C3** | **"Popular on the platform" row** (most-opened apps surfaced on the storefront) | Gives the storefront depth and a sense of a living platform; classic discovery surface | LOW | **POP-01.** Drives off `useCount` already persisted for LRU (RESIL-06). Ranking/tie-break/count detailed below. |
+| **C4** | **Richer card metadata feeding discovery** (description, created-at, maybe a composition badge) | Cards that describe themselves are more inviting and more "real" | LOW | Persisted via G5. Enables better-looking rows than slug-only cards. |
+| **D3** | **Per-widget contextual menu / tweak** (each sub-widget independently tweakable/clonable/removable) | Composition becomes *interactive* depth, not just layout — tweak one piece without touching the rest | MEDIUM | WIDGET-04 already gives each widget its own shell+menu. Differentiator is coherence once widgets are real, with correct keys (G1-followups: fold `kind`+prompt so widget variants don't collide). |
+| **D4** | **Composition that pre-warms (no render waterfall)** (a composed app appears assembled at once, not piece-by-piece popping in) | Smooth assembly preserves the "it just exists" feel | MEDIUM | WIDGET-03 transitive pre-warm already exists; v1.1 keeps it honest under real composition. |
 
-### Anti-Features (Deliberately NOT Built)
+### Anti-Features (Commonly Requested, Often Problematic)
 
-These break either the illusion or the client-only model. Each is something a comparable product *has* and that an unguided contributor would reflexively add. Documenting them is the point.
+Several would directly violate the project's hard constraints.
 
-| Feature | Why Requested / Tempting | Why Problematic Here | Instead |
-|---------|--------------------------|----------------------|---------|
-| **Visible prompt box / "Generate" button / model picker** | Every generative tool has one; feels like the obvious primary UI | Directly destroys the core illusion — apps must *exist*, not be summoned | The contextual `⋮` tweak is the *only* NL surface; no global "create an app" prompt. |
-| **Visible "AI is thinking / generating…" progress** | Honest feedback during a slow call | Names the mechanic; "Generating" is a banned concept in visible surfaces | Neutral skeleton + "Opening…" / "Just a moment…". |
-| **Generation/version history, attempt log, "regenerate" button** | v0/Artifacts show versions; useful for iteration | Exposes that output is produced and non-deterministic; reveals retries/failures | Self-heal retries happen invisibly; a tweak silently *replaces* via a new cache key. No surfaced history. |
-| **Streaming the code into view / typewriter render** | Looks impressive, common in AI demos | Reveals code is being authored live — the opposite of "this app already exists" | Render only the finished component, behind a skeleton. |
-| **Server-side anything (backend app server, API proxy)** | "Just proxy Anthropic to hide the key / add a real DB" | Breaks the zero-infra client-only model and creates key-handling liability; explicitly out of scope | Direct browser→`api.anthropic.com`; handlers run in-browser on mock/local data. |
-| **Accounts / auth / billing / subscriptions (real)** | Marketplace narrative implies a subscription | No backend to host auth; the only credential is the user's own key | Subscription is *narrative only*; the API-key gate is the sole "activation." |
-| **Multi-user sync / publish / share generated apps** | Artifacts publish + share; feels expected for a marketplace | Registry is local IndexedDB per browser; no cloud registry in v1; sharing would expose the mechanic and need infra | Local-only registry. Sharing deferred indefinitely. |
-| **Ratings / reviews / comments / creator monetization** | Standard component-marketplace features | There are no third-party creators — every app is produced on demand; ratings imply human authors and a backend | Optional implicit popularity from `useCount` only. |
-| **Devtools-visible diagnostics ("synthesizing widget…", `data-generated`, `.generated-widget`)** | Normal debugging instinct | A single leak via F12 (symbols, IndexedDB keys, console, network body, source-map comments, CSS, attributes) breaks the illusion permanently | Neutral naming everywhere; logs off unless `localStorage.debug`; opaque hash keys; banned word "synthesize" nowhere visible. |
-| **Re-compiling from storage on every load / storing compiled functions** | Simpler mental model | Functions aren't serializable; recompiling twice in a session kills the "instant" feel | Store the transpiled JS *string*; re-instantiate via `new Function()`; session in-memory `transpiledCache`. |
-| **Exposing the prompt/type slug in IndexedDB keys or error text** | Easier debugging / readable keys | Readable keys + error copy ("weather-app generation failed") reveal the mechanic | Opaque hashed keys; neutral error copy ("This app couldn't load. Try again."). |
-| **`<iframe sandbox>` isolation in v1** | Correct security posture | Adds postMessage plumbing and complexity that would slow the first vertical slice | `new Function()` constrained scope for v1; iframe flagged as production hardening, not v1 scope. |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| **Arbitrary user-typed URLs / "connect any API"** in produced apps | "Let the weather app call whatever the user wants" | Defeats CSP `connect-src` (SEC-04) the moment you widen it; turns the fetch-denied scope into an open exfil/SSRF surface for the user's key; unbounded CORS failures | **Curated allowlist** of no-key, CORS-enabled endpoints (Open-Meteo, Frankfurter/ExchangeRate-API open). Add to `connect-src` explicitly. The path is *sanctioned*, not open. |
+| **A visible "refresh/generating/AI" indicator that narrates fetching upstream** | "Show the user it's fetching live data" | A spinner saying *generating*, or a Network tab full of model/source streams, leaks the mechanic (HYGIENE-01..05) | Neutral "loading data" affordance only; keep produce calls non-streaming and out of the visible data-refresh path. A visible fetch to a *weather/FX* host is fine — it reveals "talks to a weather API," not the on-demand mechanic. |
+| **Real-time / websocket live updates** for weather & FX | "Make it live" | Free FX feeds update ~daily; weather ~10–60 min. Live polling burns quota and rate-limits with zero freshness gain | Poll-on-open + SWR + manual refresh, TTL matched to the source's real update cadence (A5/A8). |
+| **Global "trending" leaderboard / cross-user popularity** | "See what's popular everywhere" | No server, no cross-user sync (explicit Out-of-Scope); `useCount` is a **local-only** signal. Implying it's global is dishonest and impossible | "Popular **on the platform**" framed as *this browser's* most-opened; seed defaults so a fresh install isn't empty. Never claim cross-user data. |
+| **Ratings / reviews / download counts on cards** | App-store realism | No accounts, no server, no real userbase — fabricated numbers are deceptive and add UI with no signal | Use the honest local signal (`useCount` → "popular") + descriptive metadata (C4); skip fake social proof. |
+| **Deeply nested / recursive widget trees** | "Compose anything from anything" | Render waterfalls, exploding produce cost (RESIL-05 gate), cache-key collisions, debugging hell; each level multiplies failure surface | Cap composition depth (one level of `@widget`, maybe two); pre-warm (D4); enforce the cost cap. First-class ≠ unbounded. |
+| **Surfacing widget/handler internals (action specs, cache keys) in the UI** | "Power-user transparency" | Reveals the on-demand machinery → hygiene violation | Keep it all behind the storefront illusion; per-widget menu exposes *tweak/clone/remove* only, never the spec. |
+| **Streaming produced behavior into the running app** | "Faster perceived response" | Can't run partial code; SSE source stream is a Network-tab leak (explicit Out-of-Scope) | Non-streaming produce; O(1) cache hit on re-press is already the fast path. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[Storefront grid]
-    └──feeds──> [Intent resolver / static action→type map]
+A4 (real data correctly shaped)
+    └──requires──> Sanctioned network-data path (CSP connect-src + allowlisted no-key CORS APIs)
+                       └──requires──> SEC-04 CSP (exists) widened deliberately, not opened
 
-[Open-and-render loop]  ← the spine; everything below sits on it
-    ├──requires──> [IndexedDB registry]            (cache hit/miss)
-    ├──requires──> [Haiku produce call + BYOK key] (cache miss)
-    ├──requires──> [Babel compile (once)]
-    ├──requires──> [new Function() instantiate + ReactDOM render]
-    └──requires──> [App shell]
+A5 (client data cache) ──enables──> A8 (stale-while-revalidate) ──enables──> A9 (offline last-known-good)
+A2 (error+retry) + A6 (manual refresh) ──share──> data-egress error model (mirrors RESIL-01) + data rate limiter (mirrors RESIL-02)
 
-[Instant re-open]
-    └──requires──> [IndexedDB registry] + [session in-memory transpiled cache]
-                       └──requires──> [stable cache-key normalization]
+B3 (graceful mishandled action: guard → no-op, never throw)
+    └──is the floor under──> B1 (correct increments) and B2 (no stuck states)
+B5 (invisible self-heal on bad behavior)
+    └──requires──> B3 (safe no-op fallback) + RESIL-04 (bounded self-heal) + RESIL-03 (error boundary)
 
-[Skeleton / loading state] ──enhances──> [Open-and-render loop]   (covers the miss latency)
+C3 (popular row)
+    └──requires──> useCount (exists, persisted for RESIL-06 LRU)
+C1/C2/C4 (faithful re-produce, name, description)
+    └──requires──> G5 (persist displayName/prompt/widgetDeps/createdAt)
 
-[Widget composition]
-    └──requires──> [@widget dep parser]
-                       └──requires──> [pre-warm before mount]
-                                          └──enables──> [useWidget() synchronous at render]
-    └──requires──> [WidgetShell + per-widget error boundary]
+D1 (composed app renders parts)
+    └──requires──> WIDGET-01/02/03 (parse @widget, pre-warm, mount — built but dormant)
+    └──requires──> G3 (real WidgetRecord/HandlerRecord schemas, replace placeholder types)
+    └──requires──> G1-followups (fold kind + prompt-hash into cacheKey so widget variants don't collide)
+D3 (per-widget tweak) ──requires──> WIDGET-04 (per-widget shell+menu, exists) + G1-followups (distinct keys per variant)
+D2 (widget failure isolation) ──is──> WIDGET-05 (exists) — must remain true once composition is live
 
-[Contextual tweak]
-    └──requires──> [contextual ⋮ popover] + [open-and-render loop] + [registry]
-[Clone] ──requires──> [registry]            (no model call)
-[Remove] ──requires──> [mounted-root tracking]  (no model call)
-
-[Self-heal retry] ──requires──> [Haiku produce] + [Babel compile]  (feeds COMPILER error back)
-[Error boundary + retry] ──wraps──> [every app] AND [every widget]
-
-[Transparent handlers] ──requires──> [registry] + [Haiku produce]   (optional layer)
-
-[Theming] ──enables──> [generated apps look native]   (CSS vars on :root consumed by generated code)
-
-[No-visible-AI illusion] ──CONSTRAINS──> EVERY feature above
-    (naming, logs, IndexedDB keys, network payload, comments, CSS, error copy)
+HYGIENE-01..05 ──constrains──> EVERY feature above (no visible mechanic; banned lexicon; key only to api.anthropic.com)
 ```
 
 ### Dependency Notes
 
-- **Instant re-open requires stable cache-key normalization:** if the same type+prompt doesn't hash to the same key every time, the cache never hits, every open is a slow produce, and the "installed app" illusion is gone. Normalize (lowercase, trim, collapse whitespace) before hashing. This is the quiet linchpin of the whole experience.
-- **`useWidget()` synchronous-at-render requires pre-warm:** React render must not trigger async work. Pre-warming all `@widget` deps before mount is what lets `useWidget(type)` return a component immediately. Skip pre-warm and you get render-time waterfalls (widgets popping in one by one) — which itself reveals the mechanic.
-- **Self-heal must feed the compiler error, not the runtime error:** Babel errors carry line/token information the model can act on; runtime errors are far less actionable. This ordering materially changes retry success rate.
-- **Per-widget error boundary is what makes composition safe:** without an independent boundary per widget, one bad generated chart white-screens the whole app, and the user sees a broken "real app."
-- **The illusion constraint is orthogonal to every feature, not a feature itself:** it has no single implementation phase — it's an acceptance criterion attached to every other feature's "done" definition (symbols, logs, keys, network, comments, CSS, errors, copy).
+- **A4 is the milestone keystone.** Everything else in track A (caching, refresh, SWR, offline) is decoration on top of "the fetch actually happens." The blocker is the `fetch`-denied handler scope; the fix is a *narrow, allowlisted* egress added to CSP — not a general unlock.
+- **B3 underpins B1 and B2.** "Correct increments" and "no stuck states" both follow from a reducer that guards transitions and treats unknown actions as no-ops instead of throwing/hanging. Build the guard contract first; correctness and non-stuckness follow.
+- **C-track is cheap because the signals already exist.** `useCount` is persisted (for LRU); G5 metadata is a schema/persistence change, not new machinery. POP-01 is mostly a sort + a row.
+- **D-track is "activate, don't build."** The widget machinery (parse/pre-warm/mount/per-widget shell/failure isolation) shipped dormant in v1.0. The real work is **cache-key correctness (G1-followups)** and **real schemas (G3)** so activated widgets don't collide on a bare `SHA-256(type)`.
+- **Hygiene conflicts with naive implementations everywhere.** Any visible "generating/refreshing-via-AI" affordance, any exposed action spec, any streamed source breaks the premise. Each track must route its loading/error/empty UI through neutral, data-framed (not mechanic-framed) language.
 
 ---
 
 ## MVP Definition
 
-### Launch With (v1 — the vertical slice that proves the loop + illusion)
+### Launch With (v1.1)
 
-- [ ] **IndexedDB registry (`apps`/`widgets`/`handlers`)** — without cache there's no instant, and the illusion fails.
-- [ ] **API-key onboarding (set/change/clear, localStorage)** — nothing renders without it; the activation gate.
-- [ ] **Storefront grid + static intent map** — the surface users land on; defines what "exists."
-- [ ] **Open-and-render loop (resolve→cache→produce→compile→render)** — the product itself.
-- [ ] **Stable cache-key normalization + compile-once / session transpiled cache** — makes re-open instant and deterministic-at-interface.
-- [ ] **Skeleton/"Opening…" state with neutral copy** — covers miss latency without revealing generation.
-- [ ] **App shell + contextual `⋮` popover** — frame + the only NL surface.
-- [ ] **Prompt router (remove / clone / tweak)** — remove+clone client-side, tweak via new key.
-- [ ] **Error boundary + retry per app** — generated code will throw.
-- [ ] **Self-heal retry (~3, compiler error fed back)** — makes a cache miss likely to still yield a working app.
-- [ ] **Theme switcher (light/dark/system) via `:root` CSS vars** — generated apps must look native.
-- [ ] **Graceful degradation (missing/invalid key, 429, no IndexedDB) with neutral copy** — guaranteed failure modes.
-- [ ] **No-visible-AI hygiene applied to all of the above** — acceptance criterion, not a separate task.
+Minimum to make the milestone's promise ("real & robust") true.
 
-### Add After Validation (v1.x — once the single-app loop is proven)
+- [ ] **A4 — Sanctioned network-data path** (allowlisted no-key CORS endpoints in CSP; Weather via Open-Meteo, Currency via Frankfurter/ExchangeRate-API open) — *the keystone; without it the network apps stay fake.*
+- [ ] **A1/A2/A3 — Loading / error+retry / empty states for fetched data** — *a data app without these reads as broken.*
+- [ ] **A5 — Client-side data cache with TTL** (weather ~10 min, FX ~daily) — *rate-limit friendliness + instant re-open.*
+- [ ] **B3 — Guarded reducer / unknown-action no-op (never throw, never hang)** — *the floor under all reliability.*
+- [ ] **B1/B2 — Correct increments + no stuck states** — *most basic trust signals.*
+- [ ] **C1 + G5 — Persist displayName/prompt for faithful re-produce + stable identity** — *storefront depth's prerequisite.*
+- [ ] **C3 + POP-01 — "Popular on the platform" row from useCount** — *cheap, high-visibility depth.*
+- [ ] **D1 + G3 + G1-followups — Composed app renders its declared widgets, with correct cache keys + real schemas** — *makes composition first-class.*
+- [ ] **D2 — Keep widget failure isolation true under real composition** (WIDGET-05) — *partial failure must not become total.*
 
-- [ ] **Widget composition + `@widget` dep parser + pre-warm + `useWidget`** — the highest-value upgrade from "toy app" to "real composed app"; deferred only because it's HIGH complexity and the single-blob loop validates the core illusion first. **Trigger:** loop proven instant and illusion-tight on flat apps.
-- [ ] **Per-widget shell + independent `⋮` + per-widget error boundary** — pairs with composition. **Trigger:** composition shipped.
-- [ ] **Transparent backend handlers (`runHandler`)** — makes apps feel full-stack. **Trigger:** an app type clearly needs a data op (export/fetch/save).
+### Add After Validation (v1.x)
 
-### Future Consideration (v2+ — explicitly deferred)
+- [ ] **A8 — Stale-while-revalidate** — *add once A5 caching is proven; turns "fast" into "fast and fresh."*
+- [ ] **A9 — Offline last-known-good labeling** — *trigger: users hit flaky networks.*
+- [ ] **A6 — Manual refresh control** — *trigger: users want to force-update before the TTL elapses.*
+- [ ] **B5 — Invisible behavior self-heal** — *trigger: B-track metrics show residual mishandled-action rate worth the produce cost.*
+- [ ] **C4 — Richer card metadata (description, composition badge)** — *trigger: storefront feels sparse after C1/C3.*
+- [ ] **D3 — Per-widget contextual tweak as a coherent path** — *trigger: composition is used and users want piece-level edits.*
 
-- [ ] **Implicit popularity storefront row (from `useCount`)** — cheap polish; defer until there's enough usage to populate it.
-- [ ] **`<iframe sandbox>` isolation of generated code** — correct security hardening; deferred because it adds postMessage complexity and isn't needed to validate the concept.
-- [ ] **Anything multi-user (sync/share/publish)** — needs infra and risks exposing the mechanic; out of the client-only model.
+### Future Consideration (v2+)
+
+- [ ] **HARD-01 — iframe sandbox isolation** — *deferred per MVP-first; the correct end-state for running now-network-capable produced code, but out of v1.1.*
+- [ ] **Multi-level widget composition (depth > 1)** — *only after single-level composition proves stable and cost is bounded.*
+- [ ] **G2 — Unified Intent contract** — *internal refactor; defer unless it blocks the above.*
 
 ---
 
@@ -168,59 +145,95 @@ These break either the illusion or the client-only model. Each is something a co
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Open-and-render loop | HIGH | HIGH | P1 |
-| IndexedDB registry + stable cache key | HIGH | MEDIUM | P1 |
-| Instant re-open (compile-once + session cache) | HIGH | MEDIUM | P1 |
-| Skeleton/loading state (neutral copy) | HIGH | LOW | P1 |
-| API-key onboarding (illusion-preserving) | HIGH | MEDIUM | P1 |
-| Storefront grid + static intent map | HIGH | LOW | P1 |
-| App shell + contextual `⋮` tweak | HIGH | MEDIUM | P1 |
-| Clone / remove (client-side, no model) | MEDIUM | LOW | P1 |
-| Error boundary + retry | HIGH | MEDIUM | P1 |
-| Self-heal retry (compiler error fed back) | HIGH | MEDIUM | P1 |
-| Theming via CSS vars | MEDIUM | LOW | P1 |
-| Graceful degradation (key/rate/storage) | HIGH | MEDIUM | P1 |
-| No-visible-AI hygiene (cross-cutting) | HIGH | HIGH | P1 |
-| Widget composition + pre-warm + `useWidget` | HIGH | HIGH | P2 |
-| Per-widget shell + boundary | MEDIUM | MEDIUM | P2 |
-| Transparent backend handlers | MEDIUM | MEDIUM-HIGH | P2 |
-| Implicit popularity row | LOW | LOW | P3 |
-| iframe sandbox isolation | LOW (v1) / HIGH (prod) | HIGH | P3 |
+| A4 Sanctioned network-data path | HIGH | MEDIUM | P1 |
+| A1/A2/A3 Loading/error/empty states | HIGH | LOW | P1 |
+| A5 Client data cache + TTL | HIGH | MEDIUM | P1 |
+| B3 Guarded reducer / no-op fallback | HIGH | MEDIUM | P1 |
+| B1/B2 Correct increments / no stuck states | HIGH | MEDIUM | P1 |
+| C1 + G5 Persist displayName/prompt | MEDIUM | LOW | P1 |
+| C3 + POP-01 Popular row | MEDIUM | LOW | P1 |
+| D1 + G3 + G1-followups Composed render + keys/schemas | HIGH | MEDIUM | P1 |
+| D2 Widget failure isolation (keep true) | HIGH | LOW | P1 |
+| A8 Stale-while-revalidate | MEDIUM | MEDIUM | P2 |
+| A6 Manual refresh | MEDIUM | LOW | P2 |
+| A9 Offline last-known-good | MEDIUM | LOW | P2 |
+| B5 Invisible behavior self-heal | MEDIUM | HIGH | P2 |
+| C4 Richer card metadata | LOW | LOW | P2 |
+| D3 Per-widget tweak coherence | MEDIUM | MEDIUM | P2 |
+| HARD-01 iframe isolation | HIGH (security) | HIGH | P3 |
+| Multi-level composition | LOW | HIGH | P3 |
 
-**Priority key:** P1 = must have for launch · P2 = should have, add when possible · P3 = future / hardening
+**Priority key:** P1 = must have for v1.1 launch · P2 = should have, add when possible · P3 = future.
+
+---
+
+## "Popular on the Platform" Row — Pattern Detail (C3 / POP-01)
+
+A focused dig because the question asks specifically about it:
+
+- **How many:** A single horizontal row of **4–6 cards** is the discovery-row norm (enough to feel curated, few enough to scan). With only ~8 seeded app types, **~4–5** keeps "popular" meaningfully *selective* rather than "almost all of them."
+- **Ranking:** Sort by `useCount` descending (the same field RESIL-06 already persists for LRU). No download counts, no ratings — `useCount` is the only honest local signal.
+- **Ties:** Break deterministically so the row doesn't reshuffle on every render — e.g. tie-break by most-recently-used (last-open/`createdAt`) then by stable name. Avoid random tie-breaks (looks buggy).
+- **Cold start:** A fresh install has all-zero counts → an empty or arbitrary row. Seed with a sensible default ordering (or hide the row until N opens) so it never looks broken on day one.
+- **Privacy of a local-only signal:** `useCount` is **per-browser, never synced** (no server, Out-of-Scope). Frame the row honestly as platform/local popularity; do **not** imply cross-user trending (anti-feature). No PII, no transmission — fully consistent with the client-only model and HYGIENE-05.
+- **What richer metadata buys (G5):** `displayName` makes the row legible (not slugs); `description` makes cards inviting; persisting `prompt` enables faithful re-produce so a "popular" app behaves the same each open (C1). Without G5, the row is slug cards with drifting behavior.
+
+---
+
+## Data-State Norms Cheat-Sheet (Track A)
+
+For the produced weather/currency apps to read as "polished":
+
+| State | Weather | Currency / FX |
+|-------|---------|---------------|
+| Loading (first fetch) | Skeleton/spinner, neutral copy | Skeleton/spinner |
+| Error (network/non-200/bad shape) | Message + Retry (re-fetch only) | Message + Retry |
+| Empty (valid request, no data) | "City not found" | "No rate for that pair" |
+| Stale / cached | SWR: show last-good instantly, refresh in bg; optional "updated X ago" | Same; show rate date |
+| Refresh cadence / TTL | **~10 min** (weather updates 10–60 min upstream) | **~daily** (most free feeds update once/day) |
+| Rate-limit posture | Poll-on-open + cache; no live polling; backoff on 429 | Same; FX especially gains nothing from frequent polls |
+
+Recommended no-key, CORS-enabled endpoints (must be added to CSP `connect-src` explicitly): **Open-Meteo** (weather, no key, CORS on, ~10k free calls/day, requires attribution text near the display), **Frankfurter** or **ExchangeRate-API open endpoint** (FX, no key, CORS on, daily ECB rates). The reliability/optimistic-feedback track (B1/B2) can lean on React 19's built-in `useOptimistic` already in the stack.
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | v0 / Artifacts / websim | Component marketplaces (21st.dev, etc.) | Our Approach |
-|---------|-------------------------|------------------------------------------|--------------|
-| Create surface | Visible prompt box / chat / "Generate" | "Browse → install" | **No create surface.** Apps exist; only `⋮` tweak is NL. |
-| Iteration | Conversational transcript, version history | Re-install newer version | **In-place replace** via new cache key; no visible history. |
-| Output framing | "Look what the AI made" | "Copy this code into your project" | **"This is an app on the platform."** Mechanic hidden. |
-| Loading feedback | "Generating…", streaming code | Spinner | **Neutral skeleton** mirroring shape; "Opening…". |
-| Composition | Single artifact / page | Per-component | **App composes pre-warmed widgets**, each independently tweakable. |
-| Persistence/instant | Re-runs the model | CDN-served static asset | **IndexedDB cache → instant identical re-open**; produce only on true miss. |
-| Backend/data | Client demo data or real backend | N/A | **On-demand cached in-browser handlers**, transparent to apps. |
-| Sharing | Publish link, remix | Marketplace listing | **Local-only**; clone == local remix, no publish. |
-| Key handling | Vendor-hosted inference | N/A | **BYOK direct to api.anthropic.com**, no proxy. |
-| Discovery | Search/templates | Search, categories, ratings | **Storefront grid + categories**; no ratings/reviews (no human authors). |
+| Feature | Real app store (Apple/Google) | Polished data app (e.g. a weather PWA) | Our Approach |
+|---------|-------------------------------|----------------------------------------|--------------|
+| Popularity surface | Server-aggregated Top/Trending across all users | n/a | Local-only `useCount` framed as "popular on the platform"; never cross-user |
+| Data freshness | n/a | SWR + TTL (~10 min weather), manual refresh | Same SWR/TTL norms, but fetch routed through a *sanctioned* allowlist under CSP |
+| Failure isolation | Whole-app crash → store relaunch | Per-widget error boundaries on a dashboard | WIDGET-05 per-widget placeholder; one widget fails, app survives |
+| Behavior correctness | Ships vetted binaries | Hand-written, deterministic | Produced-on-demand + guarded reducers + invisible self-heal (the differentiator and the risk) |
+| Composition | Static layouts | Module-federation micro-frontends | `@widget` composition, depth-capped, pre-warmed, hygiene-hidden |
 
 ---
 
 ## Sources
 
-- v0 / generative UI — https://vercel.com/blog/announcing-v0-generative-ui ; https://www.mindstudio.ai/blog/what-is-vercel-v0
-- Claude Artifacts (render-in-place, in-place edit, remix/publish) — https://support.claude.com/en/articles/9487310-what-are-artifacts-and-how-do-i-use-them ; https://www.mindstudio.ai/blog/what-is-claude-interactive-visualization-generative-ui
-- websim (generate-on-navigate, simulated apps, Claude under the hood) — https://www.tomsguide.com/how-to-use-websim ; https://grokipedia.com/page/websim
-- Component marketplaces (storefront, categories, preview, install, ratings) — https://www.components.build/marketplaces ; https://www.adalo.com/features/component-marketplace/
-- Storefront discovery conventions — https://apps.shopify.com/search-and-discovery
-- Skeleton / perceived-performance UX (3s skeleton ≈ 1.5s spinner; neutral, motion, mirror-shape) — https://blog.logrocket.com/ux-design/skeleton-loading-screen-design/ ; https://www.onething.design/post/skeleton-screens-vs-loading-spinners
-- Error/retry UX & circuit-breaker / Haiku-fallback patterns — https://www.developersdigest.tech/blog/claude-api-reliability-error-handling
-- BYOK onboarding UX (and why it's "usually fatal for consumer apps" if framed as raw key paste) — https://www.rilna.net/blog/bring-your-own-api-key-byok-tools-guide-examples
-- Determinism-at-the-interface (cache first success, serve identically; temp=0 ≠ deterministic) — https://www.aiqnahub.com/same-ai-prompt-produces-inconsistent-results/ ; https://medium.com/@mail2mhossain/the-generative-ui-spectrum-controlled-declarative-and-open-ended-ai-interfaces-explained-2663335cdbdb
-- Project blueprint & requirements — `docs/vibeappstore.md`, `.planning/PROJECT.md`
+Data-state & SWR patterns:
+- [UI best practices for loading, error, and empty states in React — LogRocket](https://blog.logrocket.com/ui-design-best-practices-loading-error-empty-state-react/)
+- [Stale-While-Revalidate — newline](https://www.newline.co/courses/react-data-fetching-beyond-the-basics/stale-while-revalidate)
+- [Handling API Errors & Loading States in React — DEV](https://dev.to/addwebsolutionpvtltd/handling-api-errors-loading-states-in-react-clean-ux-approach-54o7)
+- [Weather data caching / TTL norms — QWeather best practices](https://dev.qweather.com/en/docs/best-practices/cache/) · [Weather API common usage / Cache-Control](https://developer.weather.com/docs/api-common-usage-guide)
+
+No-key, CORS-enabled APIs:
+- [Open-Meteo — free weather API, no key, CORS](https://open-meteo.com/) · [Open-Meteo GitHub](https://github.com/open-meteo/open-meteo)
+- [ExchangeRate-API open endpoint, no key](https://www.exchangerate-api.com/docs/free) · [Frankfurter / exchangerate.host](https://exchangerate.host/) · [Best free currency APIs 2026 — AllRatesToday](https://allratestoday.com/blog/best-free-currency-exchange-api-2026/)
+
+Reliability / FSM / optimistic UI:
+- [A Guide to Finite State Machines — BLT](https://bltinc.com/2024/11/04/finite-state-machines-guide/) (guards, error states, unknown-action = invalid/discarded)
+- [useOptimistic — React docs](https://react.dev/reference/react/useOptimistic) · [Optimistic UI patterns — murtazaweb](https://murtazaweb.com/blog/2026-03-22-optimistic-ui-updates-patterns/) (instant feedback, explicit rollback, no stuck states)
+
+Discovery / popularity:
+- [App Store Ranking Factors — Moburst](https://www.moburst.com/blog/app-store-ranking-factors/) · [ASO Ranking Factors 2026 — App Radar](https://appradar.com/academy/app-store-ranking-factors)
+
+Widget composition / isolation:
+- [Error Boundaries in Micro-frontend Architecture — Medium/DevXtalks](https://medium.com/devxtalks/error-boundaries-in-micro-frontend-architecture-5b5dd2c71541) · [Building Resilient Micro Frontends — Habsi Tech](https://blog.habsi.net/building-resilient-micro-frontends-a-practical-guide-to-composable-web-architectures/)
+
+Project context:
+- `/Volumes/Unitek-B/Projects/o2.vibe-apps/.planning/PROJECT.md` (v1.1 milestone, Validated v1.0 requirements, constraints, hygiene gate)
 
 ---
-*Feature research for: client-side generative-UI app marketplace*
-*Researched: 2026-06-24*
+*Feature research for: client-only generative app marketplace — v1.1 "Real & Robust"*
+*Researched: 2026-06-25 · Confidence: HIGH (UX domains verified across multiple current sources; constraints applied from PROJECT.md)*

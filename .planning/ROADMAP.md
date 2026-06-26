@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1–8 (shipped 2026-06-26) — full detail archived in [milestones/v1.0-ROADMAP.md](./milestones/v1.0-ROADMAP.md)
-- 📋 **Next milestone** — to be roadmapped via `/gsd-new-milestone` (candidate scope below)
+- 🚧 **v1.1 Real & Robust** — Phases 9–13 (in progress) — turn the working-but-shallow marketplace into a real, robust one
 
 ## Phases
 
@@ -27,26 +27,80 @@ gap G1). See [BLUEPRINT-DELTA.md](./BLUEPRINT-DELTA.md).
 
 </details>
 
-### 📋 Next Milestone (planned — run `/gsd-new-milestone`)
+### 🚧 v1.1 Real & Robust (Phases 9–13)
 
-Candidate scope, drawn from [BLUEPRINT-DELTA.md](./BLUEPRINT-DELTA.md) §2 plus the
-v2-deferred items:
+- [ ] **Phase 9: Richer Storefront** — Apps carry a real name and re-produce faithfully; a popular row surfaces the most-opened apps with honest local copy.
+- [ ] **Phase 10: Widget Schema & Key Correctness** — Real typed widget/handler records and every cache-key call site folds kind+prompt, so activated widgets can't collide with apps on a shared type slug.
+- [ ] **Phase 11: Reliability Hardening** — Produced delegated behavior is correct more often: invalid state is rejected and prior state kept, unknown actions are no-ops, no extra model round-trips.
+- [ ] **Phase 12: Sanctioned Network-Data Path** — Weather and Currency apps fetch real data through a host-brokered, allowlisted, keyless egress; the API key never enters app scope.
+- [ ] **Phase 13: Activate Widget Composition** — Delegated apps can declare and render `@widget` sub-widgets, each isolated, with a bounded composition depth.
 
-- **Sanctioned network-data path** so network-dependent apps (Weather, Currency)
-  work — today they can't `fetch` in the sandboxed handler scope.
-- **Activate + type the dormant widget/handler schemas** (G3) — the widget
-  composition path is built but unused by delegated apps.
-- **Unified `Intent`** (operation/kind/contextBundle) (G2); **persist
-  `displayName`/`prompt`** for a richer storefront + faithful re-produce (G5).
-- **Deferred safety:** HARD-01 `<iframe sandbox>` isolation of generated code;
-  SEC-01/02/03 general sandboxing.
-- **POP-01** "popular on the platform" storefront row from `useCount`;
-  **reducer-reliability hardening** for delegated apps.
+## Phase Details
+
+### Phase 9: Richer Storefront
+**Goal**: A user sees apps by their real name, re-opens them faithfully produced, and can spot the apps they use most via a "popular" row with truthful local copy.
+**Depends on**: Phase 8 (v1.0 complete; reuses the additive-schema muscle and the `useCount` field already persisted for LRU)
+**Requirements**: STORE-01, STORE-02
+**Success Criteria** (what must be TRUE):
+  1. A user sees each storefront card labeled with the app's real `displayName` (not a raw type slug), and pre-existing records that lack the new fields still render without a blank title.
+  2. After a user re-opens an app, it re-produces faithfully because the original producing `prompt` and `createdAt` are persisted on the app record (raw prompt stored; tweak variants named distinctly).
+  3. A user sees a "popular" row of the most-opened apps, ranked by the existing `useCount` with a deterministic tie-break, that is hidden on cold start and labeled with truthful copy (no false "popular across the platform" claim for a local-only signal).
+  4. Existing apps and tests keep working — the schema change is additive (read-tolerant of old records), `tsc` is clean, the build emits no source maps, and the hygiene gate stays green.
+**Plans**: TBD
+
+### Phase 10: Widget Schema & Key Correctness
+**Goal**: The widget and handler registry records have real types, and every cache-key derivation folds kind+prompt, so an activated widget can never be served the wrong cached artifact or collide with an app of the same type slug.
+**Depends on**: Phase 9
+**Requirements**: WIDGET-07, WIDGET-08
+**Success Criteria** (what must be TRUE):
+  1. The `widgets` and `handlers` registry records expose real typed schemas (replacing the `Record<string, unknown>` placeholders), consistent with the typed `apps` record shape, and `tsc` stays clean.
+  2. A widget of type `chart` and an app of type `chart` resolve to distinct cache keys (kind is folded in), proven by a test, so they can never collide on the shared slug.
+  3. A baseline app and its tweak variant resolve to distinct cache keys (prompt is folded in), and read and write use the same structured `registryKey(kind, type, prompt)` symmetrically — no bare `cacheKey()` survives in any registry path, proven by tests.
+  4. The full suite stays green with no regression, the hygiene gate passes, and the build emits no source maps.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 11: Reliability Hardening
+**Goal**: Produced delegated apps behave correctly more often — a mis-shaped result never blanks or sticks the app, unknown actions do nothing harmful, and none of this costs extra model round-trips.
+**Depends on**: Phase 10
+**Requirements**: RELY-01, RELY-02, RELY-03
+**Success Criteria** (what must be TRUE):
+  1. When a produced action returns a mis-shaped or invalid result, the app keeps its prior visible state — a user never sees a blank or stuck app from a bad transition.
+  2. When a user triggers an action that has no produced handler or is otherwise unknown/unhandled, the app does nothing (a silent no-op) — it never throws and never hangs.
+  3. The user never sees mechanic-revealing copy from a validation failure, and validation failures trigger no extra model round-trips (compile-error self-heal only, per the shipped RESIL-04 budget).
+  4. Produce-success is not lower than before — the validation hardens correctness without making the small model fail more often — verified offline against real captured-Haiku fixtures.
+**Plans**: TBD
+
+### Phase 12: Sanctioned Network-Data Path
+**Goal**: A user opening the Weather app sees real current conditions and the Currency app shows real FX rates, fetched through a host-brokered allowlisted path — and nothing the user or devtools sees reveals the mechanic or exposes the API key.
+**Depends on**: Phase 11 (the merge step must already validate produced state before live network-derived data flows through it — hard ordering constraint)
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04
+**Success Criteria** (what must be TRUE):
+  1. A user opens the Weather app and sees real current conditions for a location, and opens the Currency app and sees real FX rates — each fetched via a host-built request from a curated source manifest, with generated code supplying only a `sourceId` and params (raw `fetch`/`XMLHttpRequest` stay shadowed to `undefined` in app scope).
+  2. Each data app shows neutral, data-framed loading / empty / error states (never mechanic-framed); a retry re-runs the fetch rather than re-producing the app, and any fetch failure maps to a neutral fallback that never reveals the mechanic or exposes the API key.
+  3. Re-opening a data app is instant and rate-limit-friendly because fetched data is TTL-cached client-side (weather ~10 min, FX ~daily).
+  4. Egress is contained: `connect-src` is widened to exactly the finite keyless, CORS-open, read-only origins the broker calls (never `*`), asserted in `csp.test.ts`; a `sourceId` not on the allowlist is rejected by the broker; the API key is never sent anywhere but `api.anthropic.com`.
+**Plans**: TBD
+
+### Phase 13: Activate Widget Composition
+**Goal**: A delegated app can declare and render `@widget` sub-widgets as a first-class path — each widget isolated in its own shell, a failing widget never crashing its parent, and the composition depth bounded.
+**Depends on**: Phase 12 (lands on Phase 10's typed records + audited keys — hard ordering constraint; sequenced after Phase 12 to avoid churn on the shared delegated render path)
+**Requirements**: WIDGET-06
+**Success Criteria** (what must be TRUE):
+  1. A user opens a delegated app that declares `@widget` sub-widgets and sees those widgets render in place — `useWidget` is wired into the delegated `view` scope (closing the gap that the delegated instantiation injected no `useWidget`).
+  2. A failing or slow widget shows a placeholder without crashing its parent app, and renders inside its own shell with its own contextual menu (WIDGET-05 stays true under real composition).
+  3. Composition is bounded — a code-enforced widget cap and transitive-depth bound prevent runaway or recursive widget trees.
+  4. An end-to-end `@widget`-declaring delegated app passes through the chosen scope, the full suite stays green with zero regression, the hygiene gate passes, and the build emits no source maps.
+**Plans**: TBD
+**UI hint**: yes
 
 ## Progress
 
-| Phase | Milestone | Plans | Status | Completed |
-|-------|-----------|-------|--------|-----------|
+**Execution Order:**
+v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
 | 1. Hygiene Foundation & Storefront Shell | v1.0 | 4/4 | Complete | 2026-06-24 |
 | 2. Static Open-One-App Loop | v1.0 | ✓ | Complete | 2026-06-24 |
 | 3. Cache-Miss Generation (Core Value) | v1.0 | ✓ | Complete | 2026-06-24 |
@@ -55,5 +109,22 @@ v2-deferred items:
 | 6. API Error Degradation | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 7. Storage & Cost Guardrails | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 8. Backend-Style Handlers | v1.0 | 1/1 | Complete | 2026-06-24 |
+| 9. Richer Storefront | v1.1 | 0/TBD | Not started | - |
+| 10. Widget Schema & Key Correctness | v1.1 | 0/TBD | Not started | - |
+| 11. Reliability Hardening | v1.1 | 0/TBD | Not started | - |
+| 12. Sanctioned Network-Data Path | v1.1 | 0/TBD | Not started | - |
+| 13. Activate Widget Composition | v1.1 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
+
+---
+
+### v1.1 cross-cutting acceptance constraints (binding on every phase 9–13)
+
+Carried forward from v1.0 — these are acceptance constraints, not separate phases:
+
+- **HYGIENE-01..05** — no devtools-visible surface narrates the on-demand mechanic; the banned token family appears in no source surface (incl. comments); the CI lexicon gate (`hygiene.test.ts`) stays green across `src/**` + `index.html`.
+- **Single Anthropic egress** — the API key is sent only to `api.anthropic.com`, never logged, never proxied; new network egress (Phase 12) goes through the host data-broker chokepoint, not raw `fetch` in generated scope.
+- **Sourcemaps off** — production ships `build.sourcemap: false`; neutral naming for stores/keys/logs/CSS.
+- **IoC / DI** — new capabilities (e.g. `fetchData`) are wired through the injected `Services` bundle so the open→render flow stays testable offline.
+- **TDD with real captured-Haiku fixtures** — RED→GREEN, full suite runs offline with no live network; `tsc` 0 errors and a clean build on every phase exit.
