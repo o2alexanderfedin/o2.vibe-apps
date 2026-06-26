@@ -19,8 +19,8 @@
 import React from "react";
 import type { ComponentType, ReactNode } from "react";
 import { logger } from "../lib/logger";
-import { InstantiateError } from "./instantiate";
-import type { RunHandler } from "./instantiate";
+import { InstantiateError, NULL_USE_WIDGET } from "./instantiate";
+import type { RunHandler, UseWidget } from "./instantiate";
 import { deriveStateSchema } from "./stateSchema";
 
 /** The shared React instance injected into every produced module scope. */
@@ -56,8 +56,17 @@ function requireShim(specifier: string): unknown {
  * actionSpec } exports. Mirrors `instantiate` (CJS module/exports shim + a second
  * pass that returns the scope bindings when the module used bare declarations rather
  * than `export`). Throws InstantiateError if the contract is not satisfied.
+ *
+ * `useWidget` (WIDGET-06): the synchronous widget accessor injected into the module
+ * scope so the produced `view(state)` can compose `@widget` sub-widgets — it closes
+ * over this binding, so a later `view(state)` call resolves widgets via the same
+ * pre-warmed map. Defaults to the null accessor (always returns null), so a delegated
+ * app that declares no widgets — and every existing direct caller/test — is unchanged.
  */
-export function instantiateDelegated(transpiledJS: string): DelegatedModule {
+export function instantiateDelegated(
+  transpiledJS: string,
+  useWidget: UseWidget = NULL_USE_WIDGET,
+): DelegatedModule {
   const mod: { exports: Record<string, unknown> } = { exports: {} };
 
   // Some produced modules ignore "no imports" and import React; the CJS transform
@@ -68,13 +77,13 @@ export function instantiateDelegated(transpiledJS: string): DelegatedModule {
   let injectReact = true;
   const runOnce = (suffix: string): unknown => {
     const params = injectReact
-      ? ["module", "exports", "React", "require"]
-      : ["module", "exports", "require"];
+      ? ["module", "exports", "React", "useWidget", "require"]
+      : ["module", "exports", "useWidget", "require"];
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const fn = new Function(...params, transpiledJS + suffix);
     return injectReact
-      ? fn(mod, mod.exports, sharedReact, requireShim)
-      : fn(mod, mod.exports, requireShim);
+      ? fn(mod, mod.exports, sharedReact, useWidget, requireShim)
+      : fn(mod, mod.exports, useWidget, requireShim);
   };
   const evaluate = (suffix: string): unknown => {
     try {

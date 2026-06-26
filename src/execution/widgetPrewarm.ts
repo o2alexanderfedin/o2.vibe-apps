@@ -38,6 +38,16 @@ import { logger } from "../lib/logger";
 /** The maximum number of widgets resolved concurrently (WIDGET-02). */
 export const WIDGET_CONCURRENCY = 2;
 
+/**
+ * The maximum widget composition DEPTH (WIDGET-06). The host app's directly
+ * declared widgets are depth 1; a widget those declare are depth 2; and so on.
+ * A widget whose depth would exceed this cap is never resolved — it stays absent
+ * from the map (`useWidget` returns null) and the host renders around it, exactly
+ * like a resolve failure. This bounds a pathological A→B→C→…→Z nesting chain (the
+ * cycle guard already stops A→B→A loops; this stops unbounded straight-line depth).
+ */
+export const MAX_WIDGET_DEPTH = 8;
+
 /** A widget's resolved source + transpiled JS (mirrors the app dual-cache). */
 interface ResolvedWidget {
   source: string;
@@ -234,29 +244,43 @@ export async function prewarmWidgets(
   // Cycle guard (WIDGET-02): a type seen here is never queued twice, so a
   // dependency cycle (A→B→A) terminates. `seen` includes in-progress types.
   const seen = new Set<string>();
-  // FIFO worklist of widget types still needing resolution.
-  const queue: string[] = [];
+  // FIFO worklist of widget types still needing resolution, each tagged with its
+  // composition depth (root deps = 1) so the depth cap can be enforced (WIDGET-06).
+  const queue: Array<{ type: string; depth: number }> = [];
 
-  function enqueue(types: string[]): void {
+  function enqueue(types: string[], depth: number): void {
+    // Depth cap (WIDGET-06): a type beyond MAX_WIDGET_DEPTH is dropped — isolated
+    // like a resolve failure (absent from the map → useWidget null → host renders
+    // around it). Bounds unbounded straight-line nesting; the cycle guard handles
+    // loops. Logged (gated) so a too-deep tree is observable in dev.
+    if (depth > MAX_WIDGET_DEPTH) {
+      if (types.length > 0) {
+        logger.info(
+          "Widget pre-warm: depth cap (" + MAX_WIDGET_DEPTH + ") reached — skipping " +
+            types.join(", "),
+        );
+      }
+      return;
+    }
     for (const t of types) {
       if (!seen.has(t)) {
         seen.add(t);
-        queue.push(t);
+        queue.push({ type: t, depth });
       }
     }
   }
 
-  // Seed the worklist from the root source's declarations.
-  enqueue(parseWidgetDeps(rootSource));
+  // Seed the worklist from the root source's declarations (depth 1).
+  enqueue(parseWidgetDeps(rootSource), 1);
 
   // Resolve a single type: fetch/produce → record source → instantiate against
   // the shared map → enqueue its nested declarations. All failures are isolated.
-  async function processOne(widgetType: string): Promise<void> {
+  async function processOne(widgetType: string, depth: number): Promise<void> {
     const resolved = await resolveWidget(widgetType, services);
     if (!resolved) return; // isolated failure — type stays absent from the map
     sources.set(widgetType, resolved.source);
-    // Transitive: queue any widgets THIS widget declares (WIDGET-02).
-    enqueue(parseWidgetDeps(resolved.source));
+    // Transitive: queue any widgets THIS widget declares, one level deeper (WIDGET-02/06).
+    enqueue(parseWidgetDeps(resolved.source), depth + 1);
     // Instantiate against the SHARED map so nested useWidget calls resolve too,
     // then wrap in WidgetShell + per-widget ErrorBoundary (WIDGET-04/05) so the
     // component the host receives is isolated by construction. A render-time
@@ -297,7 +321,7 @@ export async function prewarmWidgets(
       }
       activeCount += 1;
       try {
-        await processOne(next);
+        await processOne(next.type, next.depth);
       } finally {
         activeCount -= 1;
       }

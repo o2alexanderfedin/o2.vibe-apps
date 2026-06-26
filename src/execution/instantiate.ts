@@ -45,7 +45,7 @@ export function makeUseWidget(
 }
 
 /** Empty-map accessor for apps that declare no widgets (always returns null). */
-const NULL_USE_WIDGET: UseWidget = makeUseWidget(new Map());
+export const NULL_USE_WIDGET: UseWidget = makeUseWidget(new Map());
 
 /**
  * The backend-style data-handler accessor injected into a component scope
