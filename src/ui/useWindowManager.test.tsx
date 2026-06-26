@@ -68,10 +68,10 @@ describe("useWindowManager", () => {
     expect(typeof instanceId).toBe("string");
     expect(instanceId.length).toBeGreaterThan(0);
     expect(result.current.windows).toHaveLength(1);
-    expect(result.current.windows[0].minimized).toBe(false);
-    expect(typeof result.current.windows[0].z).toBe("number");
-    expect(result.current.windows[0].z).toBeGreaterThan(0);
-    expect(result.current.windows[0].instanceId).toBe(instanceId);
+    expect(result.current.windows[0]!.minimized).toBe(false);
+    expect(typeof result.current.windows[0]!.z).toBe("number");
+    expect(result.current.windows[0]!.z).toBeGreaterThan(0);
+    expect(result.current.windows[0]!.instanceId).toBe(instanceId);
   });
 
   it("cascade placement offsets down-right and clamps in-viewport", () => {
@@ -82,7 +82,8 @@ describe("useWindowManager", () => {
       result.current.open("calc", { title: "Calc", icon: "C" });
     });
 
-    const [first, second] = result.current.windows;
+    const first = result.current.windows[0]!;
+    const second = result.current.windows[1]!;
     // Second window is offset to the right and below the first
     expect(second.x).toBeGreaterThan(first.x);
     expect(second.y).toBeGreaterThan(first.y);
@@ -128,24 +129,24 @@ describe("useWindowManager", () => {
   it("minimize then restore preserves x/y/z", () => {
     const { result } = renderHook(() => useWindowManager(), { wrapper });
 
-    let winId = "";
     act(() => {
       result.current.open("notes", { title: "Notes", icon: "N" });
-      winId = result.current.windows[0].id;
     });
 
-    const { x: origX, y: origY } = result.current.windows[0];
+    // Read state after act flushes
+    const winId = result.current.windows[0]!.id;
+    const { x: origX, y: origY } = result.current.windows[0]!;
 
     act(() => {
       result.current.minimize(winId);
     });
-    expect(result.current.windows[0].minimized).toBe(true);
+    expect(result.current.windows[0]!.minimized).toBe(true);
 
     act(() => {
       result.current.restore(winId);
     });
 
-    const restored = result.current.windows[0];
+    const restored = result.current.windows[0]!;
     expect(restored.minimized).toBe(false);
     expect(restored.x).toBe(origX);
     expect(restored.y).toBe(origY);
@@ -156,16 +157,17 @@ describe("useWindowManager", () => {
 
     const baseline = mountedCount();
 
-    // Open 3 windows and mount real roots for each
+    // Open 3 windows
     const instanceIds: string[] = [];
-    const winIds: string[] = [];
     act(() => {
       for (let i = 0; i < 3; i++) {
         const iid = result.current.open(`app-${i}`, { title: `App ${i}`, icon: `${i}` });
         instanceIds.push(iid);
-        winIds.push(result.current.windows[result.current.windows.length - 1].id);
       }
     });
+
+    // Read window ids after act flushes state
+    const winIds = result.current.windows.map(w => w.id);
 
     // Mount a real root for each instance
     for (const iid of instanceIds) {
@@ -191,13 +193,14 @@ describe("useWindowManager", () => {
     const { result } = renderHook(() => useWindowManager(), { wrapper });
 
     const baseline = mountedCount();
-    let winId = "";
     let instanceId = "";
 
     act(() => {
       instanceId = result.current.open("notes", { title: "Notes", icon: "N" });
-      winId = result.current.windows[0].id;
     });
+
+    // Read window id after act flushes state
+    const winId = result.current.windows[0]!.id;
 
     // isOpen is true after open
     expect(result.current.isOpen(winId)).toBe(true);
