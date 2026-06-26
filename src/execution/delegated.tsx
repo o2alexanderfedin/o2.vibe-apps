@@ -175,9 +175,10 @@ export function DelegatedShell({ appType, module, runHandler, stateSchema }: Del
       const target = e.target as Element | null;
       const el = target?.closest?.("[data-action]");
       if (!el) return;
+      const action = el.getAttribute("data-action");
+      if (!action) return; // empty or missing → not an actionable target
       if (busy) return; // ignore presses while an action is in flight
-      const action = el.getAttribute("data-action") ?? "";
-      setBusy(action);
+      setBusy(action); // action is now guaranteed non-empty
       try {
         const intent = buildActionIntent(appType, module.actionSpec, action);
         const res = await runHandler(intent, { state: stateRef.current, payload: action });
