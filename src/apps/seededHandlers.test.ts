@@ -54,6 +54,64 @@ function routingBroker(
 }
 
 // ---------------------------------------------------------------------------
+// Short-circuit in resolveHandlerJS (Task 3)
+// ---------------------------------------------------------------------------
+
+describe("SEEDED_HANDLER_SOURCES short-circuit in resolveHandlerJS (DATA-03)", () => {
+  it("weather handler runs WITHOUT a registry entry — short-circuit fires before cache lookup", async () => {
+    // Empty registry: no pre-seeded entry, no transport configured.
+    // The short-circuit must fire and execute the seeded handler.
+    const [weatherIntent] = [...WEATHER_HANDLER_SOURCES.keys()];
+    const broker = routingBroker({
+      "weather-geocode": {
+        data: { results: [{ name: "Paris", latitude: 48.8, longitude: 2.3, country: "France" }] },
+      },
+      "weather-forecast": {
+        data: { current: { temperature_2m: 18, weather_code: 1 } },
+      },
+    });
+    // NO transport override — unusedTransport is the default, it would throw if called
+    const services = createTestServices({ fetchDataBroker: broker });
+
+    const result = await runHandler(
+      weatherIntent!,
+      { state: { query: "Paris", place: "", tempC: null, condition: "", status: "idle" }, payload: "search" },
+      services,
+    );
+
+    // Short-circuit fires, handler runs, no model call, no registry miss needed
+    expect(result.error).toBeUndefined();
+    const state = (result.data as { state: Record<string, unknown> })?.state;
+    expect(state?.place).toBe("Paris, France");
+    expect(state?.tempC).toBe(18);
+    expect(state?.condition).toBe("Mainly clear"); // WMO code 1
+    expect(state?.status).toBe("ready");
+  });
+
+  it("currency handler runs WITHOUT a registry entry — short-circuit fires before cache lookup", async () => {
+    const [currencyIntent] = [...CURRENCY_HANDLER_SOURCES.keys()];
+    const broker = routingBroker({
+      "fx-latest": {
+        data: { base: "EUR", date: "2026-06-26", rates: { USD: 1.08, GBP: 0.85 } },
+      },
+    });
+    const services = createTestServices({ fetchDataBroker: broker });
+
+    const result = await runHandler(
+      currencyIntent!,
+      { state: { base: "EUR", rates: null, status: "idle" }, payload: "load" },
+      services,
+    );
+
+    expect(result.error).toBeUndefined();
+    const state = (result.data as { state: Record<string, unknown> })?.state;
+    expect(state?.base).toBe("EUR");
+    expect(state?.rates).toEqual({ USD: 1.08, GBP: 0.85 });
+    expect(state?.status).toBe("ready");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // WEATHER_HANDLER_SOURCES
 // ---------------------------------------------------------------------------
 
