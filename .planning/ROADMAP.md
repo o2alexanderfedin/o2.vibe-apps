@@ -104,7 +104,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 12-03-PLAN.md — Services wiring + handler scope: add fetchDataBroker? to Services; wire real broker in createServices(); add cannedBroker/unusedBroker to testServices.ts; inject fetchData before input in handler constrained scope
-- [ ] 12-04-PLAN.md — Seeded Weather + Currency apps: delegated module seeds (initialState/view/actionSpec) + seeded handler sources (weatherHandlers.ts, currencyHandlers.ts) + seeded-handler short-circuit in resolveHandlerJS
+- [x] 12-04-PLAN.md — Seeded Weather + Currency apps: delegated module seeds (initialState/view/actionSpec) + seeded handler sources (weatherHandlers.ts, currencyHandlers.ts) + seeded-handler short-circuit in resolveHandlerJS
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 12-05-PLAN.md — Full test suite: broker unit tests (TTL hit/miss, allowlist rejection, param injection guard, non-2xx, network throw) + handler integration tests (weather/currency seeded handlers with real-shape API fixtures, no-broker fallback, fetch bypass proof)
