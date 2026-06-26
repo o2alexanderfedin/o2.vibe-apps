@@ -33,6 +33,26 @@ import { produceComponent, type TransportFn as ProducerTransport } from "./produ
 import type { Services } from "../services/services";
 import { evictUnderPressure } from "../registry/storagePressure";
 import { logger } from "../lib/logger";
+import { APP_REGISTRY } from "../data/appRegistry";
+
+/** Title-case a type slug for display on storefront cards (Phase 9, STORE-01).
+ * Examples: "weather" → "Weather", "my-app" → "My App".
+ * For tweak variants (non-empty userPrompt), appends a short hygiene-safe suffix
+ * derived from the first 20 characters of the user's instruction (stripped to
+ * [a-zA-Z0-9 ] only) — e.g. "Weather (show celsius)". If the stripped suffix is
+ * empty after trimming, returns the base title only.
+ */
+function deriveDisplayName(type: string, userPrompt?: string): string {
+  const base = type
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  if (userPrompt) {
+    const suffix = userPrompt.trim().slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, "").trim();
+    return suffix ? `${base} (${suffix})` : base;
+  }
+  return base;
+}
 
 /**
  * Refresh the LRU bookkeeping of a stored record after a cache HIT (Phase 7,
@@ -283,6 +303,11 @@ export async function resolveComponent(
 
   // Persist both pieces to the registry — next open is an instant cache hit (GEN-04).
   // Fresh LRU bookkeeping: useCount 0 (no hits yet), updatedAt = now (RESIL-06).
+  // Phase 9 (STORE-01): set displayName (static label for seeded apps, title-cased
+  // slug for unseeded), createdAt (first-write timestamp, never overwritten on touch),
+  // and prompt (user's intent string only — never the model system-prompt, which
+  // contains lexicon visible via devtools → IndexedDB).
+  const staticEntry = APP_REGISTRY.find((a) => a.id === appType);
   await services.registry.put(
     "apps",
     {
@@ -293,6 +318,9 @@ export async function resolveComponent(
       mode,
       useCount: 0,
       updatedAt: Date.now(),
+      createdAt: Date.now(),
+      displayName: staticEntry?.displayName ?? deriveDisplayName(appType, userPrompt),
+      prompt: userPrompt ?? undefined,
     },
     appCacheKey,
   );
