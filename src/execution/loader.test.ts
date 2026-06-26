@@ -9,6 +9,8 @@ import {
   createInMemoryRegistry,
   cannedTransport,
 } from "../services/testServices";
+import { deriveDisplayName } from "./loader";
+import type { AppRecord } from "../registry/db";
 
 // A canned component source returned for unseeded types.
 const CANNED_SOURCE = `
@@ -158,5 +160,98 @@ describe("loader — three-tier resolve and dual-cache", () => {
 
     await resolveComponent("counter-seeded", "counter", key, services);
     expect(transportCalled).toBe(false);
+  });
+
+  // WR-02: Phase-9 fields (displayName, prompt, createdAt) must survive
+  // touchRecord's spread on a tier-3 cache-hit re-write. If a future refactor
+  // of touchRecord explicitly lists fields instead of spreading, this test
+  // will catch the silent field-strip regression.
+  it("tier-3 hit: displayName, prompt, and createdAt survive touchRecord spread (WR-02)", async () => {
+    const { resolveComponent, _clearCachesForTesting } = await import("./loader");
+
+    // Share ONE registry so the persisted record is visible on the second resolve.
+    const registry = createInMemoryRegistry();
+    const services = createTestServices({ registry });
+
+    const { cacheKey } = await import("../registry/cacheKey");
+    const key = await cacheKey("notes");
+
+    // First resolve: populates the registry with Phase-9 fields.
+    _clearCachesForTesting();
+    await resolveComponent("notes-p9-a", "notes", key, services);
+
+    // Manually stamp Phase-9 fields on the persisted record so the tier-3 path
+    // has a record that carries displayName/prompt/createdAt (simulates a record
+    // written with those fields on first open).
+    const written = await registry.get("apps", key);
+    expect(written).toBeDefined();
+    const cannedCreatedAt = 1_700_000_000_000;
+    // Spread required fields from the first resolve and add Phase-9 optional
+    // fields (displayName, prompt, createdAt). The explicit AppRecord cast
+    // satisfies registry.put's generic constraint.
+    const p9Record: AppRecord = {
+      ...(written as AppRecord),
+      displayName: "Notes",
+      prompt: "show dates",
+      createdAt: cannedCreatedAt,
+    };
+    await registry.put("apps", p9Record, key);
+
+    // Clear in-memory caches to force a tier-3 registry read (touchRecord path).
+    _clearCachesForTesting();
+    await resolveComponent("notes-p9-b", "notes", key, services);
+
+    // After the tier-3 hit, touchRecord spreads the stored record and re-writes it.
+    // All three Phase-9 fields must still be present and createdAt must be unchanged.
+    const touched = await registry.get("apps", key);
+    expect((touched as Record<string, unknown>)?.displayName).toBe("Notes");
+    expect((touched as Record<string, unknown>)?.prompt).toBe("show dates");
+    expect((touched as Record<string, unknown>)?.createdAt).toBe(cannedCreatedAt);
+    // useCount and updatedAt must have been bumped by touchRecord.
+    expect(typeof (touched as Record<string, unknown>)?.useCount).toBe("number");
+    expect((touched as Record<string, unknown>)?.useCount).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// IN-01: deriveDisplayName suffix sanitization — exported for unit testing only.
+describe("deriveDisplayName", () => {
+  it("title-cases a plain slug with no prompt", () => {
+    expect(deriveDisplayName("my-app")).toBe("My App");
+  });
+
+  it("title-cases an underscore-separated slug", () => {
+    expect(deriveDisplayName("weather_widget")).toBe("Weather Widget");
+  });
+
+  it("appends a trimmed suffix from the prompt (≤20 chars, alphanum+space only)", () => {
+    // "show celsius now" is 16 chars — fits in 20 — no chars stripped — suffix present.
+    expect(deriveDisplayName("weather", "show celsius now")).toBe(
+      "Weather (show celsius now)",
+    );
+    // A 21-char prompt is sliced to 20 before stripping: "show celsius now!!!" → slice 20 →
+    // "show celsius now!!!" becomes "show celsius now!!!" → stripped → "show celsius now" (16).
+    expect(deriveDisplayName("weather", "show celsius now!!!!")).toBe(
+      "Weather (show celsius now)",
+    );
+  });
+
+  it("all-punctuation-at-edges prompt: inner words survive strip (suffix non-empty)", () => {
+    // "!!! all punct !!!" → strip non-alphanum → " all punct " → trim → "all punct"
+    expect(deriveDisplayName("weather", "!!! all punct !!!")).toBe(
+      "Weather (all punct)",
+    );
+  });
+
+  it("pure-punctuation prompt falls back to base only (stripped suffix is empty)", () => {
+    // "!!!!!!!!!!" → strip → "" → trim → "" → base only
+    expect(deriveDisplayName("weather", "!!!!!!!!!!")).toBe("Weather");
+  });
+
+  it("all-whitespace prompt falls back to base only", () => {
+    expect(deriveDisplayName("weather", "   ")).toBe("Weather");
+  });
+
+  it("returns base only when userPrompt is omitted", () => {
+    expect(deriveDisplayName("counter")).toBe("Counter");
   });
 });

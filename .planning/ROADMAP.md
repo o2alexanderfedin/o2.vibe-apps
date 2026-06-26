@@ -46,7 +46,11 @@ gap G1). See [BLUEPRINT-DELTA.md](./BLUEPRINT-DELTA.md).
   2. After a user re-opens an app, it re-produces faithfully because the original producing `prompt` and `createdAt` are persisted on the app record (raw prompt stored; tweak variants named distinctly).
   3. A user sees a "popular" row of the most-opened apps, ranked by the existing `useCount` with a deterministic tie-break, that is hidden on cold start and labeled with truthful copy (no false "popular across the platform" claim for a local-only signal).
   4. Existing apps and tests keep working — the schema change is additive (read-tolerant of old records), `tsc` is clean, the build emits no source maps, and the hygiene gate stays green.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] 09-01-PLAN.md — Schema + loader: extend AppRecord with displayName/prompt/createdAt; wire into loader write sites; extract rankPopular utility
+- [x] 09-02-PLAN.md — Tests: v1-record compat for Phase 9 fields + rankPopular determinism tests
+- [x] 09-03-PLAN.md — UI: popular row in Marketplace.tsx + displayName fallback chain + visual verification checkpoint
 
 ### Phase 10: Widget Schema & Key Correctness
 **Goal**: The widget and handler registry records have real types, and every cache-key derivation folds kind+prompt, so an activated widget can never be served the wrong cached artifact or collide with an app of the same type slug.
@@ -109,7 +113,7 @@ v1.1 phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 | 6. API Error Degradation | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 7. Storage & Cost Guardrails | v1.0 | 1/1 | Complete | 2026-06-24 |
 | 8. Backend-Style Handlers | v1.0 | 1/1 | Complete | 2026-06-24 |
-| 9. Richer Storefront | v1.1 | 0/TBD | Not started | - |
+| 9. Richer Storefront | v1.1 | 0/3 | Planned | - |
 | 10. Widget Schema & Key Correctness | v1.1 | 0/TBD | Not started | - |
 | 11. Reliability Hardening | v1.1 | 0/TBD | Not started | - |
 | 12. Sanctioned Network-Data Path | v1.1 | 0/TBD | Not started | - |
