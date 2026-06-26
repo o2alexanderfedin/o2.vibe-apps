@@ -4,14 +4,14 @@ milestone: v1.1
 milestone_name: Real & Robust
 status: executing
 stopped_at: Session resumed via /gsd-resume-work — clean checkpoint confirmed (develop synced with origin, no incomplete plans/handoff). Proceeding to plan Phase 9 (Richer Storefront).
-last_updated: "2026-06-26T11:35:23.903Z"
-last_activity: 2026-06-26 -- Phase 11 execution started
+last_updated: "2026-06-26T11:40:00.000Z"
+last_activity: 2026-06-26 -- Phase 11 merged to develop (passed 3/3, 422 tests)
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
-  completed_plans: 5
-  percent: 71
+  completed_plans: 7
+  percent: 60
 ---
 
 # Project State
@@ -21,16 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 11 — reliability-hardening
+**Current focus:** Phase 12 — sanctioned network-data path (highest-judgment phase)
 
 ## Current Position
 
-Phase: 11 (reliability-hardening) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 11
-Last activity: 2026-06-26 -- Phase 11 execution started
+Phase: 12 (Sanctioned Network-Data Path) — READY TO PLAN
+Plan: —
+Status: Phases 9–11 complete (merged); planning Phase 12 next
+Last activity: 2026-06-26 -- Phase 11 merged to develop (passed 3/3, 422 tests)
 
-Progress: [████░░░░░░] 40% (2 of 5 v1.1 phases)
+Progress: [██████░░░░] 60% (3 of 5 v1.1 phases)
+
+### Phase 11 — DONE (merged 8e10317)
+
+RELY-01/02/03 shipped: lenient validate-at-merge in DelegatedShell — deriveStateSchema(initialState) (zod/mini, built once) gates the merge; wrong-typed known field → keep prior; extra keys + partial updates allowed (reliability paradox); unknown actions no-op; failures silent (gated logger); zero extra round-trips. 422 tests, tsc 0, build clean, hygiene green, code-review clean. Added zod ^4.4.3.
 
 ### Phase 9 — DONE (merged 7dd8b43)
 
