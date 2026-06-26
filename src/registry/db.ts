@@ -7,6 +7,12 @@
 // schema bumps to VERSION 2; the upgrade is additive (no store renames), and
 // existing records simply lack the two new fields — the registry adapter defaults
 // them on read (useCount: 0, updatedAt: 0) so v1 data keeps working.
+//
+// Phase 9 (STORE-01): three further additive optional fields — `displayName`,
+// `prompt`, and `createdAt` — follow the same additive-no-migration pattern as
+// the Phase 7 LRU fields. No DB version bump; old records lacking these fields
+// satisfy the interface via the `[key: string]: unknown` catch-all and the
+// optional typing; consumers provide fallbacks on read.
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
 /** DB version — bumped to 2 in Phase 7 for the LRU bookkeeping fields. */
@@ -27,11 +33,24 @@ export interface LruMeta {
 // Phase 2: AppRecord carries both the original source and the transpiled JS.
 // `source` is the TSX string; `transpiledJS` is the Babel-compiled JS string.
 // Phase 7: adds the LRU bookkeeping fields via LruMeta.
+// Phase 9: adds displayName, prompt, createdAt (all optional, additive).
 export interface AppRecord extends LruMeta {
   cacheKey: string;
   type: string;
   source: string;
   transpiledJS: string;
+  /** Human-readable title shown on storefront cards (Phase 9, STORE-01). */
+  displayName?: string;
+  /**
+   * The user's intent that produced this app (Phase 9, STORE-01).
+   * Stores the userPrompt / instruction only — never the model system-prompt
+   * (which contains mechanic lexicon visible via devtools → IndexedDB).
+   * This field is display/inspection metadata only; faithful re-production
+   * is keyed by registryKey(type, instruction), not by reading this field back.
+   */
+  prompt?: string;
+  /** Epoch ms when the record was first written (Phase 9, STORE-01). Never overwritten on touch. */
+  createdAt?: number;
   [key: string]: unknown; // allow forward-compat extra fields
 }
 export type WidgetRecord = Record<string, unknown> & LruMeta;
