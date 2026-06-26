@@ -14,17 +14,25 @@ There is no application server. The user supplies their own Anthropic API key (s
 
 This still holds after v1.0. The v1.1 delegated thin-shell refined *how* the loop runs (behavior is attached on first action rather than produced whole up front), but it did not shift what the loop must deliver: an interactive app that betrays no on-demand mechanic.
 
-## Current Milestone: v1.1 Real & Robust
+## Shipped: v1.1 Real & Robust (2026-06-26)
 
-**Goal:** Turn the working-but-shallow v1.0 marketplace into a real, robust one — apps that need live data actually get it, produced behavior is correct more often, the storefront has depth, and widget composition becomes a first-class path.
+Network-data path, reliability hardening, richer storefront, and activated widget composition — all merged, tagged `v1.1`, 552 tests green. See MILESTONES.md.
+
+## Current Milestone: v2.0 Vibe OS
+
+**Goal:** Transform the flat storefront into a themeable, **multi-window "Vibe OS" desktop** — apps open as draggable glass **windows** sharing one chrome, several at once, managed by a dock and menu bar; a visible create surface lets users describe an app and open it; and a switchable, IndexedDB-persisted **theme system** re-skins the entire OS — host chrome and every open app — at a click.
+
+**Design reference:** `design/VibeOS.dc.html` (Claude Desktop artifact) — used for *structure and visual language* only. The exact wording/copy is a free variable we tune later; the layout, window chrome, dock, menu bar, theme variable contract, and interactions are the spec.
 
 **Target features:**
-- **Sanctioned network-data path** — a controlled, hygiene-safe egress so network-dependent apps (Weather / Currency) fetch real data instead of degrading to a fallback in the sandboxed handler scope.
-- **Reliability hardening** — reduce state-machine quirks in produced delegated reducers (stronger action-spec contracts, validation, self-heal on bad transitions) so produced behavior is correct more often.
-- **Richer storefront** — persist `displayName` / `prompt` for faithful re-produce (G5) and add a "popular on the platform" row driven by `useCount` (POP-01).
-- **Activate widget composition** — make the dormant `@widget` path first-class (delegated apps that declare/use sub-widgets), replace the placeholder `WidgetRecord` / `HandlerRecord` types with real schemas (G3), and fully fold `kind` + prompt into the cache key so activated widgets can't collide on a shared type slug (G1-followups).
+- **Windowing system** — a multi-window manager: draggable windows with z-order/focus/minimize/close, a desktop surface, a bottom dock (running indicators, hover-scale), and a top menu bar (wordmark, active-app name, clock). Multiple apps mounted concurrently (N independent React roots, each its own delegated shell).
+- **Themeable shell** — a named-theme registry (Aurora / Aero / Aqua / Noir) expressed as sets of CSS custom properties; the active theme persisted in IndexedDB and switchable live; applied to host chrome **and** open apps. Built-in themes only this milestone (user-created themes deferred).
+- **Visible create surface** — the central panel where a user describes an app and opens it, wired to the **real** on-demand produce path (the loading affordance reflects genuine production), result → opens a window.
+- **Theme-aware generated apps** — produced apps/widgets reference the theme variable contract (`--accentA`, `--glass`, `--text`, …) instead of hardcoded colors, so they re-skin for free when the theme changes (the load-bearing, non-obvious part — the produce prompt must mandate the contract).
 
-**Deferred out of v1.1** (in Active, not this milestone): HARD-01 `<iframe sandbox>` / SEC-01–03 (security still deferred per MVP-first); G2 unified `Intent` (internal refactor — defer unless it blocks the above).
+**Premise evolution (deliberate):** the long-standing *"apps simply exist — no visible creation surface"* rule is replaced by a branded, visible create front-door. **The devtools-hygiene lexicon gate is unchanged and still holds**: the mechanic (AI / LLM / on-demand generation) is still never *named* in any surface — no banned token (`synthesi*`/`AI`/`llm`/`generate`/`fake`/`mock`) appears. Only the product's stance on *showing a creation affordance* changes.
+
+**Deferred out of v2.0** (in Active, not this milestone): HARD-01 `<iframe sandbox>` / SEC-01–03 (security still deferred); G2 unified `Intent` (internal refactor); user-created/custom themes (built-ins only first).
 
 ## Requirements
 
@@ -116,7 +124,7 @@ This still holds after v1.0. The v1.1 delegated thin-shell refined *how* the loo
 - **Server-side application backend** — the architecture is deliberately client-only; "handlers" run in-browser. No server to build or operate. *(Still valid.)*
 - **Real authentication / accounts / billing** — the only credential is the user's own Anthropic API key in `localStorage`; the subscription framing is product narrative. *(Still valid.)*
 - **Multi-user sync / sharing of generated apps** — the registry is local (IndexedDB) per browser; no cloud registry. *(Still valid.)*
-- **A user-visible "generate / AI" surface** — actively excluded by the core illusion; the user never sees the mechanic. *(Still valid — and enforced by the CI hygiene gate.)*
+- **Naming the mechanic (AI / LLM / "generate" / "synthesize") in any user- or devtools-visible surface** — still actively excluded and enforced by the CI lexicon gate. *(Still valid.)* **Note (v2.0):** a *visible creation surface* is no longer excluded — the user may describe an app and open it through a branded front-door — but it must never name the underlying mechanic.
 - **Proxying the Anthropic API through our own server** — would break the client-only, zero-infra model and the "never proxy the key" rule; the key goes browser → `api.anthropic.com` only. *(Still valid.)*
 - **Streaming code generation** — non-streaming is required (can't compile partial JSX) and a visible source stream in the Network tab is a hygiene leak surface. *(Still valid.)*
 
@@ -175,4 +183,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-26 — v1.1 Real & Robust milestone started*
+*Last updated: 2026-06-26 — v2.0 Vibe OS milestone started (v1.1 Real & Robust shipped)*
