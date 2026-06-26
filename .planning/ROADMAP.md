@@ -168,7 +168,17 @@ Plans:
   3. Clicking a window's titlebar or body raises it to the front (z-order) and makes it active; a new window opens cascade-placed above and to the right of the previous one.
   4. A user minimizes a window (traffic-light or dock click) and it disappears from the desktop; clicking the dock icon restores it to its prior position and size with its app state intact.
   5. Closing a window fully tears down its React root — `mountedCount()` returns to the pre-open value, no timers or listeners from the closed app survive, and a subsequent open produces a fresh root with no `createRoot` warning.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1** *(independent — run in parallel)*
+- [ ] 15-01-PLAN.md — useDrag: pointer-capture drag hook (setPointerCapture + rAF imperative writes + viewport clamp; state only on pointerup)
+- [ ] 15-02-PLAN.md — useWindowManager: WindowEntry state + bounded zTop z-order + open/focus/minimize/restore/close (close → unmountApp, zero-leak)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 15-03-PLAN.md — WindowFrame glass chrome + traffic-light titlebar + body mount seam + desktop/window CSS (display:none minimize, isolation:isolate)
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 15-04-PLAN.md — Rewire App.tsx + Marketplace.tsx open flow to windowed WindowFrames on the desktop; end-to-end integration tests (concurrent, close-leak, mid-produce-close, focus, MOD-still-works)
 **Research pitfalls defended**: Pitfall 1 (setPointerCapture on drag handle), Pitfall 2 (rAF + imperative style writes, state only on pointerup), Pitfall 3 (isolation:isolate container, bounded z-index), Pitfall 4 (display:none minimized windows), Pitfall 8 (three-step close teardown: evict→closeWin→unmountApp), Pitfall 9 (cancellation token on mid-flight close), Pitfall 12 (window raise separate from input focus)
 
 ### Phase 16: Desktop Shell
@@ -232,7 +242,7 @@ v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 
 | 12. Sanctioned Network-Data Path | v1.1 | 5/5 | Complete | 2026-06-26 |
 | 13. Activate Widget Composition | v1.1 | TBD | Complete | 2026-06-26 |
 | 14. Theme Foundation | v2.0 | 5/5 | Complete   | 2026-06-26 |
-| 15. Window Manager | v2.0 | 0/TBD | Not started | - |
+| 15. Window Manager | v2.0 | 0/4 | Planned | - |
 | 16. Desktop Shell | v2.0 | 0/TBD | Not started | - |
 | 17. Search / Launcher Panel | v2.0 | 0/TBD | Not started | - |
 | 18. Theme-Aware Generation | v2.0 | 0/TBD | Not started | - |
