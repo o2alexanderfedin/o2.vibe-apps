@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: feature-complete
-stopped_at: Phase 8 (Backend-Style Handlers) completed — milestone v1.0 feature-complete
-last_updated: "2026-06-24T00:00:00.000Z"
-last_activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed; milestone v1.0 feature-complete (45/45 requirements, all 8 phases)
+status: completed
+stopped_at: context exhaustion at 75% (2026-06-26)
+last_updated: "2026-06-26T01:12:38.443Z"
+last_activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed on branch
 progress:
   total_phases: 8
-  completed_phases: 8
-  total_plans: 6
-  completed_plans: 5
-  percent: 100
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 4
+  percent: 13
 ---
 
 # Project State
@@ -170,6 +170,14 @@ None yet.
 - [Phase 7 — RESOLVED]: Threshold decided — N=10 produce misses per 5-minute sliding window (named, configurable constants in `src/host/produceGate.ts`).
 - [Phase 8 — RESOLVED]: Handler denylist decided and implemented as `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage, sessionStorage, indexedDB, window, document]`, shadowed to `undefined` in the handler's `new Function` parameter list, plus a hostile `require` (throws) and no key in scope. It is intentionally a TARGETED denylist (handlers need local compute) — NOT the full app/widget lockdown, and NOT general sandboxing (HARD-01 iframe deferred to v2). `runHandler` reuses `Services.produceGate.tryAcquire()` on a produce miss and writes `useCount:0`/`updatedAt:Date.now()`, consistent with the apps path; produced handlers participate in `evictUnderPressure` (which already sweeps `handlers`) for free.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260625-q08 | Fix G1 cacheKey contract (fold kind+prompt) + reconcile blueprint doc | 2026-06-25 | 0f9a7d4 | [260625-q08-cachekey-contract-doc-reconcile](./quick/260625-q08-cachekey-contract-doc-reconcile/) |
+
+Last activity: 2026-06-25 — Completed quick task 260625-q08: G1 cacheKey contract fix (`registryKey` folds kind+prompt) + blueprint-doc reconcile. 378 tests, tsc 0, build clean.
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
@@ -181,8 +189,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-25
-Stopped at: **Delegated thin-shell on-demand generation built, validated live, and
+Last session: 2026-06-26T01:12:38.436Z
+Stopped at: context exhaustion at 75% (2026-06-26)
 MERGED to develop** (merge 1a274b6, pushed; feature branch + worktree deleted). Unseeded
 apps now produce BEHAVIOR-FREE "delegated" modules (markup-only view + state SSOT +
 actionSpec) mounted through the permanent DelegatedShell, with per-action behavior
@@ -194,4 +202,4 @@ graceful fallback mounts non-module payloads as monoliths. tsc 0, 368 tests, bui
 Budget renders type-appropriate + polished). See memory: [[delegated-on-demand-architecture]],
 [[verify-ui-visually]]. Known limits: network-dependent apps can't fetch in the sandboxed
 handler scope; generated reducers can have state-machine quirks.
-Resume file: .continue-here.md
+Resume file: None

@@ -8,7 +8,7 @@
 // state, etc.) that later phases will pass to the model prompt. In Phase 2
 // it is always empty because the source is seeded.
 
-import { cacheKey } from "../registry/cacheKey";
+import { registryKey } from "../registry/cacheKey";
 
 /** Operations the platform currently supports. */
 export type Operation = "open";
@@ -34,13 +34,14 @@ export interface Intent {
 /**
  * Resolve an open-app action into a typed Intent.
  *
- * The cacheKey is derived from the type string using the same SHA-256 hash as
- * Phase 1's cacheKey module, so registry reads are always key-stable.
+ * The cacheKey is the opaque structured registry key over (kind="app", type),
+ * so an app never collides with a widget of the same type slug and registry
+ * reads are always key-stable.
  *
  * @param appType  The app type id from the storefront registry.
  */
 export async function resolveOpenApp(appType: string): Promise<Intent> {
-  const key = await cacheKey(appType);
+  const key = await registryKey("app", appType);
   return {
     operation: "open",
     kind: "app",

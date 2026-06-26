@@ -30,7 +30,7 @@ import { produceComponent } from "./producer";
 import { parseWidgetDeps } from "./widgetParse";
 import { wrapWidget } from "../ui/widgetWrap";
 import { SEEDED_SOURCES } from "../apps/seeds";
-import { cacheKey } from "../registry/cacheKey";
+import { registryKey } from "../registry/cacheKey";
 import type { Services } from "../services/services";
 import { logger } from "../lib/logger";
 
@@ -58,7 +58,7 @@ async function resolveWidget(
   widgetType: string,
   services: Services,
 ): Promise<ResolvedWidget | null> {
-  const key = await cacheKey(widgetType);
+  const key = await registryKey("widget", widgetType);
 
   // Registry hit — reuse both pieces, no recompile, no model call.
   const stored = await services.registry.get("widgets", key);
@@ -130,7 +130,7 @@ export async function resolveWidgetTweak(
 ): Promise<ComponentType | null> {
   // New cache key from (type + instruction) — the tweaked variant is cached
   // separately, so re-applying the same tweak is an instant registry hit.
-  const key = await cacheKey(widgetType + "\n" + instruction);
+  const key = await registryKey("widget", widgetType, instruction);
 
   let source: string;
   let transpiledJS: string;

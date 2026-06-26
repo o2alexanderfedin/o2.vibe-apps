@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { prewarmWidgets, WIDGET_CONCURRENCY } from "./widgetPrewarm";
-import { cacheKey } from "../registry/cacheKey";
+import { registryKey } from "../registry/cacheKey";
 import {
   createTestServices,
   createInMemoryRegistry,
@@ -169,7 +169,7 @@ describe("prewarmWidgets — DI: injected registry/transport (WIDGET-02)", () =>
     // Pre-seed the widgets store with a resolved record; the transport must
     // never be touched for that type (seeded paths don't call the model).
     const registry: Registry = createInMemoryRegistry();
-    const key = await cacheKey("seeded-widget");
+    const key = await registryKey("widget", "seeded-widget");
     await registry.put(
       "widgets",
       {
@@ -202,7 +202,7 @@ describe("prewarmWidgets — DI: injected registry/transport (WIDGET-02)", () =>
 
     await prewarmWidgets(widgetSource("host", ["fresh-widget"]), services);
 
-    const key = await cacheKey("fresh-widget");
+    const key = await registryKey("widget", "fresh-widget");
     const stored = await registry.get("widgets", key);
     expect(typeof stored?.["source"]).toBe("string");
     expect(typeof stored?.["transpiledJS"]).toBe("string");

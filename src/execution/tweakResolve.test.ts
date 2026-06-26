@@ -46,14 +46,14 @@ describe("app tweak — resolveComponent with a userPrompt (MOD-03)", () => {
   it("a tweak on a SEEDED app produces via the model with the instruction (seed bypassed)", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
+    const { registryKey } = await import("../registry/cacheKey");
 
     const rec = recordingTransport(TWEAKED_APP);
     const services = createTestServices({ transport: rec.transport });
 
     // "counter" IS seeded — but a tweak must still call out so the instruction is
     // honored. A plain open of "counter" would never invoke the transport.
-    const tweakKey = await cacheKey("counter\nmake it count by ten");
+    const tweakKey = await registryKey("app", "counter", "make it count by ten");
     const Component = await resolveComponent(
       "counter-tweak-1",
       "counter",
@@ -71,13 +71,13 @@ describe("app tweak — resolveComponent with a userPrompt (MOD-03)", () => {
   it("the tweaked variant caches under its own key (re-resolve is a cache hit, no second call)", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
+    const { registryKey } = await import("../registry/cacheKey");
 
     const rec = recordingTransport(TWEAKED_APP);
     const registry = createInMemoryRegistry();
     const services = createTestServices({ transport: rec.transport, registry });
 
-    const tweakKey = await cacheKey("weather\nadd humidity");
+    const tweakKey = await registryKey("app", "weather", "add humidity");
     await resolveComponent("weather-tweak-1", "weather", tweakKey, services, "add humidity");
     const callsAfterFirst = rec.prompts.length;
 

@@ -21,7 +21,7 @@ import { ProduceAuthError } from "../execution/producer";
 import { ProduceThrottledError } from "../host/produceGate";
 import { useServices } from "../services/ServicesProvider";
 import { routeModification } from "../intent/routeModification";
-import { cacheKey } from "../registry/cacheKey";
+import { registryKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
 
 // Map the neutral icon key (data layer) to a concrete glyph (render layer)
@@ -237,7 +237,7 @@ export function Marketplace() {
       // Tweak — re-resolve and replace this entry's Component in place.
       logger.info("Tweaking " + target.appType);
       try {
-        const tweakKey = await cacheKey(target.appType + "\n" + routed.instruction);
+        const tweakKey = await registryKey("app", target.appType, routed.instruction);
         const Component = await resolveComponent(
           instanceId + "-tweak-" + tweakKey.slice(0, 8),
           target.appType,
