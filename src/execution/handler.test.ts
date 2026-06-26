@@ -24,7 +24,7 @@ import type { Registry } from "../services/registry";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
 import { createProduceGate } from "../host/produceGate";
 import { createStubClock } from "../host/clock";
-import { cacheKey } from "../registry/cacheKey";
+import { registryKey } from "../registry/cacheKey";
 import {
   codeHandlerFixture,
   rawHandlerFixture,
@@ -131,7 +131,7 @@ describe("runHandler — HANDLER-02 (dual-cache in handlers store, reuse on hit)
 
     await runHandler("persist me", { n: 1 }, services);
 
-    const key = await cacheKey("handler\npersist me");
+    const key = await registryKey("handler", "persist me");
     const stored = await registry.get("handlers", key);
     expect(stored).toBeDefined();
     expect(typeof stored?.source).toBe("string");
@@ -160,7 +160,7 @@ describe("runHandler — HANDLER-02 (dual-cache in handlers store, reuse on hit)
       transport: cannedTransport(ECHO_HANDLER),
       registry,
     });
-    const key = await cacheKey("handler\nlru handler");
+    const key = await registryKey("handler", "lru handler");
 
     await runHandler("lru handler", { n: 1 }, services); // miss → write useCount 0
     expect((await registry.get("handlers", key))?.useCount).toBe(0);
@@ -404,7 +404,7 @@ describe("handler produce prompt is hygiene-safe (HYGIENE-03)", () => {
   it("unusedTransport is never invoked on a pure cache hit (sanity for the reuse path)", async () => {
     const registry = createInMemoryRegistry();
     // Pre-seed the cache so the first call is already a hit (no transport needed).
-    const key = await cacheKey("handler\npre-seeded");
+    const key = await registryKey("handler", "pre-seeded");
     // Build the transpiled JS the same way the producer would, by going through a
     // first produce with a canned transport, then swap to unusedTransport.
     const warm = createTestServices({

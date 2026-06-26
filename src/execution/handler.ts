@@ -40,7 +40,7 @@
 import { transpileHandler } from "./transpile";
 import { produceComponent } from "./producer";
 import type { Services } from "../services/services";
-import { cacheKey } from "../registry/cacheKey";
+import { registryKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
 
 /**
@@ -186,7 +186,7 @@ async function resolveHandlerJS(
   intent: string,
   services: Services,
 ): Promise<string> {
-  const key = await cacheKey("handler\n" + intent);
+  const key = await registryKey("handler", intent);
 
   // Cache HIT: reuse the stored transpiled JS, no model call (HANDLER-02).
   const stored = await services.registry.get("handlers", key);
