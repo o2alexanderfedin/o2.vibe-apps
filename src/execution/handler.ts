@@ -177,13 +177,14 @@ async function touchHandler(
   services: Services,
   key: string,
   record: HandlerRecord,
+  nowFn: () => number = Date.now,
 ): Promise<void> {
   try {
     const useCount =
       typeof record.useCount === "number" ? record.useCount + 1 : 1;
     await services.registry.put(
       "handlers",
-      { ...record, useCount, updatedAt: Date.now() },
+      { ...record, useCount, updatedAt: nowFn() },
       key,
     );
   } catch (err) {
@@ -205,6 +206,7 @@ async function touchHandler(
 async function resolveHandlerJS(
   intent: string,
   services: Services,
+  nowFn: () => number = Date.now,
 ): Promise<string> {
   // Seeded-handler short-circuit: host-authored handler sources for known intents.
   // Fires BEFORE the registry lookup and BEFORE any model call (DATA-03). The
@@ -222,7 +224,7 @@ async function resolveHandlerJS(
   const stored = await services.registry.get("handlers", key);
   if (stored && typeof stored.transpiledJS === "string") {
     logger.info("Handler: cache hit");
-    await touchHandler(services, key, stored);
+    await touchHandler(services, key, stored, nowFn);
     return stored.transpiledJS;
   }
 
@@ -249,7 +251,7 @@ async function resolveHandlerJS(
       source: produced.source,
       transpiledJS: produced.transpiledJS,
       useCount: 0,
-      updatedAt: Date.now(),
+      updatedAt: nowFn(),
     },
     key,
   );
