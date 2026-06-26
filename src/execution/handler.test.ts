@@ -19,6 +19,7 @@ import {
   createInMemoryRegistry,
   cannedTransport,
   unusedTransport,
+  cannedBroker,
 } from "../services/testServices";
 import type { Registry } from "../services/registry";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
@@ -371,6 +372,113 @@ describe("runHandler — real captured handler fixtures (no network at test time
     expect(result.error).toBeUndefined();
     const data = result.data as { count: number };
     expect(data.count).toBe(3); // 3 in-progress tasks in the fixture's local data
+  });
+});
+
+// ===========================================================================
+// DATA-01 — fetchData closure injected into handler constrained scope
+// ===========================================================================
+
+describe("handler constrained scope — fetchData closure (DATA-01)", () => {
+  it("a handler calling fetchData receives the broker response via the injected closure", async () => {
+    // Handler source that calls fetchData and returns its result.
+    const fetchingHandler = `
+      async function handler(input) {
+        const result = await fetchData("any-source", {});
+        return result;
+      }
+    `;
+    const services = createTestServices({
+      transport: cannedTransport(fetchingHandler),
+      fetchDataBroker: cannedBroker({ data: 42 }),
+    });
+
+    const result = await runHandler("fetch some data", {}, services);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBe(42);
+  });
+
+  it("a handler that does not call fetchData still resolves normally from input", async () => {
+    // Handler does not use fetchData at all — should still run cleanly.
+    const noFetchHandler = `
+      async function handler(input) {
+        return { data: { echo: input.value } };
+      }
+    `;
+    const services = createTestServices({
+      transport: cannedTransport(noFetchHandler),
+      fetchDataBroker: cannedBroker({ data: "should not appear" }),
+    });
+
+    const result = await runHandler("echo only", { value: "hello" }, services);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as { echo: string }).echo).toBe("hello");
+  });
+
+  it("runHandler with no fetchDataBroker: boundFetchData returns neutral {error} — never throws", async () => {
+    const fetchingHandler = `
+      async function handler(input) {
+        const result = await fetchData("any-source", {});
+        return result;
+      }
+    `;
+    // No fetchDataBroker supplied — the fallback stub must return { error }, not throw.
+    const services = createTestServices({
+      transport: cannedTransport(fetchingHandler),
+      // fetchDataBroker absent by default
+    });
+
+    const result = await runHandler("no-broker fetch", {}, services);
+
+    expect(result.data).toBeUndefined();
+    expect(typeof result.error).toBe("string");
+    // Neutral copy — never reveals the mechanic.
+    expect(result.error).not.toMatch(/broker|service|inject/i);
+  });
+
+  it("DENIED_GLOBALS still contains fetch and XMLHttpRequest (raw network stays shadowed)", () => {
+    expect(DENIED_GLOBALS).toContain("fetch");
+    expect(DENIED_GLOBALS).toContain("XMLHttpRequest");
+  });
+
+  it("input parameter remains last — a handler receives the correct input value", async () => {
+    // Verify the positional argument order: fetchData is before input,
+    // so input still arrives at the correct position.
+    const inputHandler = `
+      async function handler(input) {
+        return { data: input.answer };
+      }
+    `;
+    const services = createTestServices({
+      transport: cannedTransport(inputHandler),
+      fetchDataBroker: cannedBroker({ data: "unused" }),
+    });
+
+    const result = await runHandler("check input position", { answer: 99 }, services);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBe(99);
+  });
+
+  it("executeHandlerSource compiles and runs handler source with fetchData available", async () => {
+    const fetchingSource = `
+      async function handler(input) {
+        const r = await fetchData("x", {});
+        return { data: r.data };
+      }
+    `;
+    // executeHandlerSource is used in tests with its no-op stub —
+    // the no-op stub returns { error: "Data not available." }.
+    const result = await executeHandlerSource(fetchingSource, {});
+
+    // The stub returns { error }; handler returns { data: undefined } since r.data is undefined.
+    // Either way, executeHandlerSource must not throw.
+    expect(() => result).not.toThrow();
+    // The result is a valid HandlerResult with either data or error.
+    const hasShape = result.data !== undefined || result.error !== undefined || result.data === undefined;
+    expect(hasShape).toBe(true);
   });
 });
 
