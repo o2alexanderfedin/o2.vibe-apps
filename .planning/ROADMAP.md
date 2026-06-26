@@ -30,7 +30,7 @@ gap G1). See [BLUEPRINT-DELTA.md](./BLUEPRINT-DELTA.md).
 ### 🚧 v1.1 Real & Robust (Phases 9–13)
 
 - [ ] **Phase 9: Richer Storefront** — Apps carry a real name and re-produce faithfully; a popular row surfaces the most-opened apps with honest local copy.
-- [ ] **Phase 10: Widget Schema & Key Correctness** — Real typed widget/handler records and every cache-key call site folds kind+prompt, so activated widgets can't collide with apps on a shared type slug.
+- [x] **Phase 10: Widget Schema & Key Correctness** — Real typed widget/handler records and every cache-key call site folds kind+prompt, so activated widgets can't collide with apps on a shared type slug.
 - [ ] **Phase 11: Reliability Hardening** — Produced delegated behavior is correct more often: invalid state is rejected and prior state kept, unknown actions are no-ops, no extra model round-trips.
 - [ ] **Phase 12: Sanctioned Network-Data Path** — Weather and Currency apps fetch real data through a host-brokered, allowlisted, keyless egress; the API key never enters app scope.
 - [ ] **Phase 13: Activate Widget Composition** — Delegated apps can declare and render `@widget` sub-widgets, each isolated, with a bounded composition depth.
@@ -64,10 +64,10 @@ Plans:
 **Plans**: 2 plans
 Plans:
 **Wave 1**
-- [ ] 10-01-PLAN.md — Schema + LRU parity: replace WidgetRecord/HandlerRecord placeholders with explicit interfaces extending LruMeta; add useCount/updatedAt to widget write sites in widgetPrewarm.ts; verify tsc clean
+- [x] 10-01-PLAN.md — Schema + LRU parity: replace WidgetRecord/HandlerRecord placeholders with explicit interfaces extending LruMeta; add useCount/updatedAt to widget write sites in widgetPrewarm.ts; verify tsc clean
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 10-02-PLAN.md — Test migration + audit: migrate loader.test.ts + loaderGuardrails.test.ts from bare cacheKey(type) to registryKey("app", type); add WIDGET-08 collision-distinctness audit describe block to cacheKey.test.ts
+- [x] 10-02-PLAN.md — Test migration + audit: migrate loader.test.ts + loaderGuardrails.test.ts from bare cacheKey(type) to registryKey("app", type); add WIDGET-08 collision-distinctness audit describe block to cacheKey.test.ts
 
 ### Phase 11: Reliability Hardening
 **Goal**: Produced delegated apps behave correctly more often — a mis-shaped result never blanks or sticks the app, unknown actions do nothing harmful, and none of this costs extra model round-trips.
