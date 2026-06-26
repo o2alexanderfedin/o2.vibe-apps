@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Vibe OS
-status: Phase 14 Wave 3 — FOUC script extended for named theme + CSP sha256 hash synced (14-04). First paint is now FOUC-safe for the named theme; ready for 14-05.
-stopped_at: Completed Phase 14 Plan 04 (FOUC script for named theme + CSP hash sync). Single atomic commit 963c782; index.html extended; csp.test.ts (7) + hygiene.test.ts (2) green; tsc clean.
-last_updated: "2026-06-26T22:00:00.000Z"
-last_activity: 2026-06-26 — Completed Phase 14 Plan 04 (FOUC script + CSP hash sync)
+status: Phase 14 COMPLETE — Wave 4 landed: ThemeSelector 4-pill switcher (Aurora/Aero/Aqua/Noir) mounted in AppBar, wired to useVibeTheme().setTheme; THEME-01/02 satisfied; all 5 plans done
+stopped_at: Completed Phase 14 Plan 05 (ThemeSelector 4-pill switcher + AppBar mount + switch-path test). Commits 6b53bf5 (component+styles+test) and bfce87b (AppBar mount); switch-path test clicks Noir and asserts documentElement --text becomes #f5eeff (live re-skin, THEME-02); ThemeSelector.test.tsx (3) + src/ui (59) + hygiene (2) green; tsc clean. Phase 14 — all 5 plans complete.
+last_updated: "2026-06-26T22:30:00.000Z"
+last_activity: 2026-06-26 — Completed Phase 14 Plan 05 (ThemeSelector switcher + AppBar mount); Phase 14 COMPLETE
 progress:
   total_phases: 10
-  completed_phases: 5
-  total_plans: 19
+  completed_phases: 6
+  total_plans: 18
   completed_plans: 18
-  percent: 95
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation. Plan 14-04 (FOUC script + CSP hash) complete; Wave 3 first-paint no-flash landed.
+**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation COMPLETE (all 5 plans). ThemeSelector switcher live in AppBar; named-theme capability visible and interactive. Ready for Phase 15 (Window Manager).
 
 ## Current Position
 
-Phase: 14 — Theme Foundation (In progress)
-Plan: 14-04 complete (FOUC script for named theme + CSP sha256 hash sync)
-Status: Phase 14 Wave 3 — FOUC script extended for named theme + CSP sha256 hash synced; first paint FOUC-safe; ready for 14-05 (ThemeSelector + AppBar)
-Last activity: 2026-06-26 — Completed Phase 14 Plan 04 (FOUC script + CSP hash sync)
+Phase: 14 — Theme Foundation (COMPLETE — all 5 plans)
+Plan: 14-05 complete (ThemeSelector 4-pill switcher + AppBar mount + switch-path test)
+Status: Phase 14 COMPLETE — Wave 4 landed: ThemeSelector mounted in AppBar, wired to useVibeTheme().setTheme; THEME-01/02 satisfied
+Last activity: 2026-06-26 — Completed Phase 14 Plan 05 (ThemeSelector switcher + AppBar mount); Phase 14 COMPLETE
 
 ### v2.0 Phase Map
 
@@ -56,7 +56,7 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 
 **Velocity:**
 
-- Total plans completed (v2.0): 4 (14-01, 14-02, 14-03, 14-04)
+- Total plans completed (v2.0): 5 (14-01, 14-02, 14-03, 14-04, 14-05)
 - Average duration: —
 - Total execution time: —
 
@@ -64,17 +64,18 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 14 | 4/5 | — | — |
+| Phase 14 | 5/5 | — | — |
 
 | Plan | Duration | Tasks | Files | Completed |
 |------|----------|-------|-------|-----------|
 | 14-03 | ~13min | 2 (TDD) | 6 | 2026-06-26 |
 | 14-04 | ~6min | 1 (atomic) | 1 | 2026-06-26 |
+| 14-05 | ~5min | 2 (TDD) | 4 | 2026-06-26 |
 
 **Recent Trend:**
 
-- Last 5 plans: 14-01, 14-02, 14-03, 14-04
-- Trend: Phase 14 Theme Foundation progressing (4 of 5 plans done)
+- Last 5 plans: 14-01, 14-02, 14-03, 14-04, 14-05
+- Trend: Phase 14 Theme Foundation COMPLETE (5 of 5 plans done)
 
 *Updated after each plan completion*
 
@@ -97,6 +98,9 @@ Recent decisions affecting current work:
 - [14-03]: VibeThemeProvider is nested INSIDE the existing light/dark ThemeProvider (not replacing it) so the named-theme CSS-variable contract layers on top without disturbing the 552-test data-theme mechanism.
 - [14-04]: The inline FOUC script duplicates the VIBE_THEMES values verbatim from VibeThemeProvider.tsx rather than importing them — the script must run before any module load, so the runtime provider and first paint stay in sync by convention (copied values), not by shared import.
 - [14-04]: FOUC script edit + CSP sha256 hash regeneration land in ONE atomic commit (963c782) — csp.test.ts recomputes the hash from the live file, so any desync fails CI; the no-flash guarantee stays verifiable.
+- [14-05]: ThemeSelector holds NO local state — the active pill is computed from useVibeTheme().theme each render, so it stays in sync with any theme change source (FOUC first paint, programmatic setTheme, future Phase 16 menu) with no extra wiring.
+- [14-05]: ThemeSelector mounted as the FIRST child of app-bar__controls; the existing useTheme/cycleTheme light/dark/system toggle is left fully intact (purely additive) so the 552 tests depending on the old toggle stay green — temporary home, Phase 16 relocates it to the menu bar.
+- [14-05]: Switch-path test drives a real click through act() and asserts noir's --text (#f5eeff) lands on documentElement — proving the selector → setTheme → applyVibeTheme live re-skin chain end to end (THEME-02), not a mocked setter.
 - [Roadmap v2.0]: All v1.0/v1.1 cross-cutting constraints (HYGIENE-01..05, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, TDD with real captured-Haiku fixtures, additive DB migrations) are acceptance constraints on every v2.0 phase — not separate phases.
 
 ### Key Research Flags
@@ -135,10 +139,10 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-06-26T22:00:00.000Z
-Stopped at: Completed Phase 14 Plan 04 (FOUC script for named theme + CSP sha256 hash sync). Single atomic commit 963c782; index.html FOUC script extended to read marketplace.osTheme and apply VIBE_THEMES vars on documentElement before React mounts; CSP script-src hash regenerated; csp.test.ts (7) + hygiene.test.ts (2) green; tsc clean.
-Resume with: continue Phase 14 — Plan 14-05 (ThemeSelector 4-pill switcher in AppBar + switch-path test).
+Last session: 2026-06-26T22:30:00.000Z
+Stopped at: Completed Phase 14 Plan 05 (ThemeSelector 4-pill switcher + AppBar mount + switch-path test). Commits 6b53bf5 (component+styles+test) and bfce87b (AppBar mount); switch-path test clicks Noir and asserts documentElement --text becomes #f5eeff (THEME-02 live re-skin); ThemeSelector.test.tsx (3) + src/ui (59) + hygiene (2) green; tsc clean. Phase 14 — all 5 plans complete.
+Resume with: begin Phase 15 — Window Manager (WIN-01..05). Requires Phase 14 (theme CSS-var contract is now live).
 
 ## Operator Next Steps
 
-- Continue Phase 14: execute Plan 14-05 (ThemeSelector 4-pill switcher component + AppBar wiring + switch-path test) — the last plan of Phase 14.
+- Phase 14 COMPLETE. Next: Phase 15 — Window Manager (WIN-01..05). Hand-roll useWindowManager (pointer-capture + rAF + root-lifecycle) and WindowFrame chrome that references the now-live theme CSS vars.
