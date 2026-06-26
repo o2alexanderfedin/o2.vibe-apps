@@ -53,7 +53,7 @@ function view(state) {
     React.createElement(
       "div",
       null,
-      ["1", "+", "=", "bad"].map(function (k) {
+      ["1", "2", "+", "=", "bad"].map(function (k) {
         return React.createElement("button", { key: k, "data-action": k }, k);
       })
     )
@@ -262,12 +262,18 @@ describe("DelegatedShell — merge step keeps prior state on type mismatch", () 
     expect(display).toHaveTextContent("0");
 
     const press = (name: string) => user.click(screen.getByRole("button", { name }));
+    // Build the COMPLETE expression "1+2" through the real routed key handler,
+    // then evaluate it with the real routed equals handler. Asserting the
+    // computed "3" (not the intermediate "1+2") proves the equals/compute path
+    // genuinely passes the merge validation gate.
     await press("1");
     await waitFor(() => expect(display).toHaveTextContent("1"));
     await press("+");
     await waitFor(() => expect(display).toHaveTextContent("1+"));
+    await press("2");
+    await waitFor(() => expect(display).toHaveTextContent("1+2"));
     await press("=");
-    await waitFor(() => expect(display).toHaveTextContent(/1\+/));
+    await waitFor(() => expect(display).toHaveTextContent("3"));
   });
 });
 
