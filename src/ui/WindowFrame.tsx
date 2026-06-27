@@ -23,6 +23,7 @@ interface WindowBodyProps {
   Component: ComponentType | null;
   onClose: () => void;
   onModify?: (instruction: string) => void;
+  hideClose?: boolean;
 }
 
 // The mounted app body, memoized so window-chrome churn (z-order restacks, drag
@@ -39,6 +40,7 @@ const WindowBody = memo(
     Component,
     onClose,
     onModify,
+    hideClose,
   }: WindowBodyProps) {
     if (!Component) {
       return <div className="window-chrome__placeholder">Preparing…</div>;
@@ -49,7 +51,7 @@ const WindowBody = memo(
     // ErrorBoundary so a throwing app/widget is contained to this window instead
     // of crashing the whole desktop.
     return (
-      <AppShell displayName={title} onClose={onClose} onModify={onModify}>
+      <AppShell displayName={title} onClose={onClose} onModify={onModify} hideClose={hideClose}>
         <ErrorBoundary>
           <Component />
         </ErrorBoundary>
@@ -142,10 +144,12 @@ export function WindowFrame({
             disabled
           />
         </div>
-        <span className="window-chrome__title">{title}</span>
-        <span className="window-chrome__icon" aria-hidden="true">
-          {icon}
-        </span>
+        <div className="window-chrome__title-group">
+          <span className="window-chrome__icon" aria-hidden="true">
+            {icon}
+          </span>
+          <span className="window-chrome__title">{title}</span>
+        </div>
       </div>
       <div className="window-chrome__body" onPointerDown={onFocus}>
         <WindowBody
@@ -154,6 +158,7 @@ export function WindowFrame({
           Component={Component}
           onClose={onClose}
           onModify={onModify}
+          hideClose={true}
         />
       </div>
     </div>
