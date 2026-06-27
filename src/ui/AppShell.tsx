@@ -27,14 +27,20 @@ export interface AppShellProps {
    * modification handler (the menu still opens; Apply is then a no-op closer).
    */
   onModify?: (instruction: string) => void;
+  /**
+   * When true, the inner × close button is not rendered — the surrounding
+   * chrome's close (e.g. traffic-light) is authoritative.
+   */
+  hideClose?: boolean;
   /** The rendered app content. */
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 export function AppShell({
   displayName,
   onClose,
   onModify,
+  hideClose = false,
   children,
 }: AppShellProps) {
   const [promptOpen, setPromptOpen] = useState(false);
@@ -61,15 +67,17 @@ export function AppShell({
           >
             <MoreVertical size={20} aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            className="app-bar__icon-btn"
-            aria-label={`Close ${displayName}`}
-            title="Close"
-            onClick={onClose}
-          >
-            ×
-          </button>
+          {!hideClose && (
+            <button
+              type="button"
+              className="app-bar__icon-btn"
+              aria-label={`Close ${displayName}`}
+              title="Close"
+              onClick={onClose}
+            >
+              ×
+            </button>
+          )}
         </div>
       </div>
       {promptOpen && (

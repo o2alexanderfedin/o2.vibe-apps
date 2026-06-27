@@ -1,19 +1,21 @@
+// DesktopShell — the root desktop UI (Phase 16, plan 16-03, WIN-08).
+//
+// Assembles the Vibe OS desktop: a themed wallpaper + four animated blob layers
+// behind the windows, the window stack itself, and the dock + menu bar + minimal
+// launcher chrome over them. It owns the proven open flow ported verbatim from
+// the former storefront component (handleOpen / handleClose / storeComponent /
+// handleModify), so windowing, contextual modification, the failure fallbacks,
+// and the account/key dialog are preserved with zero behavioral regression.
+//
+// DesktopShell wraps its OWN WindowManagerProvider so it stays testable
+// standalone — tests render a bare <DesktopShell/> (inside ServicesProvider +
+// VibeThemeProvider) with no App wrapper, mirroring the prior component.
+//
+// All copy and class names are neutral (no banned hygiene tokens): the desktop
+// reveals nothing about how an app's body comes to exist.
+
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Cloud,
-  Calculator,
-  NotebookPen,
-  Timer,
-  ArrowLeftRight,
-  ChefHat,
-  CalendarDays,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react";
 import { type ComponentType } from "react";
-import type { AppRecord } from "../registry/db";
-import { APP_REGISTRY } from "../data/appRegistry";
-import { rankPopular, titleCase } from "./marketplaceUtils";
 import { KeyDialog } from "./KeyDialog";
 import { WindowFrame } from "./WindowFrame";
 import {
@@ -29,19 +31,9 @@ import { useServices } from "../services/ServicesProvider";
 import { routeModification } from "../intent/routeModification";
 import { registryKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
-
-// Map the neutral icon key (data layer) to a concrete glyph (render layer)
-// per RESEARCH Open Question 1 — keeps the data free of component imports.
-const ICONS: Record<string, LucideIcon> = {
-  cloud: Cloud,
-  calculator: Calculator,
-  notes: NotebookPen,
-  timer: Timer,
-  currency: ArrowLeftRight,
-  recipes: ChefHat,
-  calendar: CalendarDays,
-  budget: Wallet,
-};
+import { MenuBar } from "./MenuBar";
+import { Dock } from "./Dock";
+import { MinimalLauncher } from "./MinimalLauncher";
 
 // Neutral, hygiene-safe fallback shown when an app fails to open for a generic
 // reason. No mechanic-revealing language and no banned tokens — it just tells the
@@ -65,8 +57,8 @@ function FailedAppContent({ onRetry }: { onRetry: () => void }) {
 }
 
 // Inline reconfigure prompt shown when an open failed for an auth reason (401 /
-// missing key, RESIL-03). It keeps the storefront browsable (it renders INSIDE
-// the failed app's shell, the rest of the page is untouched) and offers a single
+// missing key, RESIL-03). It keeps the desktop usable (it renders INSIDE the
+// failed app's shell, the rest of the desktop is untouched) and offers a single
 // neutral "Connect your account" action that opens the existing KeyDialog. Copy
 // is neutral and never mentions the underlying mechanic.
 function NeedsAuthContent({ onConnect }: { onConnect: () => void }) {
@@ -90,7 +82,7 @@ function NeedsAuthContent({ onConnect }: { onConnect: () => void }) {
 // because too many apps were opened in a short window (RESIL-05). The copy is
 // neutral and reassuring — the cap recovers as the rolling window slides, so a
 // later retry (or a re-open once a moment has passed) succeeds. It renders in the
-// SAME neutral failed-open region, keeping the storefront browsable underneath.
+// SAME neutral failed-open region, keeping the desktop usable underneath.
 function ThrottledAppContent({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="app-failed-fallback" role="alert">
@@ -108,24 +100,21 @@ function ThrottledAppContent({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-// Marketplace owns its OWN WindowManagerProvider so the component is testable
-// standalone (the existing Marketplace.test.tsx and friends render a bare
-// <Marketplace/> with no App wrapper and would otherwise throw when
-// MarketplaceInner consumes useWindowManager). App.tsx ALSO mounts a
-// WindowManagerProvider for any future desktop-level consumers; nesting is
-// harmless — the inner provider wins for Marketplace's own consumers.
-export function Marketplace() {
+// DesktopShell owns its OWN WindowManagerProvider so the component is testable
+// standalone (DesktopShell.test.tsx and the migrated open-flow tests render a
+// bare <DesktopShell/> with no App wrapper, and would otherwise throw when
+// DesktopShellInner consumes useWindowManager).
+export function DesktopShell() {
   return (
     <WindowManagerProvider>
-      <MarketplaceInner />
+      <DesktopShellInner />
     </WindowManagerProvider>
   );
 }
 
-function MarketplaceInner() {
+function DesktopShellInner() {
   const services = useServices();
   const windowManager = useWindowManager();
-  const [openingId, setOpeningId] = useState<string | null>(null);
   // The resolved component (or a fallback component) per window instance. The
   // window is minted by the manager FIRST (so a frame appears immediately and
   // the isOpen guard works); this map carries the body once produce settles.
@@ -139,12 +128,21 @@ function MarketplaceInner() {
   const [positions, setPositions] = useState<
     Map<string, { x: number; y: number }>
   >(new Map());
-  // Owns the inline reconfigure dialog (RESIL-03): the storefront stays mounted
-  // and browsable while the KeyDialog is open over it, so a 401 never crashes
-  // the page or blocks the rest of the storefront.
+  // Owns the inline reconfigure dialog (RESIL-03): the desktop stays mounted and
+  // usable while the KeyDialog is open over it, so a 401 never crashes the page
+  // or blocks the rest of the desktop. Also reachable from the menu-bar account
+  // control (SHELL-03).
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [popularApps, setPopularApps] = useState<AppRecord[]>([]);
+  // Gates the minimal launcher overlay (CONTEXT decision 4): opened from the
+  // dock magnifier, closed on backdrop click / close control / after an open.
+  const [launcherOpen, setLauncherOpen] = useState(false);
+  // PERF-01 reduced-motion seam: mirrors the OS prefers-reduced-motion
+  // preference into React state via a mockable window.matchMedia, so the CSS
+  // degrade has a JS-observable companion (this drives the root marker class the
+  // CSS + tests read, and gives any future JS path — e.g. blob-count reduction —
+  // a hook). The CSS media query is the primary, JS-free degrade; this is the
+  // testable signal on top of it.
+  const [reducedMotion, setReducedMotion] = useState(false);
 
   // Stable refs so callbacks can read current manager/services without
   // re-creating handlers (and so handleModify can look up the live window list).
@@ -185,8 +183,6 @@ function MarketplaceInner() {
   const handleOpen = useCallback(
     async (appType: string, displayName: string) => {
       logger.info("Opening " + appType);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      setOpeningId(appType);
 
       // Mint the window FIRST so a frame appears immediately (its body shows the
       // neutral "Preparing…" placeholder while produce is in flight) and the
@@ -252,11 +248,6 @@ function MarketplaceInner() {
           },
         });
         storeComponent(instanceId, Fallback);
-      } finally {
-        timeoutRef.current = setTimeout(() => {
-          setOpeningId(null);
-          timeoutRef.current = null;
-        }, 300);
       }
     },
     [services, storeComponent, handleClose],
@@ -309,8 +300,15 @@ function MarketplaceInner() {
           target.appType,
           routed.instruction,
         );
+        // Resolve the tweak under the window's OWN instanceId (not a synthetic
+        // id) so the live-component cache keeps exactly ONE key per window —
+        // the one handleClose evicts. First evict the current live component so
+        // tier-1 misses and the differing tweakKey drives a re-instantiate; the
+        // fresh component then lands back under this window's instanceId, and
+        // closing the window reclaims it with no leak (WR-01).
+        evictLiveComponent(instanceId);
         const Component = await resolveComponent(
-          instanceId + "-tweak-" + tweakKey.slice(0, 8),
+          instanceId,
           target.appType,
           tweakKey,
           services,
@@ -336,100 +334,54 @@ function MarketplaceInner() {
     [services, handleClose, storeComponent, components],
   );
 
-  // Clear any pending reset timer on unmount.
+  // Reflect the OS prefers-reduced-motion preference into state (PERF-01).
+  // Guarded for environments where matchMedia is unavailable (older jsdom / SSR)
+  // so the desktop still renders. Subscribes to live preference changes via the
+  // modern addEventListener('change', ...) with a fallback to the legacy
+  // addListener API (older Safari), and cleans up the listener on unmount.
   useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function")
+      return;
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(mql.matches);
+    const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    if (typeof mql.addEventListener === "function") {
+      mql.addEventListener("change", onChange);
+      return () => mql.removeEventListener("change", onChange);
+    }
+    // Legacy MediaQueryList API (older Safari) — addListener/removeListener.
+    mql.addListener(onChange);
+    return () => mql.removeListener(onChange);
   }, []);
 
-  // Load popular apps from the registry on mount. rankPopular owns the
-  // useCount >= 1 membership filter and the top-N cap — the component does
-  // not pre-filter or post-filter on useCount. The presence guard (!!r) only
-  // drops undefined results from missing keys; it is NOT a useCount filter.
-  useEffect(() => {
-    void (async () => {
-      try {
-        const allKeys = await services.registry.keys("apps");
-        const fetched = await Promise.all(
-          allKeys.map((k) => services.registry.get("apps", k)),
-        );
-        // Presence guard only — NOT a useCount filter. rankPopular owns membership.
-        const records = fetched.filter((r): r is AppRecord => !!r);
-        setPopularApps(rankPopular(records));
-      } catch (err) {
-        logger.error("Marketplace: failed to load popular apps: " + String(err));
-      }
-    })();
-  }, [services]);
+  // The active window feeding the menu-bar name: the highest-z, non-minimized
+  // window is the front-most one (same z-ordering the manager's zTop tracks).
+  const activeWindow =
+    [...windowManager.windows]
+      .filter((w) => !w.minimized)
+      .sort((a, b) => b.z - a.z)[0] ?? null;
 
   return (
-    <>
-      <div className="storefront-grid">
-        {APP_REGISTRY.map((app) => {
-          const Icon = ICONS[app.icon] ?? Cloud;
-          return (
-            <button
-              key={app.id}
-              type="button"
-              className="app-card"
-              aria-label={`${app.displayName} — ${app.description}`}
-              onClick={() => void handleOpen(app.id, app.displayName)}
-            >
-              <span className="app-card__icon">
-                <Icon size={32} aria-hidden="true" />
-              </span>
-              <span className="app-card__name">{app.displayName}</span>
-              <span className="app-card__description">{app.description}</span>
-              {openingId === app.id && (
-                <span className="app-card__opening" role="status">
-                  Opening…
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+    <div
+      className={
+        "desktop-shell" +
+        (reducedMotion ? " desktop-shell--reduced-motion" : "")
+      }
+    >
+      {/* Layer 1: wallpaper — the .desktop-shell background (var(--wall), CSS).
+          Layer 2: four animated blobs behind the windows (purely decorative,
+          aria-hidden). */}
+      <div className="desktop-shell__blob desktop-shell__blob--1" aria-hidden="true" />
+      <div className="desktop-shell__blob desktop-shell__blob--2" aria-hidden="true" />
+      <div className="desktop-shell__blob desktop-shell__blob--3" aria-hidden="true" />
+      <div className="desktop-shell__blob desktop-shell__blob--4" aria-hidden="true" />
 
-      {/* Popular row — hidden on cold start (rankPopular returns [] when no app
-          has useCount >= 1). The length guard is the single visibility gate;
-          no separate useCount filter is applied here. */}
-      {popularApps.length > 0 && (
-        <section aria-label="Frequently opened">
-          <h2 className="storefront-section__heading">Your most-opened</h2>
-          <div className="storefront-grid">
-            {popularApps.map((record) => {
-              const entry = APP_REGISTRY.find((a) => a.id === record.type);
-              const name =
-                record.displayName ?? entry?.displayName ?? titleCase(record.type);
-              const description = entry?.description ?? "";
-              const Icon = (entry ? ICONS[entry.icon] : undefined) ?? Cloud;
-              return (
-                <button
-                  key={record.cacheKey}
-                  type="button"
-                  className="app-card"
-                  aria-label={`${name}${description ? " — " + description : ""}`}
-                  onClick={() => void handleOpen(record.type, name)}
-                >
-                  <span className="app-card__icon">
-                    <Icon size={32} aria-hidden="true" />
-                  </span>
-                  <span className="app-card__name">{name}</span>
-                  {description && (
-                    <span className="app-card__description">{description}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Desktop — each open app is a draggable WindowFrame. The frame mounts an
-          AppShell-wrapped body as ONE managed root (keyed by instanceId), so the
-          ⋮ contextual prompt and close traffic-light live inside the same root
-          and closing tears the whole root down with zero leaked roots. */}
+      {/* Layer 3: the window stack — each open app is a draggable WindowFrame.
+          The frame mounts an AppShell-wrapped body as ONE managed root (keyed by
+          instanceId), so the ⋮ contextual prompt and close traffic-light live
+          inside the same root and closing tears the whole root down with zero
+          leaked roots. The .desktop container keeps isolation:isolate (Pitfall 3)
+          so its z-index:100 sits above the blobs and below the dock/menu-bar. */}
       <div className="desktop">
         {windowManager.windows.map((entry) => {
           const override = positions.get(entry.instanceId);
@@ -463,11 +415,36 @@ function MarketplaceInner() {
         })}
       </div>
 
-      {/* Inline key reconfiguration (RESIL-03): opened from a 401 fallback. The
-          storefront stays mounted underneath, so the page never crashes and the
-          rest of the storefront remains browsable. */}
+      {/* Layer 4: chrome over the windows — the menu bar (top) carries the
+          front-most window's name + the account control (KeyDialog gate); the
+          dock (bottom) lists the open windows + the launcher control. */}
+      <MenuBar
+        activeName={activeWindow?.title ?? null}
+        onOpenAccount={() => setKeyDialogOpen(true)}
+      />
+      <Dock
+        windows={windowManager.windows}
+        onFocus={windowManager.focus}
+        onRestore={windowManager.restore}
+        onOpenLauncher={() => setLauncherOpen(true)}
+      />
+
+      {/* The minimal launcher overlay (CONTEXT decision 4): lists the catalog;
+          opening an app routes through the SAME ported handleOpen. */}
+      {launcherOpen && (
+        <MinimalLauncher
+          onOpen={(appType, displayName) => {
+            void handleOpen(appType, displayName);
+          }}
+          onClose={() => setLauncherOpen(false)}
+        />
+      )}
+
+      {/* Inline key reconfiguration (RESIL-03 / SHELL-03): opened from a 401
+          fallback or the menu-bar account control. The desktop stays mounted
+          underneath, so the page never crashes and the rest stays usable. */}
       {keyDialogOpen && <KeyDialog onClose={() => setKeyDialogOpen(false)} />}
-    </>
+    </div>
   );
 }
 

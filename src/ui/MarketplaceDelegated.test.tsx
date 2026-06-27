@@ -7,17 +7,14 @@
 // on-demand handler produce; clicking a key updates the display.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { cleanup, screen, within, waitFor } from "@testing-library/react";
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import { createTestServices } from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
+import { renderDesktopShell, openApp } from "./desktopShellTestKit";
 
 const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "test", "fixtures");
 const read = (f: string): string => readFileSync(join(FIXTURE_DIR, f), "utf8");
@@ -46,16 +43,10 @@ afterEach(() => {
 
 describe("Marketplace — delegated app open flow (real fixtures, no network)", () => {
   it("opens an unseeded app as a delegated module; a key press drives on-demand behavior", async () => {
-    const services = createTestServices({ transport: delegatedTransport() });
-    const user = userEvent.setup();
-    render(
-      <ServicesProvider services={services}>
-        <Marketplace />
-      </ServicesProvider>,
-    );
+    const { user } = renderDesktopShell({ transport: delegatedTransport() });
 
     // Open Calculator (unseeded → produces a delegated module → DelegatedShell).
-    await user.click(screen.getByRole("button", { name: /^Calculator —/ }));
+    await openApp(user, "Calculator");
     const region = await screen.findByRole("region", { name: "Calculator" });
 
     // The behavior-free view rendered the keypad (data-action buttons, no handlers).

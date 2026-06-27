@@ -196,4 +196,74 @@ describe("WindowFrame", () => {
     ).not.toBeNull();
     expect(body.querySelector(".app-shell")).toBeNull();
   });
+
+  // Phase 16-01: title-group + hideClose tests
+  it("titlebar has .window-chrome__title-group wrapping icon then title (icon first)", () => {
+    const { container } = render(
+      createElement(WindowFrame, makeProps({ title: "Notes", icon: "N" })),
+    );
+
+    const titlebar = container.querySelector(
+      ".window-chrome__titlebar",
+    ) as HTMLElement;
+    expect(titlebar).not.toBeNull();
+
+    const group = titlebar.querySelector(
+      ".window-chrome__title-group",
+    ) as HTMLElement;
+    expect(group).not.toBeNull();
+
+    const icon = group.querySelector(".window-chrome__icon") as HTMLElement;
+    const title = group.querySelector(".window-chrome__title") as HTMLElement;
+
+    expect(icon).not.toBeNull();
+    expect(title).not.toBeNull();
+
+    // Icon must precede title in DOM order
+    const children = Array.from(group.children);
+    const iconIdx = children.indexOf(icon);
+    const titleIdx = children.indexOf(title);
+    expect(iconIdx).toBeLessThan(titleIdx);
+  });
+
+  it(".window-chrome__title still carries the title text", () => {
+    const { container } = render(
+      createElement(WindowFrame, makeProps({ title: "Calculator" })),
+    );
+
+    const titleEl = container.querySelector(
+      ".window-chrome__title",
+    ) as HTMLElement;
+    expect(titleEl).not.toBeNull();
+    expect(titleEl.textContent?.trim()).toBe("Calculator");
+  });
+
+  it("framed app shows NO inner Close button in the body (traffic-light is authoritative)", () => {
+    const props = makeProps({
+      title: "Notes",
+      Component: SimpleComponent as ComponentType,
+    });
+
+    const { container } = render(createElement(WindowFrame, props));
+
+    const body = container.querySelector(
+      ".window-chrome__body",
+    ) as HTMLElement;
+    expect(body).not.toBeNull();
+
+    // No button matching "Close Notes" inside the body (hideClose=true suppresses it)
+    const innerClose = body.querySelector(
+      '[aria-label="Close Notes"]',
+    ) as HTMLButtonElement | null;
+    expect(innerClose).toBeNull();
+
+    // The traffic-light Close button (in the titlebar) must still be present
+    const titlebar = container.querySelector(
+      ".window-chrome__titlebar",
+    ) as HTMLElement;
+    const trafficClose = titlebar.querySelector(
+      '[aria-label="Close"]',
+    ) as HTMLButtonElement | null;
+    expect(trafficClose).not.toBeNull();
+  });
 });

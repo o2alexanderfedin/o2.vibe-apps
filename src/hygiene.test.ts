@@ -148,4 +148,24 @@ describe("lexicon hygiene gate (HYGIENE-03)", () => {
     const fileCount = walk(SRC_DIR).length;
     expect(fileCount).toBeGreaterThan(5);
   });
+
+  it("explicitly covers the Phase-16 desktop-shell source files (Pitfall 11 — new surfaces stay gated)", () => {
+    // Pitfall 11: v2.0 added new devtools-visible surfaces (the desktop shell,
+    // dock, menu bar, launcher, and app icons). The walk is recursive so these
+    // are covered automatically — but a future path/layout regression could stop
+    // scanning them silently. Assert the scanned set still contains each Phase-16
+    // file by name so that regression fails loudly here.
+    const scanned = new Set(
+      walk(SRC_DIR).map((f) => relative(REPO_ROOT, f).split(sep).join("/")),
+    );
+    for (const file of [
+      "src/ui/DesktopShell.tsx",
+      "src/ui/Dock.tsx",
+      "src/ui/MenuBar.tsx",
+      "src/ui/MinimalLauncher.tsx",
+      "src/ui/iconForApp.tsx",
+    ]) {
+      expect(scanned, `hygiene gate must scan ${file}`).toContain(file);
+    }
+  });
 });
