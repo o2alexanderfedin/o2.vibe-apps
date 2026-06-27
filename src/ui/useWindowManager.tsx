@@ -43,6 +43,13 @@ export interface WindowEntry {
   y: number;
   z: number;
   minimized: boolean;
+  // Phase 19 (plan 19-02): maximize = zoom-to-work-area (NOT OS full-screen).
+  // `maximized` flags the window as filling the work area; `restoreRect` carries
+  // the pre-maximize geometry so unmaximize can return the window to where it
+  // was. The work-area rect itself is resolved in DesktopShell (it owns the
+  // menu-bar/dock layout constants); the manager only carries the toggle state.
+  maximized: boolean;
+  restoreRect: { x: number; y: number; w: number; h: number } | null;
 }
 
 export interface WindowManagerValue {
@@ -52,6 +59,12 @@ export interface WindowManagerValue {
   focus: (id: string) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
+  /** Maximize: zoom to the work area (NOT OS full-screen). Captures the
+   *  pre-maximize geometry into restoreRect and raises the window. */
+  maximize: (id: string) => void;
+  /** Restore from maximized to the prior (pre-maximize) geometry; raises the
+   *  window. restoreRect is left intact for DesktopShell to read. */
+  unmaximize: (id: string) => void;
   /** Close window: removes the entry; React unmounts the in-tree subtree. */
   close: (id: string) => void;
   /** Synchronous guard: returns false immediately after close even inside async flows. */
@@ -63,6 +76,8 @@ export interface WindowManagerValue {
    * stale-windows-array round-trip through instanceId → id.
    */
   isOpenByInstance: (instanceId: string) => boolean;
+  /** Returns the active (topmost non-minimized) window id, or null if none. */
+  activeId: () => string | null;
 }
 
 export const WindowManagerContext =
@@ -110,6 +125,12 @@ export function WindowManagerProvider({
   // not-yet-flushed) windows array.
   const openInstanceIdsRef = useRef<Set<string>>(new Set());
 
+  // Ref mirror of the full windows array, kept in-step with state. Lets
+  // activeId() (and any other live-read accessor) resolve the front-most window
+  // synchronously inside an event handler without a stale-closure round-trip.
+  const windowsRef = useRef<WindowEntry[]>(windows);
+  windowsRef.current = windows;
+
   useEffect(() => {
     openIdsRef.current = new Set(windows.map(w => w.id));
     openInstanceIdsRef.current = new Set(windows.map(w => w.instanceId));
@@ -138,6 +159,8 @@ export function WindowManagerProvider({
           y,
           z,
           minimized: false,
+          maximized: false,
+          restoreRect: null,
         };
         // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
         // before the effect runs.
@@ -179,6 +202,36 @@ export function WindowManagerProvider({
     );
   }, []);
 
+  const maximize = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    // Maximizing raises the window to the front (standard desktop behavior).
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w => {
+        if (w.id !== id) return w;
+        // Capture the pre-maximize geometry so unmaximize can return the window
+        // exactly where it was. w/h use the default app size — the maximized
+        // rect itself is the work area, resolved in DesktopShell.
+        return {
+          ...w,
+          maximized: true,
+          restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H },
+          z,
+        };
+      }),
+    );
+  }, []);
+
+  const unmaximize = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w =>
+        w.id === id ? { ...w, maximized: false, z } : w,
+      ),
+    );
+  }, []);
+
   const close = useCallback((id: string) => {
     setWindows(prev => {
       const entry = prev.find(w => w.id === id);
@@ -211,15 +264,28 @@ export function WindowManagerProvider({
     return openInstanceIdsRef.current.has(instanceId);
   }, []);
 
+  const activeId = useCallback((): string | null => {
+    // The active window is the highest-z, non-minimized one (the same z-ordering
+    // zTop tracks). Read the live ref mirror so an event-handler caller resolves
+    // the current front-most window without a stale-closure round-trip.
+    const top = [...windowsRef.current]
+      .filter(w => !w.minimized)
+      .sort((a, b) => b.z - a.z)[0];
+    return top?.id ?? null;
+  }, []);
+
   const value: WindowManagerValue = {
     windows,
     open,
     focus,
     minimize,
     restore,
+    maximize,
+    unmaximize,
     close,
     isOpen,
     isOpenByInstance,
+    activeId,
   };
 
   return (
