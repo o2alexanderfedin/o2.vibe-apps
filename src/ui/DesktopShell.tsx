@@ -498,27 +498,56 @@ function DesktopShellInner() {
     return () => mql.removeListener(onChange);
   }, []);
 
-  // Window-management keyboard shortcuts (Phase 19, plan 19-03, CHROME-03).
-  // Ctrl+Left / Ctrl+Right snap the ACTIVE window to the work-area half WITHOUT
-  // a drag. Ctrl (not Cmd) is used for snap — Cmd is reserved for Plan 04's
-  // close/minimize so the two never collide. The handler only acts (and only
-  // calls preventDefault) when a Vibe OS window is active, so Ctrl+Arrow text
-  // navigation outside a window stays free (T-19-08). Lifecycle mirrors the
-  // matchMedia effect above (mount add / unmount remove). Reads the live manager
-  // via windowManagerRef so it never closes over a stale window list.
+  // Window-management keyboard shortcuts (Phase 19, plans 19-03 + 19-04).
+  // ONE global keydown listener serves every window shortcut:
+  //   • Ctrl+Left / Ctrl+Right (CHROME-03) — snap the ACTIVE window to the
+  //     work-area half WITHOUT a drag. Ctrl (not Cmd) is the snap modifier.
+  //   • Cmd/Ctrl+W (CHROME-04) — close the active window. The browser tab is
+  //     NEVER closed: preventDefault() suppresses the native tab-close.
+  //   • Cmd/Ctrl+M (CHROME-04) — minimize the active window. preventDefault()
+  //     suppresses the browser's native minimize.
+  // Snap keys on e.ctrlKey; close/minimize key on (metaKey || ctrlKey) so Cmd+W
+  // on macOS and Ctrl+W elsewhere both work — both branches coexist here.
   //
-  // EXTENSION POINT (Plan 04, wave 4): Cmd/Ctrl+W (close) and Cmd/Ctrl+M
-  // (minimize) attach to THIS same handler — add their branches alongside the
-  // Arrow snap branches rather than registering a second global keydown listener.
+  // The handler acts (and calls preventDefault) ONLY when a Vibe OS window is
+  // active — i.e. activeId() resolves a front-most non-minimized window. With no
+  // window open the handler is a no-op (no preventDefault), so the browser tab
+  // stays closable (T-19-10) and Ctrl+Arrow text navigation outside a window
+  // stays free (T-19-08). The active-window-present gate is the same one the
+  // snap branch uses; it is the reliable T-19-10 mitigation (document.hasFocus()
+  // is unreliable in headless/background contexts and would silently disable the
+  // shortcut, so it is NOT used as the gate). It resolves the active window via
+  // activeId() (the same highest-z non-minimized definition the menu bar uses,
+  // T-19-12), reading the live manager via windowManagerRef so it never closes
+  // over a stale list. Lifecycle mirrors the matchMedia effect above (mount add /
+  // unmount remove); handleClose is in the deps (it is memoized — re-register is
+  // a no-op).
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     function handleKeyDown(e: KeyboardEvent): void {
-      // Snap uses Ctrl specifically (Cmd is reserved for Plan 04 close/minimize).
+      const wm = windowManagerRef.current;
+      const mod = e.metaKey || e.ctrlKey;
+
+      // Close / minimize the active window (Cmd on macOS, Ctrl elsewhere).
+      if (mod && (e.key === "w" || e.key === "m")) {
+        const activeId = wm.activeId();
+        // No active Vibe OS window → leave the native shortcut alone so the user
+        // can still close the browser tab (T-19-10).
+        if (activeId === null) return;
+        const active = wm.windows.find((w) => w.id === activeId);
+        if (!active) return;
+
+        e.preventDefault();
+        if (e.key === "w") handleClose(active.id, active.instanceId);
+        else wm.minimize(active.id);
+        return;
+      }
+
+      // Snap uses Ctrl specifically.
       if (!e.ctrlKey) return;
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
 
-      const wm = windowManagerRef.current;
       const active = wm.activeId();
       // No active Vibe OS window → leave the key alone (no snap, no preventDefault)
       // so it does not hijack browser text navigation.
@@ -531,7 +560,7 @@ function DesktopShellInner() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [handleClose]);
 
   // The active window feeding the menu-bar name: the highest-z, non-minimized
   // window is the front-most one (same z-ordering the manager's zTop tracks).
