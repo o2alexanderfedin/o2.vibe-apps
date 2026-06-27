@@ -25,12 +25,12 @@ export function SearchLauncherPanel({
 
   // Focus the close button on mount — NOT the input (Pitfall 12: stealing focus
   // from the input avoids the on-screen keyboard appearing on mobile and keeps
-  // the focus contract consistent with KeyDialog / MinimalLauncher).
+  // the focus contract consistent with KeyDialog).
   useEffect(() => {
     closeButtonRef.current?.focus();
   }, []);
 
-  // Escape closes; Tab is trapped within the dialog (mirrors MinimalLauncher / KeyDialog).
+  // Escape closes; Tab is trapped within the dialog (mirrors KeyDialog).
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.key === "Escape") {
