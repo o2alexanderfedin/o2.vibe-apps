@@ -190,7 +190,19 @@ Plans:
   2. Clicking a running-app icon in the dock focuses or restores that window; clicking the launcher (magnifier) icon opens the search/launcher panel; hovering any dock icon shows a hover-scale animation.
   3. With four or more windows open plus the animated wallpaper running, the desktop stays at or above 30 fps on integrated graphics — minimized windows do not composite (display:none), blob layers are merged, and blur/animation degrade automatically under `prefers-reduced-motion` or when frame time exceeds the performance budget.
   4. Switching theme with multiple windows open produces no dropped frames (no full-page restyle cascade; @property declarations or opacity-crossfade strategy in place).
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+- [ ] 16-01-PLAN.md — Phase-15 chrome fixes: AppShell hideClose prop, WindowFrame centered icon+title group, gentler cascade (WIN-08 foundation)
+
+**Wave 2** *(blocked on Wave 1 — shared index.css)*
+- [ ] 16-02-PLAN.md — Dock (WIN-06: running indicators, hover-scale, focus/restore, magnifier) + MenuBar (WIN-07: wordmark, active-app name, relocated theme switcher, account, live clock) + MinimalLauncher stub + shared iconForApp + glass CSS
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 16-03-PLAN.md — DesktopShell root (WIN-08): wallpaper + animated blob layers, ported open flow, leaf wiring; rewire App.tsx root, strip storefront grid, relocate ThemeSelector out of AppBar; end-to-end integration tests
+
+**Wave 4** *(blocked on Wave 3)*
+- [ ] 16-04-PLAN.md — PERF-01 prefers-reduced-motion degrade + theme re-skin acceptance (the headline) + minimized display:none + hygiene gate coverage of new surfaces + live viewed-screenshot smoke checkpoint
 **UI hint**: yes
 **Research pitfalls defended**: Pitfall 3 (z-index stacking: dedicated window container with isolation:isolate, blobs in lower-z sibling), Pitfall 4 (backdrop-filter compositing cost — display:none, merged blob layer, prefers-reduced-motion), Pitfall 7 (theme transition jank), Pitfall 11 (neutral CSS class names, neutral IDB store keys, neutral data-* attributes on all new surfaces)
 
@@ -243,7 +255,7 @@ v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 
 | 13. Activate Widget Composition | v1.1 | TBD | Complete | 2026-06-26 |
 | 14. Theme Foundation | v2.0 | 5/5 | Complete   | 2026-06-26 |
 | 15. Window Manager | v2.0 | 4/4 | Complete   | 2026-06-26 |
-| 16. Desktop Shell | v2.0 | 0/TBD | Not started | - |
+| 16. Desktop Shell | v2.0 | 0/4 | Planned | - |
 | 17. Search / Launcher Panel | v2.0 | 0/TBD | Not started | - |
 | 18. Theme-Aware Generation | v2.0 | 0/TBD | Not started | - |
 
