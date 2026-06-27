@@ -871,6 +871,21 @@ body {
   animation: vibeFloat 28s ease-in-out infinite -9s;
 }
 
+/* PERF-01 degrade (Pitfall 4): under the OS prefers-reduced-motion preference,
+   stop the per-frame blob animation outright and widen the blur so the ambient
+   look survives without animated compositing pressure. This is the primary,
+   JS-free degrade — it applies on its own via the media query, independent of
+   the matchMedia-driven marker DesktopShell sets for tests/future JS hooks. The
+   .desktop-shell--reduced-motion class (set by that JS seam) is also covered so
+   the degrade holds whether the root carries the marker or not. */
+@media (prefers-reduced-motion: reduce) {
+  .desktop-shell__blob,
+  .desktop-shell--reduced-motion .desktop-shell__blob {
+    animation: none !important;
+    filter: blur(80px);
+  }
+}
+
 /* ===========================================================================
    Desktop chrome — menu bar, dock, launcher (Phase 16, plan 16-02)
    Glass surfaces reference the active theme vars (--glass / --bord / --text /

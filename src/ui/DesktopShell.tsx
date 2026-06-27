@@ -137,6 +137,13 @@ function DesktopShellInner() {
   // Gates the minimal launcher overlay (CONTEXT decision 4): opened from the
   // dock magnifier, closed on backdrop click / close control / after an open.
   const [launcherOpen, setLauncherOpen] = useState(false);
+  // PERF-01 reduced-motion seam: mirrors the OS prefers-reduced-motion
+  // preference into React state via a mockable window.matchMedia, so the CSS
+  // degrade has a JS-observable companion (this drives the root marker class the
+  // CSS + tests read, and gives any future JS path — e.g. blob-count reduction —
+  // a hook). The CSS media query is the primary, JS-free degrade; this is the
+  // testable signal on top of it.
+  const [reducedMotion, setReducedMotion] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Stable refs so callbacks can read current manager/services without
@@ -336,6 +343,26 @@ function DesktopShellInner() {
     };
   }, []);
 
+  // Reflect the OS prefers-reduced-motion preference into state (PERF-01).
+  // Guarded for environments where matchMedia is unavailable (older jsdom / SSR)
+  // so the desktop still renders. Subscribes to live preference changes via the
+  // modern addEventListener('change', ...) with a fallback to the legacy
+  // addListener API (older Safari), and cleans up the listener on unmount.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function")
+      return;
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(mql.matches);
+    const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    if (typeof mql.addEventListener === "function") {
+      mql.addEventListener("change", onChange);
+      return () => mql.removeEventListener("change", onChange);
+    }
+    // Legacy MediaQueryList API (older Safari) — addListener/removeListener.
+    mql.addListener(onChange);
+    return () => mql.removeListener(onChange);
+  }, []);
+
   // The active window feeding the menu-bar name: the highest-z, non-minimized
   // window is the front-most one (same z-ordering the manager's zTop tracks).
   const activeWindow =
@@ -344,7 +371,12 @@ function DesktopShellInner() {
       .sort((a, b) => b.z - a.z)[0] ?? null;
 
   return (
-    <div className="desktop-shell">
+    <div
+      className={
+        "desktop-shell" +
+        (reducedMotion ? " desktop-shell--reduced-motion" : "")
+      }
+    >
       {/* Layer 1: wallpaper — the .desktop-shell background (var(--wall), CSS).
           Layer 2: four animated blobs behind the windows (purely decorative,
           aria-hidden). */}
