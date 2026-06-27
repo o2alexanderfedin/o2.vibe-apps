@@ -94,7 +94,7 @@ Carried forward from v1.0–v2.0 and extended for v3.0 — these are acceptance 
 
 **Success Criteria** (what must be TRUE):
   1. A user clicks the `⋮` button in the window titlebar (right of the traffic lights) and the contextual modify/clone/remove prompt opens — the in-body app-shell header with its `⋮` is gone; MOD-01 through MOD-04 all still work.
-  2. A user double-clicks the titlebar (or presses `Cmd/Ctrl+Z` maximize shortcut) and the window zooms to fill the work area between menu bar and dock — not OS full-screen, dock and menu bar remain visible; double-clicking again restores the prior geometry.
+  2. A user double-clicks the titlebar (or clicks the green traffic-light) and the window zooms to fill the work area between menu bar and dock — not OS full-screen, dock and menu bar remain visible; double-clicking again restores the prior geometry.
   3. A user drags a window to the left or right screen edge, sees a translucent drop-zone preview, releases, and the window snaps to that half; pressing `Ctrl+Left` or `Ctrl+Right` snaps the active window to the corresponding half without a drag.
   4. Pressing `Cmd/Ctrl+W` closes the active window and pressing `Cmd/Ctrl+M` minimizes it — the browser tab is never accidentally closed (`preventDefault` confirmed by a test that asserts `event.defaultPrevented`).
   5. All prior 727 tests remain green; the hygiene gate passes; no new runtime npm dependencies.
