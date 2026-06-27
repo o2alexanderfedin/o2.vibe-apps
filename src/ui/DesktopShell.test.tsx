@@ -198,6 +198,76 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     await waitFor(() => expect(activeAppName()).toBe("Notes"));
   });
 
+  // Phase 19 (plan 19-03): snap-to-half (CHROME-03). Dragging a window so the
+  // committed pointer reaches the left/right edge snaps it to that half of the
+  // work area; the geometry mirrors maximize (work area, not the full viewport).
+
+  it("dragging a window to the LEFT edge snaps it to the left half of the work area", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    const frame = frameByTitle("Notes");
+    const handle = frame.querySelector(".titlebar-handle") as HTMLElement;
+
+    // Drag the titlebar far to the left so the committed x clamps to 0 (within
+    // the snap threshold of the left edge).
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 100 });
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10, clientY: 100 });
+
+    // The frame snaps to the LEFT half: it fills the left half of the work area
+    // (x = 0, width = half the viewport, height = work-area height). The menu
+    // bar + dock stay present (work area, NOT the full viewport).
+    await waitFor(() => {
+      const f = frameByTitle("Notes");
+      expect(f.style.width).toBe(`${Math.round(window.innerWidth / 2)}px`);
+      expect(f.style.height).toBe(`${window.innerHeight - 40 - 88}px`);
+      const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)/.exec(
+        f.style.transform,
+      )!;
+      expect(parseFloat(m[1]!)).toBe(0);
+      expect(parseFloat(m[2]!)).toBe(40);
+    });
+    expect(document.querySelector(".menu-bar")).toBeInTheDocument();
+    expect(document.querySelector(".dock")).toBeInTheDocument();
+  });
+
+  it("dragging a window to the RIGHT edge snaps it to the right half of the work area", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    const frame = frameByTitle("Notes");
+    const handle = frame.querySelector(".titlebar-handle") as HTMLElement;
+
+    // Drag the titlebar far to the right so the committed x clamps near the
+    // right edge (within the snap threshold).
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(handle, {
+      pointerId: 1,
+      clientX: window.innerWidth + 500,
+      clientY: 100,
+    });
+    fireEvent.pointerUp(handle, {
+      pointerId: 1,
+      clientX: window.innerWidth + 500,
+      clientY: 100,
+    });
+
+    // The frame snaps to the RIGHT half (x = half viewport, width = half).
+    await waitFor(() => {
+      const f = frameByTitle("Notes");
+      expect(f.style.width).toBe(`${Math.round(window.innerWidth / 2)}px`);
+      const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)/.exec(
+        f.style.transform,
+      )!;
+      expect(parseFloat(m[1]!)).toBe(Math.round(window.innerWidth / 2));
+    });
+  });
+
   it("the contextual `⋮` MOD 'remove' still closes a window", async () => {
     const { user } = renderDesktopShell();
 
