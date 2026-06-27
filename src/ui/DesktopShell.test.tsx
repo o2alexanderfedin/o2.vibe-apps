@@ -570,6 +570,114 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     expect(frames()).toHaveLength(0);
   });
 
+  // Phase 19 (CR-02): the global window shortcuts must NOT hijack keys the user
+  // is typing into an app's OWN input/textarea/contentEditable. Generated apps
+  // render real inputs in-tree (e.g. the seeded Notes "Add a note…" field), and
+  // Ctrl+Arrow / Cmd+W are standard text-editing chords there.
+
+  it("Ctrl+ArrowLeft inside an app's own input does NOT snap the window (CR-02)", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded — renders a real "Add a note…" input
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    const input = within(frameByTitle("Notes")).getByPlaceholderText(
+      "Add a note…",
+    ) as HTMLInputElement;
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    // Fire Ctrl+ArrowLeft FROM the input (bubbles to the window listener with
+    // e.target === the input). The handler must bail (it is the user's word-by-
+    // word caret move), so the window does NOT snap and default is NOT prevented.
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowLeft",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(input, event);
+
+    expect(event.defaultPrevented).toBe(false);
+    const f = frameByTitle("Notes");
+    expect(f.className).not.toContain("window-chrome--snap-left");
+    expect(f.className).not.toContain("window-chrome--snap-right");
+  });
+
+  it("Cmd+W inside an app's own input does NOT close the window (CR-02)", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    const input = within(frameByTitle("Notes")).getByPlaceholderText(
+      "Add a note…",
+    ) as HTMLInputElement;
+    input.focus();
+
+    const event = new KeyboardEvent("keydown", {
+      key: "w",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(input, event);
+
+    // The window stays open (no destructive close mid-edit) and the browser's
+    // own default is left alone (defaultPrevented false) so the editable target
+    // governs the key.
+    expect(event.defaultPrevented).toBe(false);
+    expect(frameByTitle("Notes")).toBeInTheDocument();
+  });
+
+  // Phase 19 (WR-04): Cmd+Shift+W (a "close all tabs" chord) and uppercase e.key
+  // must NOT match the close/minimize chords — otherwise ALL browser tabs close,
+  // the opposite of the "the browser tab is NEVER closed" guarantee (CHROME-04).
+
+  it("Cmd+W with Caps Lock (uppercase 'W', no Shift) STILL closes the active window — WR-04", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+    await waitFor(() => expect(appBodyCount()).toBe(1));
+
+    // Caps Lock on → e.key is "W" with NO Shift. The close chord must normalize
+    // case so it STILL matches (otherwise the chord falls through and the browser
+    // tab closes — the exact failure the guarantee forbids).
+    const event = new KeyboardEvent("keydown", {
+      key: "W",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(window, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(frames()).toHaveLength(0));
+  });
+
+  it("Cmd+Shift+W does NOT close the active window (the chord must not match) — WR-04", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    // Shift held → e.key is "W". The close chord must exclude Shift, so this is
+    // NOT our shortcut — we must NOT preventDefault and must NOT close the window
+    // (so Cmd+Shift+W keeps its native browser meaning, never closing OUR window).
+    const event = new KeyboardEvent("keydown", {
+      key: "W",
+      metaKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(window, event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(frameByTitle("Notes")).toBeInTheDocument();
+  });
+
   it("the contextual `⋮` MOD 'remove' still closes a window", async () => {
     const { user } = renderDesktopShell();
 
