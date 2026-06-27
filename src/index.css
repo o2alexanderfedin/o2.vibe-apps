@@ -791,6 +791,87 @@ body {
 }
 
 /* ===========================================================================
+   Desktop shell — themed wallpaper + animated blob layers (Phase 16, plan 16-03)
+   The wallpaper binds to the active theme's --wall; four soft, screen-blended
+   blobs (var(--b1..--b4)) drift behind the windows on a slow, staggered loop.
+   Z-LAYERING (Pitfall 3): blobs sit at z 0; the .desktop window container above
+   keeps z-index:100 + isolation:isolate and carries NO transform/filter; the
+   dock + menu bar sit at z 9000 above everything. NO transition is declared on
+   :root / custom properties here — a theme switch must not cascade-restyle
+   (Pitfall 7; the reduced-motion + transition strategy lands in plan 16-04).
+   All class names are neutral.
+   ======================================================================== */
+
+.desktop-shell {
+  position: fixed;
+  inset: 0;
+  background: var(--wall);
+  overflow: hidden;
+}
+
+/* Slow drift loop shared by all four blobs (staggered per blob below). The
+   keyframes only translate/scale the blob — they never touch the wallpaper. */
+@keyframes vibeFloat {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(7%, -9%) scale(1.14);
+  }
+  66% {
+    transform: translate(-8%, 6%) scale(0.92);
+  }
+}
+
+/* Base blob: a blurred, screen-blended radial disc that never intercepts
+   pointer events and always sits behind the windows (z 0). */
+.desktop-shell__blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.6;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Per-blob position / size / brand color (var(--b1..--b4)) + staggered timing,
+   matching the design reference's blob layout. */
+.desktop-shell__blob--1 {
+  top: -12%;
+  left: -8%;
+  width: 46vw;
+  height: 46vw;
+  background: radial-gradient(circle, var(--b1) 0%, transparent 68%);
+  animation: vibeFloat 16s ease-in-out infinite 0s;
+}
+.desktop-shell__blob--2 {
+  top: 6%;
+  left: 58%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, var(--b2) 0%, transparent 68%);
+  animation: vibeFloat 20s ease-in-out infinite -3s;
+}
+.desktop-shell__blob--3 {
+  top: 52%;
+  left: 4%;
+  width: 44vw;
+  height: 44vw;
+  background: radial-gradient(circle, var(--b3) 0%, transparent 68%);
+  animation: vibeFloat 24s ease-in-out infinite -6s;
+}
+.desktop-shell__blob--4 {
+  top: 46%;
+  left: 62%;
+  width: 48vw;
+  height: 48vw;
+  background: radial-gradient(circle, var(--b4) 0%, transparent 68%);
+  animation: vibeFloat 28s ease-in-out infinite -9s;
+}
+
+/* ===========================================================================
    Desktop chrome — menu bar, dock, launcher (Phase 16, plan 16-02)
    Glass surfaces reference the active theme vars (--glass / --bord / --text /
    --hi) so the chrome re-skins live when the theme switches. All class names
