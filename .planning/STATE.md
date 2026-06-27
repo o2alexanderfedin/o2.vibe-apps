@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Vibe OS
-status: complete
-stopped_at: "v2.0 Vibe OS SHIPPED. All 5 phases (14–18) complete and merged to develop. 21/21 requirements satisfied. 727 tests green. Tagged v2.0. Archive: .planning/milestones/v2.0-ROADMAP.md, v2.0-REQUIREMENTS.md, v2.0-MILESTONE-AUDIT.md."
-last_updated: "2026-06-26T00:00:00.000Z"
-last_activity: 2026-06-26 -- v2.0 milestone archived and tagged
+milestone: v3.0
+milestone_name: Trusted Desktop
+status: planning
+last_updated: "2026-06-27T05:52:00.018Z"
+last_activity: 2026-06-27
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 34
-  completed_plans: 34
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-26 after v2.0)
 
 ## Current Position
 
-Phase: 14 — Theme Foundation (COMPLETE — all 5 plans)
-Plan: 14-05 complete (ThemeSelector 4-pill switcher + AppBar mount + switch-path test)
-Status: Ready to execute
-Last activity: 2026-06-27 -- Phase 18 planning complete
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-27 — Milestone v3.0 started
 
 ### v2.0 Phase Map
 
@@ -140,10 +139,10 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-06-26T22:30:00.000Z
-Stopped at: Completed Phase 14 Plan 05 (ThemeSelector 4-pill switcher + AppBar mount + switch-path test). Commits 6b53bf5 (component+styles+test) and bfce87b (AppBar mount); switch-path test clicks Noir and asserts documentElement --text becomes #f5eeff (THEME-02 live re-skin); ThemeSelector.test.tsx (3) + src/ui (59) + hygiene (2) green; tsc clean. Phase 14 — all 5 plans complete.
-Resume with: begin Phase 15 — Window Manager (WIN-01..05). Requires Phase 14 (theme CSS-var contract is now live).
+Last session: 2026-06-26 — session resumed via /gsd-resume-work
+Stopped at: v2.0 Vibe OS SHIPPED + archived + tagged. Clean checkpoint, nothing in flight (develop @ 6a1e49d, synced; only untracked design/). 727 tests green, tsc 0, build clean, hygiene+CSP green. Resumed to await the next user-owned decision.
+Resume with: /gsd-new-milestone (plan v3.0 — strong candidate: deferred security story HARD-01 / `<iframe sandbox>` isolation), OR a `develop → main` release.
 
 ## Operator Next Steps
 
-- Phase 14 COMPLETE. Next: Phase 15 — Window Manager (WIN-01..05). Hand-roll useWindowManager (pointer-capture + rAF + root-lifecycle) and WindowFrame chrome that references the now-live theme CSS vars.
+- v2.0 COMPLETE. Next is a user-owned decision: `/gsd-new-milestone` to scope v3.0 (deferred items below are candidates — esp. HARD-01 `<iframe sandbox>` isolation), or cut a `develop → main` release.

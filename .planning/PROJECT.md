@@ -22,6 +22,18 @@ Themeable multi-window desktop — 5 phases (14–18), 21/21 requirements satisf
 
 Network-data path, reliability hardening, richer storefront, and activated widget composition — all merged, tagged `v1.1`, 552 tests green.
 
+## Current Milestone: v3.0 Trusted Desktop
+
+**Goal:** Make the Vibe OS desktop *safe to run untrusted generated code*, *durable across reloads*, and *personalizable* — without breaking the illusion that apps simply exist.
+
+**Target features (build order reflects dependencies):**
+- **Window UX & chrome** — relocate the `⋮` contextual menu out of the app body into the **window titlebar (right-aligned)**, drop the now-redundant in-body app-shell header, and add maximize/snap + keyboard affordances. This puts the contextual control in host-owned chrome — the hard prerequisite for iframe isolation.
+- **Security: `<iframe sandbox>` isolation (HARD-01)** — run each app body inside `<iframe sandbox="allow-scripts">` (opaque origin, no `allow-same-origin`); broker data / handler / modify calls via `postMessage`; the Anthropic key never enters the frame. Theme CSS vars re-injected per frame.
+- **Desktop persistence** — restore window geometry / z-order, the open-app set, and last theme across reloads.
+- **Theme editor / custom themes** — create, name, edit, and save user themes over the 12-var contract, persisted in the IDB `settings` store; the built-in four remain.
+
+**Key context:** The `⋮`→titlebar move is a *prerequisite* for the iframe work (contextual UI must be host-owned once the body is an opaque frame). Theme vars must be re-injected into each sandboxed frame (CSS custom properties don't cross the iframe boundary). Zero-new-dependency bias and the devtools-hygiene lexicon gate stay in force. Drove from a user design screenshot (the `⋮`-to-titlebar annotation).
+
 ## Requirements
 
 ### Validated
@@ -208,4 +220,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-26 after v2.0 Vibe OS milestone — 727 tests green, `v2.0` tagged*
+*Last updated: 2026-06-26 — started milestone v3.0 Trusted Desktop (iframe sandbox + persistence + theme editor + window-chrome UX); baseline 727 tests green, `v2.0` tagged*
