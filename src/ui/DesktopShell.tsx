@@ -181,12 +181,12 @@ function DesktopShellInner() {
   const [components, setComponents] = useState<
     Map<string, ComponentType | null>
   >(new Map());
-  // onMove position overrides keyed by instanceId. Committed drags update this
-  // so a re-render keeps the dragged position (useDrag's imperative transform
-  // is the during-drag source of truth; this is the committed source of truth).
-  const [positions, setPositions] = useState<
-    Map<string, { x: number; y: number }>
-  >(new Map());
+  // Committed free-drag positions live on the manager entry itself (via
+  // setGeometry), so x/y is the SINGLE authoritative source of truth (WR-01) —
+  // there is no separate positions map to drift from it. useDrag's imperative
+  // transform remains the during-drag source of truth; setGeometry is the
+  // committed one. Keeping geometry on the entry lets maximize/snap capture the
+  // EFFECTIVE current position into restoreRect for a faithful restore.
   // Owns the inline reconfigure dialog (RESIL-03): the desktop stays mounted and
   // usable while the KeyDialog is open over it, so a 401 never crashes the page
   // or blocks the rest of the desktop. Also reachable from the menu-bar account
@@ -230,12 +230,8 @@ function DesktopShellInner() {
         next.delete(instanceId);
         return next;
       });
-      setPositions((prev) => {
-        if (!prev.has(instanceId)) return prev;
-        const next = new Map(prev);
-        next.delete(instanceId);
-        return next;
-      });
+      // No positions map to clean up — the entry's own x/y (removed by the
+      // manager's close) is the only geometry store (WR-01).
     },
     [],
   );
@@ -599,17 +595,16 @@ function DesktopShellInner() {
           // ?? entry x/y, CSS min-size) — no width/height passed, so the existing
           // position/drag tests stay byte-identical.
           // A maximized window fills the work area; a SNAPPED window fills the
-          // left/right HALF of the work area (same rect-application path). Both
-          // ignore the drag positions override. A plain window renders unchanged
-          // (transform-only, positions override ?? entry x/y, CSS min-size).
-          const override = positions.get(entry.instanceId);
+          // left/right HALF of the work area (same rect-application path). A
+          // plain window renders transform-only from the entry's authoritative
+          // x/y (committed drags write back via setGeometry — WR-01), CSS min-size.
           const area = entry.maximized
             ? workArea()
             : entry.snapSide
               ? snapHalf(entry.snapSide)
               : null;
-          const x = area ? area.x : (override?.x ?? entry.x);
-          const y = area ? area.y : (override?.y ?? entry.y);
+          const x = area ? area.x : entry.x;
+          const y = area ? area.y : entry.y;
           return (
             <WindowFrame
               key={entry.id}
@@ -639,7 +634,7 @@ function DesktopShellInner() {
               onEdgeChange={(side) => setSnapPreview(side)}
               onMove={(nx, ny) => {
                 // At commit, snap to a half if the dragged position reached an
-                // edge (within SNAP_THRESHOLD), else keep the dragged position.
+                // edge (within SNAP_THRESHOLD), else commit a FREE position.
                 // Either way the during-drag preview clears.
                 setSnapPreview(null);
                 if (nx <= SNAP_THRESHOLD) {
@@ -650,9 +645,15 @@ function DesktopShellInner() {
                 ) {
                   windowManager.snapRight(entry.id);
                 } else {
-                  setPositions((prev) =>
-                    new Map(prev).set(entry.instanceId, { x: nx, y: ny }),
-                  );
+                  // Free position. If the window was snapped, clear the snap so
+                  // it can actually move (CR-01) — otherwise the snap-half rect
+                  // would keep winning in render and the drag would spring back.
+                  if (entry.snapSide !== null) {
+                    windowManager.unsnap(entry.id);
+                  }
+                  // Write the dragged position back to the entry as the
+                  // authoritative geometry (WR-01).
+                  windowManager.setGeometry(entry.id, nx, ny);
                 }
               }}
               onModify={(instruction) =>

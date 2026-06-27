@@ -66,17 +66,27 @@ export interface WindowManagerValue {
   focus: (id: string) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
+  /** Commit a free (non-pinned) position back to the entry so `x`/`y` are the
+   *  authoritative source of truth — used when a drag commits to a free position.
+   *  Keeping geometry on the entry lets maximize/snap capture the EFFECTIVE
+   *  current position into restoreRect (WR-01) rather than a stale value. */
+  setGeometry: (id: string, x: number, y: number) => void;
   /** Maximize: zoom to the work area (NOT OS full-screen). Captures the
-   *  pre-maximize geometry into restoreRect and raises the window. */
+   *  EFFECTIVE pre-maximize geometry into restoreRect, clears any snap (a window
+   *  cannot be both maximized and snapped — CR-01), and raises the window. */
   maximize: (id: string) => void;
-  /** Restore from maximized to the prior (pre-maximize) geometry; raises the
-   *  window. restoreRect is left intact for DesktopShell to read. */
+  /** Restore from maximized to the prior (pre-maximize) geometry: READS
+   *  restoreRect and writes x/y back so the window lands exactly where it was
+   *  (WR-01); raises the window. */
   unmaximize: (id: string) => void;
-  /** Snap to the LEFT half of the work area (CHROME-03). Captures the pre-snap
-   *  geometry into restoreRect, clears `maximized`, and raises the window. */
+  /** Snap to the LEFT half of the work area (CHROME-03). Captures the EFFECTIVE
+   *  pre-snap geometry into restoreRect, clears `maximized`, and raises the window. */
   snapLeft: (id: string) => void;
   /** Snap to the RIGHT half of the work area (CHROME-03). Same capture + raise. */
   snapRight: (id: string) => void;
+  /** Clear a snap: returns a snapped window to a FREE, non-pinned state, READING
+   *  restoreRect to restore its prior geometry (CR-01/WR-01); raises the window. */
+  unsnap: (id: string) => void;
   /** Close window: removes the entry; React unmounts the in-tree subtree. */
   close: (id: string) => void;
   /** Synchronous guard: returns false immediately after close even inside async flows. */
@@ -215,6 +225,20 @@ export function WindowManagerProvider({
     );
   }, []);
 
+  const setGeometry = useCallback((id: string, x: number, y: number) => {
+    // Write a committed free position back to the entry so `x`/`y` stay the
+    // authoritative geometry. A pinned (maximized/snapped) window ignores this
+    // (its rect is resolved in DesktopShell), so guard against overwriting the
+    // pre-pin geometry that restoreRect/un-pin relies on.
+    setWindows(prev =>
+      prev.map(w =>
+        w.id === id && !w.maximized && w.snapSide === null
+          ? { ...w, x, y }
+          : w,
+      ),
+    );
+  }, []);
+
   const maximize = useCallback((id: string) => {
     // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
     // Maximizing raises the window to the front (standard desktop behavior).
@@ -222,12 +246,15 @@ export function WindowManagerProvider({
     setWindows(prev =>
       prev.map(w => {
         if (w.id !== id) return w;
-        // Capture the pre-maximize geometry so unmaximize can return the window
-        // exactly where it was. w/h use the default app size — the maximized
-        // rect itself is the work area, resolved in DesktopShell.
+        // Capture the EFFECTIVE current geometry (w.x/w.y are kept authoritative
+        // via setGeometry on drag commit, WR-01) so unmaximize returns the
+        // window exactly where it was. Clear any snap — a window cannot be both
+        // maximized and snapped (CR-01). The maximized rect itself is the work
+        // area, resolved in DesktopShell; w/h default to the app size.
         return {
           ...w,
           maximized: true,
+          snapSide: null,
           restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H },
           z,
         };
@@ -239,9 +266,19 @@ export function WindowManagerProvider({
     // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
     const z = ++zTop;
     setWindows(prev =>
-      prev.map(w =>
-        w.id === id ? { ...w, maximized: false, z } : w,
-      ),
+      prev.map(w => {
+        if (w.id !== id) return w;
+        // READ restoreRect to return the window to its prior geometry (WR-01).
+        // Fall back to the current x/y if no rect was captured.
+        const rect = w.restoreRect;
+        return {
+          ...w,
+          maximized: false,
+          x: rect ? rect.x : w.x,
+          y: rect ? rect.y : w.y,
+          z,
+        };
+      }),
     );
   }, []);
 
@@ -252,9 +289,9 @@ export function WindowManagerProvider({
     setWindows(prev =>
       prev.map(w => {
         if (w.id !== id) return w;
-        // Capture the pre-snap geometry so an unsnap could return the window
-        // where it was. A window cannot be both maximized and snapped — clear
-        // `maximized`. The half-rect itself is resolved in DesktopShell.
+        // Capture the EFFECTIVE pre-snap geometry so unsnap returns the window
+        // where it was (WR-01). A window cannot be both maximized and snapped —
+        // clear `maximized`. The half-rect itself is resolved in DesktopShell.
         return {
           ...w,
           snapSide: "left",
@@ -277,6 +314,26 @@ export function WindowManagerProvider({
           snapSide: "right",
           maximized: false,
           restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H },
+          z,
+        };
+      }),
+    );
+  }, []);
+
+  const unsnap = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    // Clear the snap and return the window to a FREE, non-pinned state, READING
+    // restoreRect to restore its prior geometry (CR-01/WR-01).
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w => {
+        if (w.id !== id) return w;
+        const rect = w.restoreRect;
+        return {
+          ...w,
+          snapSide: null,
+          x: rect ? rect.x : w.x,
+          y: rect ? rect.y : w.y,
           z,
         };
       }),
@@ -331,10 +388,12 @@ export function WindowManagerProvider({
     focus,
     minimize,
     restore,
+    setGeometry,
     maximize,
     unmaximize,
     snapLeft,
     snapRight,
+    unsnap,
     close,
     isOpen,
     isOpenByInstance,
