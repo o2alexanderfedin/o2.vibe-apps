@@ -18,7 +18,11 @@ findings:
   warning: 4
   info: 4
   total: 8
-status: issues_found
+status: resolved
+resolution:
+  fixed: [WR-01, WR-02, WR-03, WR-04, IN-01]
+  deferred: [IN-02, IN-03, IN-04]
+  note: "All 4 Warnings fixed and committed (38e1c43, b5f5acf, 4225ff8, 58a45c2) plus IN-01 (91469c2). IN-02/03/04 are non-blocking quality observations (latent or documented-intentional). Full suite 669 green, tsc clean, build 0 source maps, hygiene clean."
 ---
 
 # Phase 17: Code Review Report
