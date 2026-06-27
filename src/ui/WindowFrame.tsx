@@ -2,9 +2,9 @@
 //
 // The AppShell-wrapped app renders as a normal child of this frame's React
 // subtree (inside the host root), so it shares the host's reconciler, batching,
-// and — in tests — the same `act()` scope. The AppShell carries the ⋮ contextual
-// prompt around the resolved app component; closing or unmounting the frame tears
-// the whole subtree down through React, leaving zero orphan roots.
+// and — in tests — the same `act()` scope. The AppShell carries no chrome of
+// its own; the ⋮ contextual prompt now lives in this titlebar (Phase 19,
+// plan 19-01) so the app body is a chrome-free zone ready for Phase 20.
 //
 // (Earlier this frame mounted the app into a SEPARATE manager-owned root via
 // mountApp. That detached root rendered outside the test `act()` scope, which let
@@ -12,8 +12,10 @@
 // unthrottled and also raced when unmounting mid-render. Rendering in-tree
 // removes both.)
 
-import { type ComponentType, memo, useRef } from "react";
+import { useState, type ComponentType, memo, useRef } from "react";
+import { MoreVertical } from "lucide-react";
 import { AppShell } from "./AppShell";
+import { ContextualPrompt } from "./ContextualPrompt";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useDrag } from "./useDrag";
 import { iconForAppType } from "./iconForApp";
@@ -23,8 +25,6 @@ interface WindowBodyProps {
   title: string;
   Component: ComponentType | null;
   onClose: () => void;
-  onModify?: (instruction: string) => void;
-  hideClose?: boolean;
 }
 
 // The mounted app body, memoized so window-chrome churn (z-order restacks, drag
@@ -40,19 +40,17 @@ const WindowBody = memo(
     title,
     Component,
     onClose,
-    onModify,
-    hideClose,
   }: WindowBodyProps) {
     if (!Component) {
       return <div className="window-chrome__placeholder">Preparing…</div>;
     }
-    // The AppShell carries role="region" (labeled by the app) plus the ⋮ prompt;
-    // it only appears once the component resolves, so the region denotes a READY
-    // app rather than an empty in-flight placeholder. The app is wrapped in an
+    // The AppShell carries role="region" (labeled by the app name); it only
+    // appears once the component resolves, so the region denotes a READY app
+    // rather than an empty in-flight placeholder. The app is wrapped in an
     // ErrorBoundary so a throwing app/widget is contained to this window instead
-    // of crashing the whole desktop.
+    // of crashing the whole desktop. AppShell is content-only (no header/chrome).
     return (
-      <AppShell displayName={title} onClose={onClose} onModify={onModify} hideClose={hideClose}>
+      <AppShell displayName={title}>
         <ErrorBoundary>
           <Component />
         </ErrorBoundary>
@@ -99,6 +97,12 @@ export function WindowFrame({
   onModify,
 }: WindowFrameProps) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
+
+  function handleApply(instruction: string): void {
+    setPromptOpen(false);
+    onModify?.(instruction);
+  }
 
   // The `icon` prop carries the neutral appType key (e.g. "weather"); resolve it
   // to a glyph the same way the Dock does (iconForAppType) so the titlebar shows
@@ -156,15 +160,37 @@ export function WindowFrame({
           </span>
           <span className="window-chrome__title">{title}</span>
         </div>
+        {/* ⋮ menu — opens the shared contextual prompt (MOD-01).
+            Lives in the titlebar (Phase 19) so the app body is chrome-free.
+            stopPropagation prevents the click from triggering the drag's onPointerDown. */}
+        <button
+          type="button"
+          className="app-bar__icon-btn"
+          aria-label="App options"
+          aria-haspopup="dialog"
+          aria-expanded={promptOpen}
+          title="Options"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPromptOpen((open) => !open);
+          }}
+        >
+          <MoreVertical size={20} aria-hidden="true" />
+        </button>
       </div>
+      {promptOpen && (
+        <ContextualPrompt
+          targetName={title}
+          onApply={handleApply}
+          onCancel={() => setPromptOpen(false)}
+        />
+      )}
       <div className="window-chrome__body" onPointerDown={onFocus}>
         <WindowBody
           instanceId={instanceId}
           title={title}
           Component={Component}
           onClose={onClose}
-          onModify={onModify}
-          hideClose={true}
         />
       </div>
     </div>
