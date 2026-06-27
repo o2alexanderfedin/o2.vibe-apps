@@ -72,11 +72,19 @@ export interface WindowFrameProps {
   y: number;
   z: number;
   minimized: boolean;
+  /** When true, the frame is zoomed to the work area (Phase 19). Disables drag. */
+  maximized: boolean;
+  /** Optional explicit width/height applied ONLY when maximized, so the frame
+   *  fills the work area; the non-maximized path stays transform-only + CSS-min. */
+  w?: number;
+  h?: number;
   /** Resolved app component; null renders a neutral placeholder body. */
   Component: ComponentType | null;
   onClose: () => void;
   onMinimize: () => void;
   onFocus: () => void;
+  /** Toggle maximize ↔ restore (green traffic-light + double-click titlebar). */
+  onMaximize: () => void;
   onMove: (x: number, y: number) => void;
   onModify?: (instruction: string) => void;
 }
@@ -89,10 +97,14 @@ export function WindowFrame({
   y,
   z,
   minimized,
+  maximized,
+  w,
+  h,
   Component,
   onClose,
   onMinimize,
   onFocus,
+  onMaximize,
   onMove,
   onModify,
 }: WindowFrameProps) {
@@ -119,20 +131,43 @@ export function WindowFrame({
   return (
     <div
       ref={frameRef}
-      className={"window-chrome" + (minimized ? " window-chrome--minimized" : "")}
+      className={
+        "window-chrome" +
+        (minimized ? " window-chrome--minimized" : "") +
+        (maximized ? " window-chrome--maximized" : "")
+      }
       // Position is driven ENTIRELY by transform (box origin stays at the
       // desktop's top-left 0,0 via the CSS top/left). useDrag writes the same
       // transform imperatively during a drag; on commit, onMove updates the
       // positions map and this React-owned transform replaces the imperative
       // one cleanly — no double-applied left/top + transform offset.
-      style={{ transform: `translate(${x}px, ${y}px)`, zIndex: z }}
+      //
+      // When maximized, an explicit width/height (the work-area rect, computed
+      // in DesktopShell) is applied so the frame FILLS the work area; the CSS
+      // min-size alone would leave it at its content size. The non-maximized
+      // branch stays transform-only + CSS-min so the existing position/drag
+      // tests are byte-identical.
+      style={{
+        transform: `translate(${x}px, ${y}px)`,
+        zIndex: z,
+        ...(maximized && w !== undefined && h !== undefined
+          ? { width: w, height: h }
+          : null),
+      }}
     >
       <div
         className="window-chrome__titlebar titlebar-handle"
         onPointerDown={(e) => {
+          // While maximized the window is pinned to the work area — gate drag so
+          // it cannot be pulled out of the maximized rect (CONTEXT.md: simplest
+          // path is to disable drag while maximized). Early-return before
+          // onFocus()/handlePointerDown so neither a drag nor a focus-raise fires.
+          if (maximized) return;
           onFocus();
           handlePointerDown(e);
         }}
+        // Double-clicking the titlebar toggles maximize ↔ restore.
+        onDoubleClick={onMaximize}
       >
         <div className="window-chrome__traffic-lights">
           <button
@@ -151,7 +186,11 @@ export function WindowFrame({
             type="button"
             className="window-chrome__traffic-light window-chrome__traffic-light--max"
             aria-label="Maximize"
-            disabled
+            // stopPropagation so the click does not start a titlebar drag.
+            onClick={(e) => {
+              e.stopPropagation();
+              onMaximize();
+            }}
           />
         </div>
         <div className="window-chrome__title-group">
