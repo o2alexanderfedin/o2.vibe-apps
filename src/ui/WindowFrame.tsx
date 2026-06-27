@@ -19,6 +19,7 @@ import { ContextualPrompt } from "./ContextualPrompt";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useDrag } from "./useDrag";
 import { iconForAppType } from "./iconForApp";
+import { SNAP_THRESHOLD } from "./snapConstants";
 
 interface WindowBodyProps {
   instanceId: string;
@@ -133,16 +134,15 @@ export function WindowFrame({
   // transform-only + CSS-min path so the frame fills its assigned rect.
   const pinned = maximized || snapSide != null;
 
-  // The snap threshold mirrors DesktopShell's SNAP_THRESHOLD: a drag whose
-  // pointer is within this many px of the left/right viewport edge surfaces a
-  // drop-zone preview (and snaps on release, handled at commit in DesktopShell).
-  const EDGE_THRESHOLD = 20;
-
+  // The snap threshold is the SHARED SNAP_THRESHOLD constant (IN-04): a drag
+  // whose pointer is within this many px of the left/right viewport edge
+  // surfaces a drop-zone preview (and snaps on release — the commit in
+  // DesktopShell is driven off the SAME reported edge side, WR-02).
   function reportEdge(clientX: number): void {
     if (!onEdgeChange) return;
     let side: "left" | "right" | null = null;
-    if (clientX <= EDGE_THRESHOLD) side = "left";
-    else if (clientX >= window.innerWidth - EDGE_THRESHOLD) side = "right";
+    if (clientX <= SNAP_THRESHOLD) side = "left";
+    else if (clientX >= window.innerWidth - SNAP_THRESHOLD) side = "right";
     if (side !== lastEdgeRef.current) {
       lastEdgeRef.current = side;
       onEdgeChange(side);

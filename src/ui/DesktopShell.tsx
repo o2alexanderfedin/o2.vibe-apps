@@ -39,6 +39,7 @@ import { MenuBar } from "./MenuBar";
 import { Dock } from "./Dock";
 import { SearchLauncherPanel } from "./SearchLauncherPanel";
 import { slugFromText } from "./launcherUtils";
+import { SNAP_THRESHOLD } from "./snapConstants";
 
 // Work-area geometry (Phase 19, plan 19-02, CHROME-02). Maximize = zoom-to-work-
 // area, NOT the OS Fullscreen API: a maximized window fills the viewport MINUS
@@ -49,11 +50,9 @@ import { slugFromText } from "./launcherUtils";
 const MENU_BAR_H = 40;
 const DOCK_RESERVE = 88;
 
-// Snap-to-half (Phase 19, plan 19-03, CHROME-03). When a drag commits with the
-// pointer within SNAP_THRESHOLD px of the left/right viewport edge, the window
-// snaps to that HALF of the work area instead of taking the dragged position.
-// The same threshold drives the during-drag drop-zone preview.
-const SNAP_THRESHOLD = 20;
+// Snap-to-half (Phase 19, plan 19-03, CHROME-03). The SNAP_THRESHOLD that drives
+// both the during-drag drop-zone preview (WindowFrame) and the on-release commit
+// is the SHARED constant (IN-04), so preview and commit can never desynchronize.
 
 // Nominal frame width used for the right-edge snap check (mirrors the window
 // manager's DEFAULT_W). A drag whose committed x + this width reaches the right
