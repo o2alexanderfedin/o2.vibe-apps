@@ -114,6 +114,8 @@ export interface TestServicesOverrides {
   fetchDataBroker?: DataFetchBroker;
   /** Inject a recording settings store to assert the theme-mirror seam. */
   settingsStore?: SettingsStore;
+  /** Override the app-body render mode; defaults to "in-tree" for the JSDOM suite. */
+  frameMode?: "iframe" | "in-tree";
 }
 
 /**
@@ -134,6 +136,7 @@ export function createTestServices(overrides: TestServicesOverrides = {}): Servi
     storage: overrides.storage ?? noPressureStorageSeam,
     fetchDataBroker: overrides.fetchDataBroker,
     settingsStore: overrides.settingsStore ?? createRecordingSettingsStore(),
+    frameMode: overrides.frameMode ?? "in-tree",
   };
 }
 

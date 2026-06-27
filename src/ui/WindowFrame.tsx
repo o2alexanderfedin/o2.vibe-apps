@@ -20,6 +20,8 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { useDrag } from "./useDrag";
 import { iconForAppType } from "./iconForApp";
 import { SNAP_THRESHOLD } from "./snapConstants";
+import { useServices } from "../services/ServicesProvider";
+import { SandboxFrame } from "./SandboxFrame";
 
 interface WindowBodyProps {
   instanceId: string;
@@ -104,6 +106,13 @@ export interface WindowFrameProps {
    *  a drop-zone preview (Phase 19, plan 19-03). */
   onEdgeChange?: (side: "left" | "right" | null) => void;
   onModify?: (instruction: string) => void;
+  /** When frameMode==="iframe", the compiled app string for the frame body. */
+  transpiledJS?: string;
+  /** Theme vars baked into the frame's first paint (frameMode==="iframe"). */
+  themeVars?: Record<string, string>;
+  /** Parent-side handler brokers passed to the frame (key never crosses). */
+  onRunHandler?: (intent: string, input: unknown) => Promise<{ data?: unknown; error?: string }>;
+  onFetchData?: (sourceId: string, params: unknown) => Promise<{ data?: unknown; error?: string }>;
 }
 
 export function WindowFrame({
@@ -127,7 +136,12 @@ export function WindowFrame({
   onSnap,
   onEdgeChange,
   onModify,
+  transpiledJS,
+  themeVars,
+  onRunHandler,
+  onFetchData,
 }: WindowFrameProps) {
+  const { frameMode } = useServices();
   const frameRef = useRef<HTMLDivElement>(null);
   const [promptOpen, setPromptOpen] = useState(false);
   // True only while a titlebar drag is in flight — gates the edge-proximity
@@ -314,12 +328,25 @@ export function WindowFrame({
         />
       )}
       <div className="window-chrome__body" onPointerDown={onFocus}>
-        <WindowBody
-          instanceId={instanceId}
-          title={title}
-          Component={Component}
-          onClose={onClose}
-        />
+        {frameMode === "iframe" && transpiledJS ? (
+          <SandboxFrame
+            instanceId={instanceId}
+            title={title}
+            transpiledJS={transpiledJS}
+            themeVars={themeVars ?? {}}
+            onClose={onClose}
+            onModify={onModify}
+            onRunHandler={onRunHandler}
+            onFetchData={onFetchData}
+          />
+        ) : (
+          <WindowBody
+            instanceId={instanceId}
+            title={title}
+            Component={Component}
+            onClose={onClose}
+          />
+        )}
       </div>
     </div>
   );
