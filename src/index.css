@@ -718,9 +718,9 @@ body {
 }
 
 .window-chrome__titlebar {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 8px;
   padding: 8px 12px;
   cursor: grab;
   user-select: none;
@@ -758,14 +758,26 @@ body {
   background: #28c840;
 }
 
+.window-chrome__title-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .window-chrome__title {
-  flex: 1;
   font-size: 13px;
   font-weight: 600;
   color: var(--text, var(--color-text-primary));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.window-chrome__icon {
+  flex-shrink: 0;
 }
 
 .window-chrome__body {
