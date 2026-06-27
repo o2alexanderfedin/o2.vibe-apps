@@ -82,7 +82,7 @@ function App() {
 
         <div
           style={{
-            backgroundColor: "rgba(var(--color-accent-rgb, 100, 100, 255), 0.1)",
+            backgroundColor: "rgba(var(--color-accent-rgb, 128, 128, 128), 0.1)",
             padding: "20px",
             borderRadius: "8px",
             marginBottom: "30px",
@@ -123,8 +123,8 @@ function App() {
             style={{
               padding: "20px",
               borderRadius: "8px",
-              backgroundColor: "rgba(76, 175, 80, 0.1)",
-              border: "1px solid rgba(76, 175, 80, 0.3)",
+              backgroundColor: "rgba(255, 255, 255, 0.05)",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
             }}
           >
             <p style={{ margin: "0 0 8px 0", fontSize: "14px", opacity: 0.8 }}>
@@ -135,7 +135,7 @@ function App() {
                 margin: 0,
                 fontSize: "24px",
                 fontWeight: "bold",
-                color: remaining >= 0 ? "#4caf50" : "#f44336",
+                color: remaining >= 0 ? "var(--accentA)" : "var(--accentA)",
               }}
             >
               ${remaining.toFixed(2)}
@@ -146,8 +146,8 @@ function App() {
             style={{
               padding: "20px",
               borderRadius: "8px",
-              backgroundColor: "rgba(255, 152, 0, 0.1)",
-              border: "1px solid rgba(255, 152, 0, 0.3)",
+              backgroundColor: "rgba(255, 255, 255, 0.05)",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
             }}
           >
             <p style={{ margin: "0 0 8px 0", fontSize: "14px", opacity: 0.8 }}>
@@ -158,7 +158,7 @@ function App() {
                 margin: 0,
                 fontSize: "24px",
                 fontWeight: "bold",
-                color: "#ff9800",
+                color: "var(--accentA)",
               }}
             >
               ${totalExpenses.toFixed(2)}
@@ -204,10 +204,10 @@ function App() {
                 height: "100%",
                 backgroundColor:
                   percentageUsed > 90
-                    ? "#f44336"
+                    ? "var(--accentA)"
                     : percentageUsed > 75
-                      ? "#ff9800"
-                      : "var(--color-accent)",
+                      ? "var(--accentA)"
+                      : "var(--accentA)",
                 transition: "width 0.3s ease",
               }}
             />
@@ -216,11 +216,11 @@ function App() {
 
         <div
           style={{
-            backgroundColor: "rgba(var(--color-accent-rgb, 100, 100, 255), 0.05)",
+            backgroundColor: "rgba(var(--color-accent-rgb, 128, 128, 128), 0.05)",
             padding: "20px",
             borderRadius: "8px",
             marginBottom: "30px",
-            border: "1px solid rgba(var(--color-accent-rgb, 100, 100, 255), 0.2)",
+            border: "1px solid rgba(var(--color-accent-rgb, 128, 128, 128), 0.2)",
           }}
         >
           <h3 style={{ marginTop: 0, marginBottom: "15px" }}>Add Expense</h3>
@@ -270,7 +270,7 @@ function App() {
           />
 
           {error && (
-            <p style={{ color: "#f44336", margin: "10px 0", fontSize: "14px" }}>
+            <p style={{ color: "var(--accentA)", margin: "10px 0", fontSize: "14px" }}>
               {error}
             </p>
           )}
@@ -312,9 +312,9 @@ function App() {
                     justifyContent: "space-between",
                     alignItems: "center",
                     padding: "12px",
-                    backgroundColor: "rgba(var(--color-accent-rgb, 100, 100, 255), 0.05)",
+                    backgroundColor: "rgba(var(--color-accent-rgb, 128, 128, 128), 0.05)",
                     borderRadius: "4px",
-                    border: "1px solid rgba(var(--color-accent-rgb, 100, 100, 255), 0.2)",
+                    border: "1px solid rgba(var(--color-accent-rgb, 128, 128, 128), 0.2)",
                   }}
                 >
                   <div style={{ flex: 1 }}>
@@ -348,7 +348,7 @@ function App() {
                         padding: "4px 8px",
                         borderRadius: "4px",
                         border: "none",
-                        backgroundColor: "#f44336",
+                        backgroundColor: "var(--accentA)",
                         color: "white",
                         cursor: "pointer",
                         fontSize: "12px",
@@ -379,10 +379,10 @@ function App() {
 
       <style>{`
         :root {
-          --color-surface: #1e1e2e;
+          --color-surface: #1e1e1e;
           --color-text: #e0e0e0;
-          --color-accent: #6366f1;
-          --color-accent-rgb: 99, 102, 241;
+          --color-accent: var(--accentA);
+          --color-accent-rgb: 128, 128, 128;
         }
 
         * {

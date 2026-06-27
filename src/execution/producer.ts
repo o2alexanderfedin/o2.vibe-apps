@@ -23,6 +23,7 @@
 // getter without touching the network or the browser.
 
 import { transpile, transpileHandler, TranspileError } from "./transpile";
+import { checkForHardcodedColors } from "./colorCheck";
 import {
   callModel,
   isTruncated,
@@ -121,7 +122,7 @@ export function buildPrompt(
       `Requirements:\n` +
       `- Default export named App (function App() { ... })\n` +
       `- No imports — React is injected as a global; never write the word import\n` +
-      `- Uses CSS variables for theming: var(--color-surface), var(--color-text), var(--color-accent)\n` +
+      `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
       `- Hold the COMPLETE app state in ONE React.useState with an explicit, named initial shape (keep it small, e.g. { display: "0", expr: "" }) and a separate React.useState(false) "busy" flag.\n` +
       `- Define ONE async function dispatch(action, payload) — the ONLY place behavior happens — that:\n` +
       `    1. sets busy true;\n` +
@@ -151,7 +152,7 @@ export function buildPrompt(
       `- No imports — React is injected as a global; never write the word import. NO event handlers, NO onClick, and do NOT wire any actions — behavior is added elsewhere.\n` +
       `- export const initialState = { ... } : the COMPLETE state of a "${type}" as ONE object with named fields and sensible initial values. (Shape example, for a calculator: { display: "0", expr: "" }.)\n` +
       `- export function view(state) { return ( ...markup... ); } : a PURE function that renders a "${type}" from state. Every interactive element MUST carry a data-action="<id>" attribute named for what it does in a "${type}" (shape example, calculator: data-action="7", data-action="equals") and have NO onClick or other handler. Read all dynamic text from state.\n` +
-      `- STYLING (important): there is NO external stylesheet and NO CSS framework — className / Tailwind classes will NOT apply, and you do NOT need a <style> tag. Style EVERYTHING with inline style={{ ... }} objects, and lay the controls out properly (e.g. a button keypad as style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem" }} with sensible padding, a constrained maxWidth, and centered). Theme using the host's EXISTING variables var(--color-surface), var(--color-text), var(--color-accent) inside the inline styles — they are already defined, so do NOT redefine them.\n` +
+      `- STYLING (important): there is NO external stylesheet and NO CSS framework — className / Tailwind classes will NOT apply, and you do NOT need a <style> tag. Style EVERYTHING with inline style={{ ... }} objects, and lay the controls out properly (e.g. a button keypad as style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem" }} with sensible padding, a constrained maxWidth, and centered). Theme using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
       `- export const actionSpec = "..." : ONE precise description of the EXACT "${type}" state shape and what EACH data-action does to it — unambiguous, since this is the contract the behavior follows. (Shape example, for a calculator: "state is { display: string, expr: string }; for a digit/operator append it to expr and set display to expr; for 'equals' evaluate expr and set display and expr to the result".)\n` +
       `- Finish with: export { initialState, view, actionSpec };\n` +
       mutationLine(userPrompt) +
@@ -165,7 +166,7 @@ export function buildPrompt(
       `- Default export named App (function App(props) { ... })\n` +
       `- Accepts props { data?, config?, onAction? } — all optional, render sensible defaults when absent\n` +
       `- Uses React.useState / React.useEffect (React is available as a global)\n` +
-      `- Uses CSS variables for theming: var(--color-surface), var(--color-text), var(--color-accent)\n` +
+      `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
       `- Compact, fully functional, no placeholders\n` +
       `- No imports — React is injected; no import statements at all\n` +
       mutationLine(userPrompt) +
@@ -193,7 +194,7 @@ export function buildPrompt(
     `Requirements:\n` +
     `- Default export named App (function App() { ... })\n` +
     `- Uses React.useState / React.useEffect (React is available as a global)\n` +
-    `- Uses CSS variables for theming: var(--color-surface), var(--color-text), var(--color-accent)\n` +
+    `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
     `- Fully functional, no placeholders\n` +
     `- No imports — React is injected; no import statements at all\n` +
     `Two optional helpers are in scope as globals — reach for them when the app naturally calls for them (a simple single-purpose app can stay one self-contained component):\n` +
@@ -238,6 +239,7 @@ export function buildRepairPrompt(
       `Requirements:\n` +
       `- export const initialState (one object), export function view(state) returning markup whose interactive elements carry data-action="..." and have NO handlers, and export const actionSpec (a string), then export { initialState, view, actionSpec }\n` +
       `- No imports — React is injected as a global; no event handlers in this module\n` +
+      `- Style EVERYTHING with inline style={{ ... }} and the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
       mutationLine(userPrompt) +
       `Return ONLY the corrected TSX code block, no explanation.`
     );
@@ -251,7 +253,7 @@ export function buildRepairPrompt(
     `Requirements:\n` +
     `- Default export named App (function App(${kind === "widget" ? "props" : ""}) { ... })\n` +
     `- No imports — React is injected as a global, no import statements\n` +
-    `- Uses CSS variables: var(--color-surface), var(--color-text), var(--color-accent)\n` +
+    `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
     mutationLine(userPrompt) +
     `Return ONLY the corrected TSX code block, no explanation.`
   );
@@ -285,6 +287,7 @@ export function buildLengthPrompt(
       `Requirements:\n` +
       `- export const initialState (one object), export function view(state) returning compact markup whose interactive elements carry data-action="..." and have NO handlers, and export const actionSpec (a short string), then export { initialState, view, actionSpec }\n` +
       `- No imports — React is injected as a global; no behavior in this module\n` +
+      `- Style with inline style={{ ... }} and the host CSS variables: var(--accentA) and var(--accentB) for brand colors, var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
       mutationLine(userPrompt) +
       `Return ONLY the complete TSX code block, no explanation.`
     );
@@ -298,6 +301,7 @@ export function buildLengthPrompt(
     `- Uses React.useState / React.useEffect (React is available as a global)\n` +
     `- No imports — React is injected; no import statements at all\n` +
     `- Fully functional, no placeholders, minimal inline styling\n` +
+    `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors, var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
     mutationLine(userPrompt) +
     `Return ONLY the complete TSX code block, no explanation.`
   );
@@ -473,6 +477,12 @@ export async function produceComponent(
           "Handler must not import or require any module — no SDK, library, package, network, or model is available in this scope. Compute the result with plain local TypeScript only (Math, String, Array, JSON, Date).",
           null,
         );
+      }
+      // TGEN-02: post-compile saturated color check (skipped for handlers — no React/CSS).
+      // A TranspileError thrown here is caught by the existing catch below, feeding the
+      // self-heal loop (≤3 attempts) with no new retry infrastructure.
+      if (kind !== "handler") {
+        checkForHardcodedColors(transpiledJS);
       }
       logger.info(`Producer: compiled successfully on attempt ${attempt}`);
       return { source: code, transpiledJS };

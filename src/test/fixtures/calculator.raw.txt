@@ -94,7 +94,7 @@ function App() {
         justifyContent: "center",
         alignItems: "center",
         minHeight: "100vh",
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        background: "linear-gradient(135deg, var(--accentA) 0%, var(--accentB) 100%)",
         fontFamily: "system-ui, -apple-system, sans-serif",
         margin: 0,
         padding: "20px",
@@ -102,9 +102,9 @@ function App() {
     >
       <style>{`
         :root {
-          --color-surface: #1e1e2e;
+          --color-surface: #1e1e1e;
           --color-text: #e0e0e0;
-          --color-accent: #667eea;
+          --color-accent: var(--accentA);
         }
 
         * {
@@ -152,13 +152,13 @@ function App() {
           cursor: pointer;
           transition: all 0.2s ease;
           color: var(--color-text);
-          background-color: rgba(102, 126, 234, 0.2);
+          background-color: rgba(255, 255, 255, 0.1);
         }
 
         button:hover {
           background-color: var(--color-accent);
           transform: translateY(-2px);
-          box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+          box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
         }
 
         button:active {
@@ -170,33 +170,33 @@ function App() {
         }
 
         .operator-btn:hover {
-          background-color: #7c8ef5;
+          background-color: var(--accentB);
         }
 
         .equals-btn {
-          background-color: #10b981;
+          background-color: var(--accentA);
           grid-column: span 2;
         }
 
         .equals-btn:hover {
-          background-color: #059669;
+          background-color: var(--accentA);
         }
 
         .clear-btn {
-          background-color: #ef4444;
+          background-color: var(--accentA);
           grid-column: span 2;
         }
 
         .clear-btn:hover {
-          background-color: #dc2626;
+          background-color: var(--accentA);
         }
 
         .special-btn {
-          background-color: rgba(239, 68, 68, 0.3);
+          background-color: rgba(255, 255, 255, 0.1);
         }
 
         .special-btn:hover {
-          background-color: rgba(239, 68, 68, 0.5);
+          background-color: rgba(255, 255, 255, 0.2);
         }
       `}</style>
 
