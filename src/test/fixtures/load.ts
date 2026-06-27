@@ -11,6 +11,8 @@
 //                                 (weather even uses JSX fragments + export default.)
 //   timer                        — complete but has a genuine syntax error
 //                                 (good for exercising the self-heal loop).
+//   pomodoro-timer — a delegated module (Phase 17, CREATE-02 describe→produce path).
+//                    Used by SearchLauncherPanel.integration.test.tsx to verify the offline flow.
 
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
@@ -19,7 +21,12 @@ import { dirname, join } from "node:path";
 
 const FIXTURE_DIR = dirname(fileURLToPath(import.meta.url));
 
-export type FixtureName = "weather" | "calculator" | "budget" | "timer";
+export type FixtureName =
+  | "weather"
+  | "calculator"
+  | "budget"
+  | "timer"
+  | "pomodoro-timer";
 
 /** Read the raw model response (markdown fences included) for a fixture. */
 export function rawFixture(name: FixtureName): string {

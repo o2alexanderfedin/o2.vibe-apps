@@ -1,0 +1,44 @@
+```tsx
+const initialState = {
+  phase: "idle",
+  minutesLeft: 25,
+  secondsLeft: 0,
+  rounds: 0,
+};
+
+function view(state) {
+  const mins = String(state.minutesLeft).padStart(2, "0");
+  const secs = String(state.secondsLeft).padStart(2, "0");
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem", padding: "2rem", backgroundColor: "var(--color-surface)", color: "var(--color-text)", fontFamily: "system-ui, sans-serif", minHeight: "100%", boxSizing: "border-box" }}>
+      <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600 }}>
+        {state.phase === "break" ? "Break" : "Focus"}
+      </h2>
+      <div style={{ fontSize: "4rem", fontWeight: 700, letterSpacing: "0.05em", fontVariantNumeric: "tabular-nums" }}>
+        {mins}:{secs}
+      </div>
+      <div style={{ display: "flex", gap: "0.75rem" }}>
+        {state.phase === "idle" || state.phase === "break" ? (
+          <button data-action="start" style={{ padding: "0.5rem 1.5rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "1rem" }}>
+            Start
+          </button>
+        ) : (
+          <button data-action="pause" style={{ padding: "0.5rem 1.5rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontSize: "1rem" }}>
+            Pause
+          </button>
+        )}
+        <button data-action="reset" style={{ padding: "0.5rem 1.5rem", backgroundColor: "transparent", color: "var(--color-text)", border: "1px solid var(--color-text)", borderRadius: "0.375rem", cursor: "pointer", fontSize: "1rem", opacity: 0.7 }}>
+          Reset
+        </button>
+      </div>
+      <p style={{ margin: 0, fontSize: "0.875rem", opacity: 0.6 }}>
+        Rounds completed: {state.rounds}
+      </p>
+    </div>
+  );
+}
+
+const actionSpec = "state is { phase: 'idle'|'running'|'paused'|'break', minutesLeft: number, secondsLeft: number, rounds: number }; 'start': set phase to 'running'; 'pause': set phase to 'paused'; 'reset': return to initial state (phase idle, 25 min, 0 sec, rounds unchanged); 'tick': decrement secondsLeft by 1, when 0 decrement minutesLeft, when both 0 and phase=running set phase='break' and minutesLeft=5, when both 0 and phase=break increment rounds and set minutesLeft=25 phase=idle";
+
+export { initialState, view, actionSpec };
+```
