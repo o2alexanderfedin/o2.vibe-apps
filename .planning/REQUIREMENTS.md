@@ -104,8 +104,22 @@ Which phases cover which requirements. Filled during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CHROME-01..04 | — | Pending |
-| SANDBOX-01..06 | — | Pending |
-| PERSIST-01..03 | — | Pending |
-| THEME-06..10 | — | Pending |
-| HYGIENE-07 | — | Pending |
+| CHROME-01 | Phase 19 | Pending |
+| CHROME-02 | Phase 19 | Pending |
+| CHROME-03 | Phase 19 | Pending |
+| CHROME-04 | Phase 19 | Pending |
+| SANDBOX-01 | Phase 20 | Pending |
+| SANDBOX-02 | Phase 20 | Pending |
+| SANDBOX-03 | Phase 20 | Pending |
+| SANDBOX-04 | Phase 20 | Pending |
+| SANDBOX-05 | Phase 20 | Pending |
+| SANDBOX-06 | Phase 20 | Pending |
+| PERSIST-01 | Phase 21 | Pending |
+| PERSIST-02 | Phase 21 | Pending |
+| PERSIST-03 | Phase 21 | Pending |
+| THEME-06 | Phase 22 | Pending |
+| THEME-07 | Phase 22 | Pending |
+| THEME-08 | Phase 22 | Pending |
+| THEME-09 | Phase 22 | Pending |
+| THEME-10 | Phase 22 | Pending |
+| HYGIENE-07 | Phase 20 (gate re-applied in phases 21, 22) | Pending |

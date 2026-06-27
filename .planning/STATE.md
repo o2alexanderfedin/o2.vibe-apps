@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Trusted Desktop
-status: planning
-last_updated: "2026-06-27T05:52:00.018Z"
-last_activity: 2026-06-27
+status: roadmap_created
+last_updated: "2026-06-26T00:00:00.000Z"
+last_activity: 2026-06-26
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,36 +20,61 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26 after v2.0)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v2.0 COMPLETE — milestone archived and tagged `v2.0`. Next: `/gsd-new-milestone` to plan v3.0.
+**Current focus:** v3.0 Trusted Desktop — roadmap created. Next: `/gsd-plan-phase 19` to plan Window Chrome & Menu Relocation.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 19 (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-27 — Milestone v3.0 started
+Status: Roadmap created; ready to plan Phase 19
+Last activity: 2026-06-26 — v3.0 roadmap created (Phases 19–22)
 
-### v2.0 Phase Map
+### v3.0 Phase Map
 
 | Phase | Name | Requirements | Hard ordering constraint |
 |-------|------|--------------|--------------------------|
-| 14 | Theme Foundation | THEME-01..05 | Dependency root — must precede all v2.0 phases |
-| 15 | Window Manager | WIN-01..05 | Requires Phase 14 (chrome uses theme CSS vars) |
-| 16 | Desktop Shell | WIN-06, WIN-07, WIN-08, PERF-01 | Requires Phase 15 (renders WindowFrame) |
-| 17 | Search / Launcher Panel | CREATE-01..03 | Requires Phase 16 (receives onOpen from DesktopShell) |
-| 18 | Theme-Aware Generation | TGEN-01..03, HYGIENE-06 | Requires Phase 14 (var contract live) + Phase 17 (windows exist for end-to-end verify) |
+| 19 | Window Chrome & Menu Relocation | CHROME-01, CHROME-02, CHROME-03, CHROME-04 | Dependency root — must precede all SANDBOX work (CHROME-01 is the hard prerequisite for iframe isolation) |
+| 20 | Opaque-Origin Frame Isolation | SANDBOX-01, SANDBOX-02, SANDBOX-03, SANDBOX-04, SANDBOX-05, SANDBOX-06, HYGIENE-07 | Requires Phase 19 gate confirmed (⋮ in titlebar, MOD-01..04 green from titlebar) |
+| 21 | Desktop Persistence | PERSIST-01, PERSIST-02, PERSIST-03 | Requires Phase 19 (WindowFrame structure); independent of Phase 20 at data-model level — can begin after Phase 19 |
+| 22 | Theme Editor & Custom Themes | THEME-06, THEME-07, THEME-08, THEME-09, THEME-10 | Requires Phase 19 (MenuBar + VibeThemeProvider at correct state); independent of Phases 20/21 at data-model level |
 
-### v1.1 phases — all DONE (archived)
+### v3.0 Requirement Coverage
 
-- Phase 9 Richer Storefront (STORE-01/02) — merged 7dd8b43
-- Phase 10 Widget Schema & Key Correctness (WIDGET-07/08) — merged 3b83cf7
-- Phase 11 Reliability Hardening (RELY-01/02/03) — merged 8e10317
-- Phase 12 Sanctioned Network-Data Path (DATA-01..04) — merged de9ce2b (live CORS smoke; 2 smoke-found bugs fixed)
-- Phase 13 Activate Widget Composition (WIDGET-06) — merged ab4f105 (implemented inline; subagent quota hit)
+All 19 v3.0 requirements mapped — 19/19 (100%):
 
-## Prior Position (Milestone v1.1 — SHIPPED 2026-06-26)
+| Requirement | Phase |
+|-------------|-------|
+| CHROME-01 | Phase 19 |
+| CHROME-02 | Phase 19 |
+| CHROME-03 | Phase 19 |
+| CHROME-04 | Phase 19 |
+| SANDBOX-01 | Phase 20 |
+| SANDBOX-02 | Phase 20 |
+| SANDBOX-03 | Phase 20 |
+| SANDBOX-04 | Phase 20 |
+| SANDBOX-05 | Phase 20 |
+| SANDBOX-06 | Phase 20 |
+| PERSIST-01 | Phase 21 |
+| PERSIST-02 | Phase 21 |
+| PERSIST-03 | Phase 21 |
+| THEME-06 | Phase 22 |
+| THEME-07 | Phase 22 |
+| THEME-08 | Phase 22 |
+| THEME-09 | Phase 22 |
+| THEME-10 | Phase 22 |
+| HYGIENE-07 | Phase 20 (anchored here; re-applied as acceptance criterion in phases 21 and 22) |
 
-v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements satisfied, 552 tests green. Key deliveries: richer storefront (displayName/prompt/createdAt/useCount), typed widget/handler records + symmetric registryKey, validate-at-merge reliability (zod/mini), host-brokered network-data path (real Weather/Currency), delegated widget composition (`useWidget` wired into view scope).
+### Prior milestones — all DONE (archived)
+
+**v2.0 Vibe OS** — Phases 14–18 COMPLETE
+- Phase 14 Theme Foundation (THEME-01..05) — merged, tagged v2.0
+- Phase 15 Window Manager (WIN-01..05) — merged
+- Phase 16 Desktop Shell (WIN-06/07/08, PERF-01) — merged
+- Phase 17 Search / Launcher Panel (CREATE-01..03) — merged
+- Phase 18 Theme-Aware Generation (TGEN-01..03, HYGIENE-06) — merged
+
+**v1.1 Real & Robust** — Phases 9–13 DONE (archived)
+**v1.0 MVP** — Phases 1–8 DONE (archived)
 
 ## Performance Metrics
 
@@ -74,7 +99,7 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 **Recent Trend:**
 
 - Last 5 plans: 14-01, 14-02, 14-03, 14-04, 14-05
-- Trend: Phase 14 Theme Foundation COMPLETE (5 of 5 plans done)
+- Trend: v2.0 milestone COMPLETE (5 phases, 21/21 requirements, 727 tests green)
 
 *Updated after each plan completion*
 | Phase 15 P03 | ~12 minutes | 2 tasks | 4 files |
@@ -86,32 +111,28 @@ v1.1 Real & Robust shipped and archived: 5 phases (9–13), 12/12 requirements s
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap v2.0]: 5-phase structure (14–18) validated by research. Phase order is strictly dependency-driven: Theme Foundation → Window Manager → Desktop Shell → Create Panel → Theme-Aware Generation.
-- [Roadmap v2.0]: HARD ordering constraint — Theme Foundation (14) must precede Window Manager (15) because WindowFrame chrome references theme CSS vars; the alias bridge must land before any produce-prompt change or pre-v2 cached apps lose their colors.
-- [Roadmap v2.0]: HARD ordering constraint — Window Manager (15) before Desktop Shell (16) before Search/Launcher Panel (17) — consumer chain: useWindowManager → WindowFrame → DesktopShell → CreatePanel onOpen prop.
-- [Roadmap v2.0]: HARD ordering constraint — Theme-Aware Generation (18) is last because it needs the var contract live (Phase 14) and apps opening in windows (Phases 15–17) to verify end-to-end re-skin; it is the highest-novelty/risk phase.
-- [Roadmap v2.0]: Zero new npm dependencies — hand-roll useDrag (setPointerCapture + rAF + state-on-pointerup), VibeThemeProvider (documentElement.style.setProperty), and all windowing/dock/menu-bar components. Research verdict: react-draggable has React 19 findDOMNode breakage; framer-motion is 674KB–4.8MB.
-- [Roadmap v2.0]: Theme vars applied to document.documentElement (not React context) so CSS inheritance reaches all separately-createRoot'd generated app subtrees — this is the central theming mechanism.
-- [Roadmap v2.0]: FOUC prevention via synchronous localStorage read in index.html script before React mounts; IDB settings store (v3) is the authoritative persistence, localStorage is the FOUC guard.
-- [14-03]: Settings store reaches IndexedDB via openRegistry() directly rather than widening the Registry StoreName union (apps|widgets|handlers) — the settings store sits outside the cache-eviction surface.
-- [14-03]: setTheme fires settingsStore.write(name) fire-and-forget (no await) — the UI switch + localStorage write are synchronous and authoritative; the IDB mirror is best-effort.
-- [14-03]: VibeThemeProvider is nested INSIDE the existing light/dark ThemeProvider (not replacing it) so the named-theme CSS-variable contract layers on top without disturbing the 552-test data-theme mechanism.
-- [14-04]: The inline FOUC script duplicates the VIBE_THEMES values verbatim from VibeThemeProvider.tsx rather than importing them — the script must run before any module load, so the runtime provider and first paint stay in sync by convention (copied values), not by shared import.
-- [14-04]: FOUC script edit + CSP sha256 hash regeneration land in ONE atomic commit (963c782) — csp.test.ts recomputes the hash from the live file, so any desync fails CI; the no-flash guarantee stays verifiable.
-- [14-05]: ThemeSelector holds NO local state — the active pill is computed from useVibeTheme().theme each render, so it stays in sync with any theme change source (FOUC first paint, programmatic setTheme, future Phase 16 menu) with no extra wiring.
-- [14-05]: ThemeSelector mounted as the FIRST child of app-bar__controls; the existing useTheme/cycleTheme light/dark/system toggle is left fully intact (purely additive) so the 552 tests depending on the old toggle stay green — temporary home, Phase 16 relocates it to the menu bar.
-- [14-05]: Switch-path test drives a real click through act() and asserts noir's --text (#f5eeff) lands on documentElement — proving the selector → setTheme → applyVibeTheme live re-skin chain end to end (THEME-02), not a mocked setter.
-- [Roadmap v2.0]: All v1.0/v1.1 cross-cutting constraints (HYGIENE-01..05, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, TDD with real captured-Haiku fixtures, additive DB migrations) are acceptance constraints on every v2.0 phase — not separate phases.
+- [Roadmap v3.0]: 4-phase structure (19–22) derived from the dependency-enforced build order independently confirmed by all four research streams. CHROME → SANDBOX → PERSIST/THEME-editor is a hard constraint, not advisory.
+- [Roadmap v3.0]: HARD ordering constraint — CHROME-01 (`⋮` to titlebar) must complete and its MOD-01..04 gate must be confirmed before any iframe work begins. `createPortal` cannot cross an opaque-origin boundary without `allow-same-origin`, which must never be set.
+- [Roadmap v3.0]: HARD ordering constraint — Phase 20 (iframe isolation) requires Phase 19; Phases 21 and 22 require Phase 19 but are independent of Phase 20 at the data-model level and can be developed in parallel with or immediately after Phase 20.
+- [Roadmap v3.0]: Schema decision SETTLED — additive keys (`"windowLayout"`, `"customTheme:<name>"`) in the existing `settings` store; no DB version bump, no migration. A dedicated `windows` store (DB v4) is the fallback only if querying needs grow beyond a flat key-value lookup, which v3.0 does not require.
+- [Roadmap v3.0]: Zero new npm runtime dependencies confirmed for all four pillars. Playwright is permitted as a devDependency for SANDBOX-05 (the Playwright integration test is a new test category not in the 727-test baseline).
+- [Roadmap v3.0]: HYGIENE-07 anchored to Phase 20 (the largest new devtools-visible surface: frameBridge/SandboxFrame/srcdoc). The extended lexicon gate must cover the words "iframe", "sandbox", "isolation" in addition to the existing banned token family — these words must not appear in any user-visible copy, error message, or devtools-visible surface.
+- [Roadmap v3.0]: `postMessage` to opaque-origin frames must use `"*"` as targetOrigin (sending to the string `"null"` does not work — the browser blocks it). Frame-to-parent messages use the injected `parentOrigin` (real host origin).
+- [Roadmap v3.0]: React 19 has no UMD builds. Inline React CJS from node_modules as IIFEs assigning `window.React` / `window.ReactDOM`. Total per-frame srcdoc string ~553KB. Store as a module-level constant built once and reused.
+- [Roadmap v3.0]: FOUC for custom themes — mirror custom theme vars to `localStorage["vibe.customTheme.<name>"]` at save time; extend the FOUC script to apply custom theme on first paint. Any FOUC script change requires `csp.test.ts` SHA-256 hash recompute in the same commit (the Phase 14 invariant stays in force).
+- [Roadmap v2.0]: All v1.0/v1.1/v2.0 cross-cutting constraints (HYGIENE-01..06, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, additive IDB only, FOUC/CSP hash invariant) remain acceptance criteria on every v3.0 phase — not separate phases.
 
 ### Key Research Flags
 
-- **Phase 18 (Theme-Aware Generation):** prompt-engineering + post-compile check is the most novel piece of the milestone — needs a prompt test proving generated apps actually emit the CSS vars and the self-heal catch works. Plan with a focused design pass.
-- **Phase 15 (Window Manager):** pointer-capture/rAF/root-lifecycle has subtle correctness edges — worth careful test design (drag across app root boundary, close-while-producing cancellation, mountedCount===0 after all closes).
-- **Phases 14, 16, 17:** standard composition/integration patterns — lighter research need but Phase 14 has the FOUC-script/CSP-hash same-commit invariant to respect.
+- **Phase 20 (HARD-01):** Highest-risk phase. All seven critical iframe pitfalls concentrate here (allow-same-origin trap, key leak, missing source check, CSS-vars-don't-cross, portal-needs-host-chrome, postMessage targetOrigin "null" trap, React 19 no UMD). Security review at the gate is recommended. The full iframe round-trip (READY → MOUNT → render → FRAME_RESIZE → THEME_PUSH) cannot be tested in JSDOM — at least one Playwright integration test is required.
+- **Phase 22 (Theme Editor):** Alpha-color input UX for `--glass` / `--glass2` — `<input type="color">` returns only `#rrggbb` hex; decide on dual range+color or text-field pattern during Phase 22 planning.
+- **Phases 19, 21:** Standard patterns — lighter research need; Phase 19 has the MOD-01..04 gate that unlocks Phase 20.
 
 ### Pending Todos
 
-None yet.
+- Decide Playwright test infrastructure at start of Phase 20 planning (Playwright vs alternative browser-native approach; devDependency addition).
+- Confirm `loader.ts` transpiled-string accessor interface before Phase 20 planning (`getTranspiledJS(cacheKey)` accessor into session-tier `transpiledCache`).
+- Decide alpha-color input UX pattern for `--glass` / `--glass2` before Phase 22 planning.
 
 ### Blockers/Concerns
 
@@ -123,7 +144,7 @@ None at roadmap creation.
 |---|-------------|------|--------|-----------|
 | 260625-q08 | Fix G1 cacheKey contract (fold kind+prompt) + reconcile blueprint doc | 2026-06-25 | 0f9a7d4 | [260625-q08-cachekey-contract-doc-reconcile](./quick/260625-q08-cachekey-contract-doc-reconcile/) |
 
-Last activity: 2026-06-26 — v2.0 Vibe OS roadmap created (Phases 14–18).
+Last activity: 2026-06-26 — v3.0 Trusted Desktop roadmap created (Phases 19–22); 19/19 requirements mapped.
 
 ## Deferred Items
 
@@ -131,18 +152,13 @@ Items acknowledged and carried forward:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Security | `<iframe sandbox>` isolation of generated code (HARD-01) + SEC-01/02/03 — windowing layer designed so iframe move stays a contained change | Deferred beyond v2.0 | v2.0 Requirements |
-| Refactor | G2 unified `Intent` contract — internal refactor, no user-facing value | Deferred beyond v2.0 | v2.0 Requirements |
-| Theming | User-created / custom themes — built-in four only this milestone; a theme editor is a v2.x follow-up | Deferred to v2.x | v2.0 Requirements |
-| Persistence | Window-position / desktop-layout persistence — restoring window geometry and installed[] dock across reloads | Deferred to v2.x | v2.0 Requirements |
-| Security | Cancellation token (AbortController) per window open — guards mid-flight close; acceptable for alpha | Deferred to polish | v2.0 Roadmap |
+| Window UX | CHROME-F1: Snap to quarter (corner drag) | Deferred to v3.1 | v3.0 Requirements |
+| Window UX | CHROME-F2: Keyboard window cycle (Cmd+`) | Deferred to v3.1 | v3.0 Requirements |
+| Theme | THEME-F1: Theme export / import (JSON) | Deferred to v3.1 | v3.0 Requirements |
+| Refactor | G2 unified `Intent` contract — internal refactor, no user-facing value | Deferred beyond v3.0 | v2.0 Requirements |
 
 ## Session Continuity
 
-Last session: 2026-06-26 — session resumed via /gsd-resume-work
-Stopped at: v2.0 Vibe OS SHIPPED + archived + tagged. Clean checkpoint, nothing in flight (develop @ 6a1e49d, synced; only untracked design/). 727 tests green, tsc 0, build clean, hygiene+CSP green. Resumed to await the next user-owned decision.
-Resume with: /gsd-new-milestone (plan v3.0 — strong candidate: deferred security story HARD-01 / `<iframe sandbox>` isolation), OR a `develop → main` release.
-
-## Operator Next Steps
-
-- v2.0 COMPLETE. Next is a user-owned decision: `/gsd-new-milestone` to scope v3.0 (deferred items below are candidates — esp. HARD-01 `<iframe sandbox>` isolation), or cut a `develop → main` release.
+Last session: 2026-06-26 — v3.0 roadmap created
+Stopped at: Roadmap written; ready for Phase 19 planning.
+Resume with: `/gsd-plan-phase 19` to plan Window Chrome & Menu Relocation.

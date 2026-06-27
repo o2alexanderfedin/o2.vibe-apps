@@ -5,6 +5,7 @@
 - ✅ **v1.0 MVP** — Phases 1–8 (shipped 2026-06-26) — full detail archived in [milestones/v1.0-ROADMAP.md](./milestones/v1.0-ROADMAP.md)
 - ✅ **v1.1 Real & Robust** — Phases 9–13 (shipped 2026-06-26) — full detail archived in [milestones/v1.1-ROADMAP.md](./milestones/v1.1-ROADMAP.md)
 - ✅ **v2.0 Vibe OS** — Phases 14–18 (shipped 2026-06-26) — full detail archived in [milestones/v2.0-ROADMAP.md](./milestones/v2.0-ROADMAP.md)
+- 🔵 **v3.0 Trusted Desktop** — Phases 19–22 (in progress)
 
 ## Phases
 
@@ -53,6 +54,13 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
 - [x] **Phase 18: Theme-Aware Generation** — All produce-prompt branches mandate the CSS-var contract; a post-compile static check feeds violations into the self-heal loop; model-supplied names are sanitized; the CI lexicon gate covers all new surfaces. (completed 2026-06-26)
 
 </details>
+
+### v3.0 Trusted Desktop (Phases 19–22)
+
+- [ ] **Phase 19: Window Chrome & Menu Relocation** - Relocate the `⋮` contextual menu into the window titlebar (right-aligned), add maximize/snap/keyboard shortcuts; hard prerequisite for all iframe work.
+- [ ] **Phase 20: Opaque-Origin Frame Isolation** - Convert each app body to `<iframe sandbox="allow-scripts">` brokered by `postMessage`; the API key never enters the frame; 727 RTL tests remain green via in-tree fallback.
+- [ ] **Phase 21: Desktop Persistence** - Restore window geometry, z-order, open-app set, and minimized state across reloads using additive keys in the existing IDB `settings` store; no DB version bump.
+- [ ] **Phase 22: Theme Editor & Custom Themes** - Create, name, edit, and save custom themes over the 12-var contract; custom themes appear in the menu-bar switcher and survive reload FOUC-free.
 
 ## Phase Details
 
@@ -154,10 +162,136 @@ Plans:
 
 ---
 
+## v3.0 Trusted Desktop — Phase Details
+
+### v3.0 cross-cutting acceptance constraints (binding on every phase 19–22)
+
+Carried forward from v1.0–v2.0 and extended for v3.0 — these are acceptance criteria on every phase, not separate phases:
+
+- **HYGIENE-01..06** — no devtools-visible surface narrates the on-demand mechanic; the banned token family applies; the CI lexicon gate (`hygiene.test.ts`) must stay green across `src/**` + `index.html` + srcdoc template strings + postMessage field names + IDB keys. Extended in Phase 20 to all new v3.0 files (HYGIENE-07).
+- **Key never enters the frame** — `buildSrcdoc(transpiledJS, themeVars, parentOrigin)` is type-enforced with no other parameters accepted; CI-tested at every phase after Phase 20.
+- **Zero new npm runtime dependencies** — Playwright is permitted as a devDependency for SANDBOX-05 only; nothing enters the runtime bundle.
+- **IoC / DI** — new components reach the test suite via the `in-tree` fallback mode via `ServicesProvider`; no live network in any test.
+- **`build.sourcemap: false`** + minify in prod; CSP `connect-src 'self' api.anthropic.com` (frames never call Anthropic directly).
+- **Additive IDB only** — new keys (`"windowLayout"`, `"customTheme:<name>"`) in the existing `settings` store; no DB version bump, no migration.
+- **FOUC script / CSP hash invariant** — any change to the `index.html` FOUC script must be accompanied by a SHA-256 hash update in `csp.test.ts` in the same commit.
+- **The words "iframe", "sandbox", "isolation"** must not appear in any user-visible copy, error message, or devtools-visible surface — enforced by the extended lexicon gate (HYGIENE-07).
+
+---
+
+### Phase 19: Window Chrome & Menu Relocation
+
+**Goal**: The window titlebar owns all host-controlled actions — the `⋮` contextual menu lives in the titlebar chrome, not the app body — and the window gains maximize, snap, and keyboard shortcuts; completing this phase makes the app body a chrome-free zone ready to become an opaque frame.
+
+**Depends on**: Phase 18 (v2.0 complete; `WindowFrame`, `AppShell`, `useWindowManager` exist)
+
+**Requirements**: CHROME-01, CHROME-02, CHROME-03, CHROME-04
+
+**Success Criteria** (what must be TRUE):
+  1. A user clicks the `⋮` button in the window titlebar (right of the traffic lights) and the contextual modify/clone/remove prompt opens — the in-body app-shell header with its `⋮` is gone; MOD-01 through MOD-04 all still work.
+  2. A user double-clicks the titlebar (or presses `Cmd/Ctrl+Z` maximize shortcut) and the window zooms to fill the work area between menu bar and dock — not OS full-screen, dock and menu bar remain visible; double-clicking again restores the prior geometry.
+  3. A user drags a window to the left or right screen edge, sees a translucent drop-zone preview, releases, and the window snaps to that half; pressing `Ctrl+Left` or `Ctrl+Right` snaps the active window to the corresponding half without a drag.
+  4. Pressing `Cmd/Ctrl+W` closes the active window and pressing `Cmd/Ctrl+M` minimizes it — the browser tab is never accidentally closed (`preventDefault` confirmed by a test that asserts `event.defaultPrevented`).
+  5. All prior 727 tests remain green; the hygiene gate passes; no new runtime npm dependencies.
+
+**Risks / Notes**:
+  - CHROME-01 is the hard prerequisite for all of Phase 20 — once the app body becomes an opaque frame, no mechanism exists to inject host chrome from outside (`createPortal` across an opaque-origin iframe boundary requires `allow-same-origin`, which must never be set). Do not proceed to Phase 20 until this gate is confirmed by the MOD-01..04 test suite.
+  - Snap preview requires a translucent overlay rendered by `DesktopShell` — coordinate with the existing `useDrag` pointer-capture rAF loop to detect edge proximity without breaking existing drag behavior.
+  - Maximize must target the work area (`100vh - menuBarHeight - dockHeight`), not OS full-screen. Hard-code as a constraint; OS full-screen is permanently excluded.
+
+**Plans**: TBD
+**UI hint**: yes
+
+---
+
+### Phase 20: Opaque-Origin Frame Isolation
+
+**Goal**: Each app body runs inside `<iframe sandbox="allow-scripts">` at an opaque origin — the API key is structurally unable to enter the frame, generated code cannot reach `localStorage`, and every app↔host interaction is brokered by typed `postMessage` RPC; all 727 existing tests remain green via the in-tree fallback, and a Playwright integration test proves the real round-trip.
+
+**Depends on**: Phase 19 (CHROME-01 gate confirmed; `⋮` is host-owned chrome before any app body becomes a frame)
+
+**Requirements**: SANDBOX-01, SANDBOX-02, SANDBOX-03, SANDBOX-04, SANDBOX-05, SANDBOX-06, HYGIENE-07
+
+**Success Criteria** (what must be TRUE):
+  1. A user opens any app and it renders inside a sandboxed frame — the app is fully interactive (buttons, inputs, handlers work) and the user sees no visual difference from the pre-Phase-20 experience; the frame renders with correct theme colors on first paint.
+  2. From inside the frame, reading `localStorage` throws a `SecurityError` — a Playwright test asserts this. A CI test asserts the mounted iframe `sandbox` attribute never contains the string `"allow-same-origin"`.
+  3. A CI test asserts that `iframeEl.getAttribute('srcdoc')` does not match the pattern `/sk-ant/` — the API key can never be baked into the srcdoc template. A forged `postMessage` from an unknown `source` (not the live frame's `contentWindow`) is dropped without error — a Playwright test confirms.
+  4. Switching themes re-skins all open app frames live, in lockstep with the host chrome — a Playwright test drives a theme switch while two apps are open and asserts that both frames' `:root` CSS vars update.
+  5. All 727 prior RTL/JSDOM tests pass without a real browser (the `in-tree` fallback mode, injected via `ServicesProvider`, is active in the test environment).
+  6. An app that stops responding triggers a visible overlay (not a blank window) with a force-close action — the rest of the desktop remains usable; a test confirms the overlay appears after the ping timeout.
+
+**Risks / Notes** (all seven critical pitfalls from SUMMARY.md):
+  - **Pitfall 1 — `allow-same-origin` + `allow-scripts` destroys the sandbox**: If both are set, the frame's scripts can call `window.frameElement.removeAttribute('sandbox')`, escaping all isolation. Use exactly `sandbox="allow-scripts"` — no exceptions ever. CI test must assert `!sandboxAttr.includes("allow-same-origin")`.
+  - **Pitfall 2 — API key leaking into the frame**: Three vectors: (a) srcdoc-building function inadvertently receiving the `services` graph; (b) `postMessage` init payload including config built from the settings store; (c) error messages echoing raw handler input containing key material. Prevention: `buildSrcdoc(transpiledJS: string, themeVars: Record<string,string>, parentOrigin: string)` — type signature accepts no other parameters.
+  - **Pitfall 3 — Missing `event.source` check**: Checking `event.origin` alone is insufficient. Correct guard for opaque-origin frames: `event.origin === "null" && event.source === knownIframeContentWindow`. Use `crypto.randomUUID()` for correlation IDs; namespace the pending-callback map by `[frameId, correlationId]`.
+  - **Pitfall 4 — CSS custom properties do not cross the iframe boundary**: The frame has its own `:root`. Bake 12 theme vars into the srcdoc `<style>` block at construction. On every `setTheme()` call, `broadcastTheme(vars)` sends `postMessage({ type: 'THEME_PUSH', vars }, "*")` to all registered frame `contentWindow` references.
+  - **Pitfall 5 — `⋮` must be host-owned before iframe work**: Completed in Phase 19. Do not begin Phase 20 until the Phase 19 MOD-01..04 gate is confirmed.
+  - **Pitfall 6 — `postMessage` to opaque-origin frames uses `"*"` as targetOrigin**: Sending to the string `"null"` does not work — the browser blocks it. Use `"*"` for parent-to-frame messages; audit that no payload contains key-adjacent data. Frame-to-parent messages use the injected `parentOrigin` (real host origin).
+  - **Pitfall 7 — React 19 has no UMD builds**: Inline React CJS from `node_modules` as IIFEs assigning `window.React` / `window.ReactDOM`. Total per-frame srcdoc string ~553KB. Store the template as a module-level constant so it is built once and reused across all frame instances.
+  - **Known limitation — infinite-loop frame cannot be `terminate()`d**: An iframe cannot be killed like a Worker. SANDBOX-06 mitigates with a ping/timeout/overlay/force-close; document explicitly that the loop continues in the orphaned frame until it is force-closed.
+  - **New test category — Playwright**: This is the first phase requiring a real browser for integration tests. Playwright is permitted as a devDependency; the decision on test infrastructure (Playwright vs another browser-native approach) must be made at the start of Phase 20 planning.
+
+**Plans**: TBD
+**UI hint**: yes
+
+---
+
+### Phase 21: Desktop Persistence
+
+**Goal**: When a user reloads the page, the desktop they left is restored — every open window appears at its saved position, geometry, and z-order, and previously opened apps come back through the cache-hit path without triggering the produce gate.
+
+**Depends on**: Phase 19 (Phase 20 is independent at the data-model level; can begin immediately after Phase 19 completes — does not need to wait for Phase 20)
+
+**Requirements**: PERSIST-01, PERSIST-02, PERSIST-03
+
+**Success Criteria** (what must be TRUE):
+  1. A user opens 3 apps, moves them to different positions, then reloads — all 3 windows reappear at their saved positions, with correct z-order and minimized state, using fresh `instanceId`s minted at restore time.
+  2. Dragging a window 50+ times does not cause 50 IDB writes — a test confirms that only 1 write (debounced, ~300ms trailing) lands in the `settings` store per drag sequence, preventing a write-storm.
+  3. An app that was evicted from the cache and cannot be re-resolved on restore opens as a placeholder with a visible retry action — it never silently spends API quota.
+  4. Restoring 5 windows does not throw a produce-gate error — restores are serialized (concurrency-capped at 1–2 concurrent), and all 5 windows complete restore before any produce-gate threshold is reached.
+  5. The IDB `settings` store record for `"windowLayout"` contains exactly `{ appType, title, icon, x, y, z, minimized }` per entry — no `instanceId`, no `transpiledJS`, no API key, no Component reference.
+
+**Risks / Notes**:
+  - **No DB version bump** — additive keys (`"windowLayout"`, `"openSet"`) are added to the existing `settings` store via `writeRaw(key, value)` / `readRaw(key)`. Do not bump `REGISTRY_DB_VERSION`; no migration path is needed.
+  - **Stale `instanceId` on restore** — persisted `instanceId` values are session-scoped UUIDs meaningless to the next session. Always mint a fresh `instanceId` via `windowManager.open()` using the persisted `appType` — never restore a raw `instanceId`.
+  - **Multi-tab IDB conflict** — two tabs open during reload may write conflicting `"windowLayout"` values. Last-write-wins via IDB transaction ordering is acceptable for v3.0; document as known multi-tab behavior, not a bug.
+  - **No in-app state persisted** — scroll position, form values, and any runtime state of generated apps are intentionally not saved; generated apps have no stable serialization contract. A user returning to an app sees its initial state.
+
+**Plans**: TBD
+
+---
+
+### Phase 22: Theme Editor & Custom Themes
+
+**Goal**: A user can create, name, edit, and save custom themes over the 12-variable contract, see them in the menu-bar switcher alongside the built-ins, and find them waiting after a hard reload — without any Aurora flash on first paint.
+
+**Depends on**: Phase 19 (Phase 20 and Phase 21 are independent at the data-model level; can begin in parallel with Phase 21 or immediately after Phase 19)
+
+**Requirements**: THEME-06, THEME-07, THEME-08, THEME-09, THEME-10
+
+**Success Criteria** (what must be TRUE):
+  1. A user opens the theme editor from the menu bar, adjusts color pickers for any of the 12 CSS vars, and sees the desktop re-skin in real time — the live preview mutates `:root` vars without saving.
+  2. A user names and saves a custom theme, then sees it appear in the menu-bar theme switcher alongside Aurora, Aero, Aqua, and Noir; selecting it re-skins the host AND all open frames live (via `THEME_PUSH`), identical to a built-in switch.
+  3. A user tries to enter an invalid color value in the editor — the value is rejected before any IDB write (`CSS.supports` gate) and the current theme is unchanged.
+  4. A user creates a custom theme, reloads the page — the custom theme is still in the switcher, and if it was the active theme, it is applied on first paint with no Aurora flash (the FOUC script reads the mirrored `localStorage` vars; `csp.test.ts` SHA-256 hash is updated in the same commit as the FOUC script change).
+  5. A user tries to create a custom theme named `"aurora"` — it is rejected or auto-namespaced to `"custom:aurora"`; the built-in Aurora is still accessible and unmodified. Deleting the currently active custom theme auto-switches to Aurora before the delete completes.
+  6. The theme editor shows an inline, non-blocking contrast warning when a text/background pairing falls below WCAG AA — the user can still save; it is advisory, not blocking.
+
+**Risks / Notes**:
+  - **FOUC for custom themes** — the FOUC script currently hard-codes the 4 built-in themes. Mirror custom theme vars to `localStorage["vibe.customTheme.<name>"]` at save time; extend the FOUC script to check `localStorage` for the active custom theme if `vibeStored` starts with `"custom:"`. Any FOUC script change requires `csp.test.ts` SHA-256 hash recompute in the same commit (the invariant from Phase 14).
+  - **Alpha-color inputs** — `<input type="color">` returns only `#rrggbb` hex. For the `--glass` / `--glass2` vars (which carry alpha), use a dual range+color pattern or accept a text-field input for alpha vars during Phase 22 planning.
+  - **Name collision guard** — custom themes use `"custom:<name>"` key namespace in IDB so they can never collide with built-in four names. `sanitizeDisplayName` must be applied to user-supplied theme names before any DOM render or IDB write.
+  - **THEME_PUSH to frames** — Phase 22 must call the same `broadcastTheme(vars)` path introduced in Phase 20 when a custom theme is activated. If Phase 21 completes before Phase 20, a stub `broadcastTheme` (no-op) must exist to avoid a runtime error; it becomes live when Phase 20 lands.
+
+**Plans**: TBD
+**UI hint**: yes
+
+---
+
 ## Progress
 
 **Execution Order:**
-v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 → 15 → 16 → 17 → 18
+v1.0 → v1.1 → v2.0 → v3.0 phases execute in numeric order: 1 → … → 18 → 19 → 20 → 21 → 22
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -179,10 +313,15 @@ v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 
 | 16. Desktop Shell | v2.0 | 4/4 | Complete | 2026-06-27 |
 | 17. Search / Launcher Panel | v2.0 | 4/4 | Complete | 2026-06-26 |
 | 18. Theme-Aware Generation | v2.0 | 4/4 | Complete | 2026-06-26 |
+| 19. Window Chrome & Menu Relocation | v3.0 | 0/TBD | Not started | - |
+| 20. Opaque-Origin Frame Isolation | v3.0 | 0/TBD | Not started | - |
+| 21. Desktop Persistence | v3.0 | 0/TBD | Not started | - |
+| 22. Theme Editor & Custom Themes | v3.0 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
 **v1.1 Real & Robust shipped 2026-06-26 — 5 phases, 12/12 requirements satisfied, 552 tests green.**
 **v2.0 Vibe OS shipped 2026-06-26 — 5 phases, 21/21 requirements satisfied, 727 tests green.**
+**v3.0 Trusted Desktop in progress — 4 phases (19–22), 19 requirements.**
 
 ---
 
