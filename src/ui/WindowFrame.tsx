@@ -16,6 +16,7 @@ import { type ComponentType, memo, useRef } from "react";
 import { AppShell } from "./AppShell";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useDrag } from "./useDrag";
+import { iconForAppType } from "./iconForApp";
 
 interface WindowBodyProps {
   instanceId: string;
@@ -99,6 +100,11 @@ export function WindowFrame({
 }: WindowFrameProps) {
   const frameRef = useRef<HTMLDivElement>(null);
 
+  // The `icon` prop carries the neutral appType key (e.g. "weather"); resolve it
+  // to a glyph the same way the Dock does (iconForAppType) so the titlebar shows
+  // an icon rather than the raw key string (WR-04).
+  const TitleIcon = iconForAppType(icon);
+
   const { handlePointerDown } = useDrag({
     elementRef: frameRef,
     initialX: x,
@@ -146,7 +152,7 @@ export function WindowFrame({
         </div>
         <div className="window-chrome__title-group">
           <span className="window-chrome__icon" aria-hidden="true">
-            {icon}
+            <TitleIcon size={14} />
           </span>
           <span className="window-chrome__title">{title}</span>
         </div>
