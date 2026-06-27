@@ -294,6 +294,39 @@ describe("useWindowManager", () => {
     expect(after1.z).toBeGreaterThan(after2.z);
   });
 
+  it("activeWindow returns the same entry activeId resolves to — single source of truth (WR-05)", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    let id1 = "", id2 = "";
+    act(() => {
+      id1 = result.current.open("a", { title: "A", icon: "a" });
+      id2 = result.current.open("b", { title: "B", icon: "b" });
+    });
+
+    const win1 = result.current.windows.find((w) => w.instanceId === id1)!;
+    const win2 = result.current.windows.find((w) => w.instanceId === id2)!;
+
+    // The second window opened last → highest z → active. activeWindow() must
+    // return that same entry (NOT just an id), so DesktopShell's menu-bar name
+    // and the keyboard-shortcut target share ONE definition of "front-most".
+    expect(result.current.activeWindow()?.id).toBe(result.current.activeId());
+    expect(result.current.activeWindow()?.id).toBe(win2.id);
+
+    // Focusing the first raises it → activeWindow tracks it.
+    act(() => {
+      result.current.focus(win1.id);
+    });
+    expect(result.current.activeWindow()?.id).toBe(win1.id);
+    expect(result.current.activeWindow()?.id).toBe(result.current.activeId());
+
+    // Minimize both → no active window.
+    act(() => {
+      result.current.minimize(win1.id);
+      result.current.minimize(win2.id);
+    });
+    expect(result.current.activeWindow()).toBeNull();
+  });
+
   it("activeId returns the highest-z non-minimized id, null when all minimized", () => {
     const { result } = renderHook(() => useWindowManager(), { wrapper });
 
