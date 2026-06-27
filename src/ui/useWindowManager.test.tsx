@@ -210,6 +210,119 @@ describe("useWindowManager", () => {
     expect(result.current.windows[3]!.title).toBe("App");
   });
 
+  // Phase 19 (plan 19-02): maximize = zoom-to-work-area state on the manager.
+  // The manager owns maximized/restoreRect + maximize/unmaximize/activeId; the
+  // work-area geometry itself is resolved in DesktopShell.
+
+  it("a new window defaults to maximized=false, restoreRect=null", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+
+    const win = result.current.windows[0]!;
+    expect(win.maximized).toBe(false);
+    expect(win.restoreRect).toBeNull();
+  });
+
+  it("maximize sets maximized=true and captures the prior x/y into restoreRect", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+
+    const winId = result.current.windows[0]!.id;
+    const { x: priorX, y: priorY } = result.current.windows[0]!;
+
+    act(() => {
+      result.current.maximize(winId);
+    });
+
+    const win = result.current.windows[0]!;
+    expect(win.maximized).toBe(true);
+    expect(win.restoreRect).not.toBeNull();
+    // restoreRect captures the pre-maximize geometry so unmaximize can return.
+    expect(win.restoreRect!.x).toBe(priorX);
+    expect(win.restoreRect!.y).toBe(priorY);
+    expect(typeof win.restoreRect!.w).toBe("number");
+    expect(typeof win.restoreRect!.h).toBe("number");
+  });
+
+  it("unmaximize sets maximized=false (restoreRect carries prior geometry)", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+
+    const winId = result.current.windows[0]!.id;
+
+    act(() => {
+      result.current.maximize(winId);
+    });
+    expect(result.current.windows[0]!.maximized).toBe(true);
+
+    act(() => {
+      result.current.unmaximize(winId);
+    });
+    expect(result.current.windows[0]!.maximized).toBe(false);
+  });
+
+  it("maximize raises the window's z above a second window", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    let id1 = "", id2 = "";
+    act(() => {
+      id1 = result.current.open("a", { title: "A", icon: "a" });
+      id2 = result.current.open("b", { title: "B", icon: "b" });
+    });
+
+    // After opening, the second window (B) is on top.
+    const win1 = result.current.windows.find((w) => w.instanceId === id1)!;
+    const win2 = result.current.windows.find((w) => w.instanceId === id2)!;
+    expect(win2.z).toBeGreaterThan(win1.z);
+
+    // Maximizing the first window raises it above the second.
+    act(() => {
+      result.current.maximize(win1.id);
+    });
+
+    const after1 = result.current.windows.find((w) => w.instanceId === id1)!;
+    const after2 = result.current.windows.find((w) => w.instanceId === id2)!;
+    expect(after1.z).toBeGreaterThan(after2.z);
+  });
+
+  it("activeId returns the highest-z non-minimized id, null when all minimized", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    let id1 = "", id2 = "";
+    act(() => {
+      id1 = result.current.open("a", { title: "A", icon: "a" });
+      id2 = result.current.open("b", { title: "B", icon: "b" });
+    });
+
+    const win1 = result.current.windows.find((w) => w.instanceId === id1)!;
+    const win2 = result.current.windows.find((w) => w.instanceId === id2)!;
+
+    // The second window opened last → highest z → active.
+    expect(result.current.activeId()).toBe(win2.id);
+
+    // Focusing the first raises it → it becomes active.
+    act(() => {
+      result.current.focus(win1.id);
+    });
+    expect(result.current.activeId()).toBe(win1.id);
+
+    // Minimize both → no active window.
+    act(() => {
+      result.current.minimize(win1.id);
+      result.current.minimize(win2.id);
+    });
+    expect(result.current.activeId()).toBeNull();
+  });
+
   it("isOpen is the primary guard: open returns true; close returns false; guarded late mount stays at baseline", () => {
     const { result } = renderHook(() => useWindowManager(), { wrapper });
 
