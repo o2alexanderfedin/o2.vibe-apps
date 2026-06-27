@@ -51,6 +51,17 @@ export function SearchLauncherPanel({
         (el) => !el.hasAttribute("disabled") && el.offsetParent !== null,
       );
       if (focusable.length === 0) return;
+      // With a single focusable control (common while working — the input, every
+      // chip, and the whole app grid go disabled together, leaving only the close
+      // button), trap unconditionally: on any Tab, keep focus on the sole control.
+      // The first/last wrap branches below both reference the same node and would
+      // not fire if focus had drifted to the dialog container, letting native Tab
+      // escape the modal.
+      if (focusable.length === 1) {
+        e.preventDefault();
+        focusable[0]!.focus();
+        return;
+      }
       const first = focusable[0]!;
       const last = focusable[focusable.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
