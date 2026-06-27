@@ -40,6 +40,29 @@ import { Dock } from "./Dock";
 import { SearchLauncherPanel } from "./SearchLauncherPanel";
 import { slugFromText } from "./launcherUtils";
 
+// Work-area geometry (Phase 19, plan 19-02, CHROME-02). Maximize = zoom-to-work-
+// area, NOT the OS Fullscreen API: a maximized window fills the viewport MINUS
+// the menu bar (top) and the dock (bottom), so both stay visible — they ARE the
+// product identity. These constants mirror the CSS layout chrome:
+//   MENU_BAR_H  → .menu-bar { height: 40px } (src/index.css)
+//   DOCK_RESERVE → .dock bottom:16px + padding 9px*2 + icon 52px ≈ 88px reserved
+const MENU_BAR_H = 40;
+const DOCK_RESERVE = 88;
+
+// The work-area rect a maximized window fills. Read from the live viewport so a
+// resize-then-maximize uses the current size. The rect starts below the menu bar
+// and stops above the dock reserve.
+function workArea(): { x: number; y: number; w: number; h: number } {
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  return {
+    x: 0,
+    y: MENU_BAR_H,
+    w: vw,
+    h: vh - MENU_BAR_H - DOCK_RESERVE,
+  };
+}
+
 // Neutral, hygiene-safe fallback shown when an app fails to open for a generic
 // reason. No mechanic-revealing language and no banned tokens — it just tells the
 // user the app didn't load and offers a retry, which also makes failures
@@ -468,9 +491,16 @@ function DesktopShellInner() {
           so its z-index:100 sits above the blobs and below the dock/menu-bar. */}
       <div className="desktop">
         {windowManager.windows.map((entry) => {
+          // A maximized window is pinned to the work area: its x/y come from
+          // workArea() (NOT the drag positions override / cascade), and it is
+          // sized to the work-area w/h so it fills the area. A non-maximized
+          // window renders exactly as before (transform-only, positions override
+          // ?? entry x/y, CSS min-size) — no width/height passed, so the existing
+          // position/drag tests stay byte-identical.
           const override = positions.get(entry.instanceId);
-          const x = override?.x ?? entry.x;
-          const y = override?.y ?? entry.y;
+          const area = entry.maximized ? workArea() : null;
+          const x = area ? area.x : (override?.x ?? entry.x);
+          const y = area ? area.y : (override?.y ?? entry.y);
           return (
             <WindowFrame
               key={entry.id}
@@ -482,10 +512,18 @@ function DesktopShellInner() {
               y={y}
               z={entry.z}
               minimized={entry.minimized}
+              maximized={entry.maximized}
+              w={area?.w}
+              h={area?.h}
               Component={components.get(entry.instanceId) ?? null}
               onClose={() => handleClose(entry.id, entry.instanceId)}
               onMinimize={() => windowManager.minimize(entry.id)}
               onFocus={() => windowManager.focus(entry.id)}
+              onMaximize={() =>
+                entry.maximized
+                  ? windowManager.unmaximize(entry.id)
+                  : windowManager.maximize(entry.id)
+              }
               onMove={(nx, ny) =>
                 setPositions((prev) =>
                   new Map(prev).set(entry.instanceId, { x: nx, y: ny }),
