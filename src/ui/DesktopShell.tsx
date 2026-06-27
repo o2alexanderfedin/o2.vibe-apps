@@ -115,7 +115,6 @@ export function DesktopShell() {
 function DesktopShellInner() {
   const services = useServices();
   const windowManager = useWindowManager();
-  const [openingId, setOpeningId] = useState<string | null>(null);
   // The resolved component (or a fallback component) per window instance. The
   // window is minted by the manager FIRST (so a frame appears immediately and
   // the isOpen guard works); this map carries the body once produce settles.
@@ -144,7 +143,6 @@ function DesktopShellInner() {
   // a hook). The CSS media query is the primary, JS-free degrade; this is the
   // testable signal on top of it.
   const [reducedMotion, setReducedMotion] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Stable refs so callbacks can read current manager/services without
   // re-creating handlers (and so handleModify can look up the live window list).
@@ -185,8 +183,6 @@ function DesktopShellInner() {
   const handleOpen = useCallback(
     async (appType: string, displayName: string) => {
       logger.info("Opening " + appType);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      setOpeningId(appType);
 
       // Mint the window FIRST so a frame appears immediately (its body shows the
       // neutral "Preparing…" placeholder while produce is in flight) and the
@@ -252,11 +248,6 @@ function DesktopShellInner() {
           },
         });
         storeComponent(instanceId, Fallback);
-      } finally {
-        timeoutRef.current = setTimeout(() => {
-          setOpeningId(null);
-          timeoutRef.current = null;
-        }, 300);
       }
     },
     [services, storeComponent, handleClose],
@@ -342,13 +333,6 @@ function DesktopShellInner() {
     },
     [services, handleClose, storeComponent, components],
   );
-
-  // Clear any pending reset timer on unmount.
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
 
   // Reflect the OS prefers-reduced-motion preference into state (PERF-01).
   // Guarded for environments where matchMedia is unavailable (older jsdom / SSR)

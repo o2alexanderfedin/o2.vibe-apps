@@ -229,12 +229,6 @@ body {
   -webkit-box-orient: vertical;
 }
 
-.app-card__opening {
-  margin-top: 12px;
-  font-size: 14px;
-  color: var(--color-text-tertiary);
-}
-
 /* ───────────────────────── KeyDialog (UI-SPEC §3) ─────────────────────── */
 .key-dialog-overlay {
   position: fixed;
