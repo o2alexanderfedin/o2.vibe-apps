@@ -1,7 +1,7 @@
 // DesktopShell — the root desktop UI (Phase 16, plan 16-03, WIN-08).
 //
 // Assembles the Vibe OS desktop: a themed wallpaper + four animated blob layers
-// behind the windows, the window stack itself, and the dock + menu bar + minimal
+// behind the windows, the window stack itself, and the dock + menu bar + search
 // launcher chrome over them. It owns the proven open flow ported verbatim from
 // the former storefront component (handleOpen / handleClose / storeComponent /
 // handleModify), so windowing, contextual modification, the failure fallbacks,
@@ -24,7 +24,11 @@ import {
   type WindowManagerValue,
 } from "./useWindowManager";
 import { resolveOpenApp } from "../intent/resolver";
-import { resolveComponent, evictLiveComponent } from "../execution/loader";
+import {
+  resolveComponent,
+  evictLiveComponent,
+  deriveDisplayName,
+} from "../execution/loader";
 import { ProduceAuthError } from "../execution/producer";
 import { ProduceThrottledError } from "../host/produceGate";
 import { useServices } from "../services/ServicesProvider";
@@ -33,7 +37,8 @@ import { registryKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
 import { MenuBar } from "./MenuBar";
 import { Dock } from "./Dock";
-import { MinimalLauncher } from "./MinimalLauncher";
+import { SearchLauncherPanel } from "./SearchLauncherPanel";
+import { slugFromText } from "./launcherUtils";
 
 // Neutral, hygiene-safe fallback shown when an app fails to open for a generic
 // reason. No mechanic-revealing language and no banned tokens — it just tells the
@@ -133,9 +138,14 @@ function DesktopShellInner() {
   // or blocks the rest of the desktop. Also reachable from the menu-bar account
   // control (SHELL-03).
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
-  // Gates the minimal launcher overlay (CONTEXT decision 4): opened from the
+  // Gates the search/launcher overlay (Phase 17, CREATE-01/02): opened from the
   // dock magnifier, closed on backdrop click / close control / after an open.
   const [launcherOpen, setLauncherOpen] = useState(false);
+  // Drives the panel's working indicator while a free-text describe is in flight
+  // (true before resolve, false in the finally). Seeded picks resolve instantly
+  // from cache and never set this, so the indicator only shows during a real
+  // describe latency window.
+  const [launcherWorking, setLauncherWorking] = useState(false);
   // PERF-01 reduced-motion seam: mirrors the OS prefers-reduced-motion
   // preference into React state via a mockable window.matchMedia, so the CSS
   // degrade has a JS-observable companion (this drives the root marker class the
@@ -257,6 +267,74 @@ function DesktopShellInner() {
   // latest handleOpen without adding it to its own dependency list.
   const handleOpenRef = useRef(handleOpen);
   handleOpenRef.current = handleOpen;
+
+  // Free-text describe path (Phase 17, CREATE-02). The user types a description
+  // in the panel; we derive a type slug, fold the full text into the cache key
+  // (so each description caches as its own app), and route through the SAME
+  // windowing machinery handleOpen uses. The ONE difference from handleOpen is
+  // deliberate: resolveOpenApp does not fold a prompt into its cache key, so for
+  // a description we build the key here via registryKey and call resolveComponent
+  // directly with the pre-built key + the full text as the userPrompt. This
+  // duplication is intentional and contained — handleOpen stays untouched so its
+  // 7 integration tests keep passing; a later phase may extract a shared
+  // free-text helper both paths route through.
+  const handleDescribe = useCallback(
+    async (text: string) => {
+      const slug = slugFromText(text);
+      const displayName = deriveDisplayName(slug, text);
+      const cacheKey = await registryKey("app", slug, text);
+      setLauncherWorking(true);
+      try {
+        // Route through the windowing machinery: mint the window first (so a
+        // frame appears immediately showing the neutral "Preparing…" placeholder
+        // while resolve is in flight), then resolve the component under the
+        // manager-minted instanceId.
+        const wm = windowManagerRef.current;
+        const instanceId = wm.open(slug, { title: displayName, icon: slug });
+        const closeByInstance = (iid: string) => {
+          const wid = windowManagerRef.current.windows.find(
+            (x) => x.instanceId === iid,
+          )?.id;
+          if (wid) handleClose(wid, iid);
+        };
+        try {
+          const Component = await resolveComponent(
+            instanceId,
+            slug,
+            cacheKey,
+            services,
+            text,
+          );
+          if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
+            evictLiveComponent(instanceId);
+            return;
+          }
+          storeComponent(instanceId, Component);
+        } catch (err) {
+          const needsAuth = err instanceof ProduceAuthError;
+          const throttled = err instanceof ProduceThrottledError;
+          logger.error("Failed to open described app: " + String(err));
+          if (!windowManagerRef.current.isOpenByInstance(instanceId)) return;
+          const Fallback = makeFallback({
+            needsAuth,
+            throttled,
+            onConnect: () => setKeyDialogOpen(true),
+            onRetry: () => {
+              closeByInstance(instanceId);
+              void handleDescribeRef.current(text);
+            },
+          });
+          storeComponent(instanceId, Fallback);
+        }
+      } finally {
+        setLauncherWorking(false);
+        setLauncherOpen(false);
+      }
+    },
+    [services, storeComponent, handleClose],
+  );
+  const handleDescribeRef = useRef(handleDescribe);
+  handleDescribeRef.current = handleDescribe;
 
   // Contextual modification (Phase 5, MOD-02/03/04). A free-form instruction
   // from an app's `⋮` prompt is routed CLIENT-SIDE:
@@ -429,14 +507,18 @@ function DesktopShellInner() {
         onOpenLauncher={() => setLauncherOpen(true)}
       />
 
-      {/* The minimal launcher overlay (CONTEXT decision 4): lists the catalog;
-          opening an app routes through the SAME ported handleOpen. */}
+      {/* The search/launcher panel (Phase 17, CREATE-01/02): lists the catalog
+          (pre-installed) and accepts a free-text description that routes through
+          the resolve→produce→cache→mount loop. Pre-installed picks reuse the
+          ported handleOpen; a described app routes through handleDescribe. */}
       {launcherOpen && (
-        <MinimalLauncher
+        <SearchLauncherPanel
           onOpen={(appType, displayName) => {
             void handleOpen(appType, displayName);
           }}
+          onDescribe={(text) => handleDescribeRef.current(text)}
           onClose={() => setLauncherOpen(false)}
+          isWorking={launcherWorking}
         />
       )}
 
