@@ -3,8 +3,9 @@
 // Tests cover: open/mint, cascade placement, z-order focus, minimize/restore,
 // zero-leak close, and the isOpen guard that prevents late mounts after close.
 //
-// Test doubles: mountApp/unmountApp/mountedCount/isMounted/unmountAll from the
-// real mount module (no network, no IndexedDB involvement).
+// Test doubles: mountApp/mountedCount/unmountAll from the real mount module
+// (no network, no IndexedDB involvement). The isOpen test mounts a real root
+// only to prove the guarded late-mount path stays at baseline.
 
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
@@ -152,33 +153,25 @@ describe("useWindowManager", () => {
     expect(restored.y).toBe(origY);
   });
 
-  it("close routes through unmountApp and drops the entry (zero leak)", () => {
+  it("close drops the entry (in-tree model: React unmounts the subtree)", () => {
     const { result } = renderHook(() => useWindowManager(), { wrapper });
 
-    const baseline = mountedCount();
-
     // Open 3 windows
-    const instanceIds: string[] = [];
     act(() => {
       for (let i = 0; i < 3; i++) {
-        const iid = result.current.open(`app-${i}`, { title: `App ${i}`, icon: `${i}` });
-        instanceIds.push(iid);
+        result.current.open(`app-${i}`, { title: `App ${i}`, icon: `${i}` });
       }
     });
 
     // Read window ids after act flushes state
     const winIds = result.current.windows.map(w => w.id);
+    expect(winIds).toHaveLength(3);
 
-    // Mount a real root for each instance
-    for (const iid of instanceIds) {
-      const container = document.createElement("div");
-      document.body.appendChild(container);
-      mountApp(iid, container, NoOp);
-    }
-
-    expect(mountedCount()).toBe(baseline + 3);
-
-    // Close all windows via manager (which must call unmountApp internally)
+    // Close all windows via the manager. In the in-tree model each app renders
+    // as a normal React child of its WindowFrame, so closing simply removes the
+    // entry — there is no manager-owned root to tear down. The zero-leak
+    // invariant for the rendered subtree is covered end-to-end by
+    // MarketplaceWindows.test.tsx (appBodyCount → 0 after close).
     act(() => {
       for (const wid of winIds) {
         result.current.close(wid);
@@ -186,7 +179,6 @@ describe("useWindowManager", () => {
     });
 
     expect(result.current.windows).toHaveLength(0);
-    expect(mountedCount()).toBe(baseline);
   });
 
   it("isOpen is the primary guard: open returns true; close returns false; guarded late mount stays at baseline", () => {

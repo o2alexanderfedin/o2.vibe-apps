@@ -1,11 +1,13 @@
 // Window Manager context and hook (Phase 15, plan 15-02).
 //
 // Owns the ordered list of open windows, z-ordering, minimize/restore, and the
-// zero-leak close path (always routes through unmountApp before dropping the
-// entry from state). The isOpen ref-mirror provides a synchronous boolean guard
-// usable in async flows between the point a window is opened and the point the
-// component actually mounts — preventing orphan roots if the window closes
-// before the mount completes.
+// close path. In the in-tree rendering model each app renders as a normal React
+// child of its WindowFrame, so closing simply removes the entry from state and
+// React unmounts the window's subtree — there is no separate root to tear down.
+// The isOpen ref-mirror provides a synchronous boolean guard usable in async
+// flows between the point a window is opened and the point the component
+// actually mounts — preventing a body from being stored for a window that has
+// already closed before the mount completes.
 
 import {
   createContext,
@@ -17,7 +19,6 @@ import {
   type JSX,
   type ReactNode,
 } from "react";
-import { unmountApp } from "../execution/mount";
 import { logger } from "../lib/logger";
 
 // Default window dimensions used for viewport-clamp arithmetic.
@@ -50,7 +51,7 @@ export interface WindowManagerValue {
   focus: (id: string) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
-  /** Close window and unmount its root — MUST be called before discarding the entry. */
+  /** Close window: removes the entry; React unmounts the in-tree subtree. */
   close: (id: string) => void;
   /** Synchronous guard: returns false immediately after close even inside async flows. */
   isOpen: (id: string) => boolean;
@@ -153,7 +154,8 @@ export function WindowManagerProvider({
     setWindows(prev => {
       const entry = prev.find(w => w.id === id);
       if (entry) {
-        unmountApp(entry.instanceId);
+        // No explicit root teardown: the app renders in-tree, so removing the
+        // entry below lets React unmount the window's whole subtree.
         logger.info(`Window closed: ${id} (${entry.appType})`);
       }
       // Remove from ref mirror synchronously so isOpen() returns false
