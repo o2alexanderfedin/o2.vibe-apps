@@ -19,6 +19,7 @@ function makeWindow(over: Partial<WindowEntry> = {}): WindowEntry {
     minimized: false,
     maximized: false,
     restoreRect: null,
+    snapSide: null,
     ...over,
   };
 }

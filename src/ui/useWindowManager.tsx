@@ -50,6 +50,13 @@ export interface WindowEntry {
   // menu-bar/dock layout constants); the manager only carries the toggle state.
   maximized: boolean;
   restoreRect: { x: number; y: number; w: number; h: number } | null;
+  // Phase 19 (plan 19-03): snap-to-half (CHROME-03). `snapSide` marks the window
+  // as snapped to the left or right HALF of the work area (null = not snapped).
+  // Like maximize, the half-rect geometry itself is resolved in DesktopShell
+  // (it owns the menu-bar/dock layout constants); the manager only carries the
+  // side marker so DesktopShell knows to apply a half-rect. A window cannot be
+  // both maximized and snapped — snapLeft/snapRight clear `maximized`.
+  snapSide: "left" | "right" | null;
 }
 
 export interface WindowManagerValue {
@@ -65,6 +72,11 @@ export interface WindowManagerValue {
   /** Restore from maximized to the prior (pre-maximize) geometry; raises the
    *  window. restoreRect is left intact for DesktopShell to read. */
   unmaximize: (id: string) => void;
+  /** Snap to the LEFT half of the work area (CHROME-03). Captures the pre-snap
+   *  geometry into restoreRect, clears `maximized`, and raises the window. */
+  snapLeft: (id: string) => void;
+  /** Snap to the RIGHT half of the work area (CHROME-03). Same capture + raise. */
+  snapRight: (id: string) => void;
   /** Close window: removes the entry; React unmounts the in-tree subtree. */
   close: (id: string) => void;
   /** Synchronous guard: returns false immediately after close even inside async flows. */
@@ -161,6 +173,7 @@ export function WindowManagerProvider({
           minimized: false,
           maximized: false,
           restoreRect: null,
+          snapSide: null,
         };
         // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
         // before the effect runs.
@@ -232,6 +245,44 @@ export function WindowManagerProvider({
     );
   }, []);
 
+  const snapLeft = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    // Snapping raises the window to the front (standard desktop behavior).
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w => {
+        if (w.id !== id) return w;
+        // Capture the pre-snap geometry so an unsnap could return the window
+        // where it was. A window cannot be both maximized and snapped — clear
+        // `maximized`. The half-rect itself is resolved in DesktopShell.
+        return {
+          ...w,
+          snapSide: "left",
+          maximized: false,
+          restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H },
+          z,
+        };
+      }),
+    );
+  }, []);
+
+  const snapRight = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w => {
+        if (w.id !== id) return w;
+        return {
+          ...w,
+          snapSide: "right",
+          maximized: false,
+          restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H },
+          z,
+        };
+      }),
+    );
+  }, []);
+
   const close = useCallback((id: string) => {
     setWindows(prev => {
       const entry = prev.find(w => w.id === id);
@@ -282,6 +333,8 @@ export function WindowManagerProvider({
     restore,
     maximize,
     unmaximize,
+    snapLeft,
+    snapRight,
     close,
     isOpen,
     isOpenByInstance,
