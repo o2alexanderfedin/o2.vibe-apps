@@ -1,30 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { dbReady } from "./registry/registry";
 import { logger } from "./lib/logger";
 import { ThemeProvider } from "./ui/ThemeProvider";
 import { VibeThemeProvider } from "./ui/VibeThemeProvider";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
-import { AppBar } from "./ui/AppBar";
-import { Marketplace } from "./ui/Marketplace";
-import { KeyDialog } from "./ui/KeyDialog";
-import { WindowManagerProvider } from "./ui/useWindowManager";
+import { DesktopShell } from "./ui/DesktopShell";
 
-// Full storefront shell (Phase 1, Plan 02): ThemeProvider wraps an
-// ErrorBoundary around the AppBar + Marketplace tree. The KeyDialog is owned
-// here so the AppBar Account button can open it. Registry init from Plan 01 is
-// preserved.
+// Root shell. ThemeProvider (light/dark/system via data-theme) wraps
+// VibeThemeProvider (the named-theme CSS-variable contract) wraps an
+// ErrorBoundary around the DesktopShell.
 //
-// Phase 14 (THEME-01): VibeThemeProvider is nested INSIDE ThemeProvider so the
-// named-theme CSS-variable contract layers on top of the existing light/dark/
-// system data-theme mechanism without disturbing it.
+// Phase 16 (WIN-08): the flat storefront (AppBar + Marketplace grid) is replaced
+// by the DesktopShell root — a themed wallpaper + animated blobs behind the
+// windows, with the dock + menu bar + minimal launcher over them. DesktopShell
+// owns its OWN WindowManagerProvider and KeyDialog, so App no longer mounts an
+// outer WindowManagerProvider or App-level key-dialog state.
 //
-// Phase 15 (WIN-01): WindowManagerProvider is mounted just inside ErrorBoundary
-// so any future desktop-level consumer can read the window list. Marketplace
-// owns its OWN provider internally (so it stays testable as a bare component),
-// and the inner provider wins for its own consumers — nesting is harmless.
+// ServicesProvider lives in main.tsx (the composition root, wrapping <App/>), so
+// DesktopShell's useServices() resolves without App re-providing it. The
+// registry init effect from Plan 01 is preserved.
 export default function App() {
-  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
-
   useEffect(() => {
     void dbReady.then(() => {
       logger.info("Registry initialized");
@@ -35,15 +30,7 @@ export default function App() {
     <ThemeProvider>
       <VibeThemeProvider>
         <ErrorBoundary>
-          <WindowManagerProvider>
-            <AppBar onOpenAccount={() => setKeyDialogOpen(true)} />
-            <main>
-              <Marketplace />
-            </main>
-            {keyDialogOpen && (
-              <KeyDialog onClose={() => setKeyDialogOpen(false)} />
-            )}
-          </WindowManagerProvider>
+          <DesktopShell />
         </ErrorBoundary>
       </VibeThemeProvider>
     </ThemeProvider>

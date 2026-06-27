@@ -18,18 +18,13 @@
 // Test doubles are named "canned"/"stub"/"testTransport" (never banned tokens).
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import {
-  createTestServices,
-  type TestServicesOverrides,
-} from "../services/testServices";
+import { cleanup, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { _clearCachesForTesting } from "../execution/loader";
 import { unmountAll } from "../execution/mount";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
+import type { TestServicesOverrides } from "../services/testServices";
 import { rawWidgetFixture } from "../test/fixtures/load";
+import { renderDesktopShell as renderMarketplace, openApp } from "./desktopShellTestKit";
 
 // An app source that declares three widgets and renders each via useWidget.
 // Shipped fenced + with `export default` (the real model output shape). The
@@ -85,27 +80,6 @@ function compositionTransport(
       stop_reason: "end_turn",
     });
   };
-}
-
-function renderMarketplace(overrides: TestServicesOverrides = {}) {
-  const services = createTestServices(overrides);
-  const user = userEvent.setup();
-  render(
-    <ServicesProvider services={services}>
-      <Marketplace />
-    </ServicesProvider>,
-  );
-  return { services, user };
-}
-
-async function openApp(
-  user: ReturnType<typeof userEvent.setup>,
-  displayName: string,
-): Promise<void> {
-  const card = screen.getByRole("button", {
-    name: new RegExp("^" + displayName + " —"),
-  });
-  await user.click(card);
 }
 
 beforeEach(() => {

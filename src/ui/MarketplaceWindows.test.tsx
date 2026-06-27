@@ -1,11 +1,13 @@
-// UI integration tests for the WINDOWED open flow (Phase 15, plan 15-04).
+// UI integration tests for the WINDOWED open flow (Phase 15, plan 15-04;
+// migrated to DesktopShell in Phase 16, plan 16-03).
 //
-// These render the REAL Marketplace with INJECTED dependencies — a canned
+// These render the REAL DesktopShell with INJECTED dependencies — a canned
 // transport (no network) and an in-memory registry (no real IndexedDB) — and
-// drive the full user flow through the rendered DOM, now that opening an app
-// mints a draggable WindowFrame on the desktop instead of an inline opened-app
-// region. Test doubles are named "canned"/"stub"/"deferred" (never the banned
-// hygiene tokens).
+// drive the full user flow through the rendered DOM. Apps are opened via the
+// launcher (dock magnifier → app button) since the flat storefront grid is gone;
+// every assertion below is on the WINDOW/frame behavior, which is identical
+// under DesktopShell. Test doubles are named "canned"/"stub"/"deferred" (never
+// the banned hygiene tokens).
 //
 // Coverage (the WIN acceptance bar):
 //   1. opening an app mints a window on the desktop (one managed root).
@@ -19,39 +21,18 @@
 //   9. the contextual `⋮` MOD still works inside a window (remove closes it).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  cleanup,
-  render,
-  screen,
-  within,
-  fireEvent,
-  waitFor,
-} from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import {
-  createTestServices,
-  cannedTransport,
-  type TestServicesOverrides,
-} from "../services/testServices";
+import { cleanup, screen, within, fireEvent, waitFor } from "@testing-library/react";
+import { cannedTransport } from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
 import { unmountAll } from "../execution/mount";
-import type { Services } from "../services/services";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
-
-// jsdom does not implement the pointer-capture APIs the drag hook relies on —
-// install module-level stubs so handlePointerDown does not throw (mirrors the
-// Wave 1/2 test files).
-if (!Element.prototype.setPointerCapture) {
-  Element.prototype.setPointerCapture = () => undefined;
-}
-if (!Element.prototype.releasePointerCapture) {
-  Element.prototype.releasePointerCapture = () => undefined;
-}
-if (!Element.prototype.hasPointerCapture) {
-  Element.prototype.hasPointerCapture = () => false;
-}
+import {
+  renderDesktopShell as renderMarketplace,
+  openApp,
+  frames,
+  frameByTitle,
+  appBodyCount,
+} from "./desktopShellTestKit";
 
 // A produced component shipped with `export default` — the canonical produced
 // shape. Used for cache-miss apps (Calculator/Timer) so a window mounts a
@@ -76,47 +57,6 @@ export default function App() {
 }
 `;
 
-function renderMarketplace(overrides: TestServicesOverrides = {}): {
-  services: Services;
-  user: ReturnType<typeof userEvent.setup>;
-} {
-  const services = createTestServices(overrides);
-  const user = userEvent.setup();
-  render(
-    <ServicesProvider services={services}>
-      <Marketplace />
-    </ServicesProvider>,
-  );
-  return { services, user };
-}
-
-/** Click a storefront card by its display name (aria-label starts with it). */
-async function openApp(
-  user: ReturnType<typeof userEvent.setup>,
-  displayName: string,
-): Promise<void> {
-  const card = screen.getByRole("button", {
-    name: new RegExp("^" + displayName + " —"),
-  });
-  await user.click(card);
-}
-
-/** All window-chrome frames currently in the document. */
-function frames(): HTMLElement[] {
-  return Array.from(
-    document.querySelectorAll<HTMLElement>(".window-chrome"),
-  );
-}
-
-/** The single frame whose titlebar title text matches `title`. */
-function frameByTitle(title: string): HTMLElement {
-  const frame = frames().find((f) =>
-    f.querySelector(".window-chrome__title")?.textContent?.trim() === title,
-  );
-  if (!frame) throw new Error(`no window frame titled "${title}"`);
-  return frame;
-}
-
 /**
  * Parse the {x, y} out of a frame's `transform: translate(Xpx, Ypx)`. The frame
  * is positioned purely via transform (box origin pinned at 0,0), so this is the
@@ -130,16 +70,6 @@ function frameTranslate(frame: HTMLElement): { x: number; y: number } {
   return { x: parseFloat(m[1]!), y: parseFloat(m[2]!) };
 }
 
-/**
- * Count mounted app bodies — each open window renders exactly one AppShell
- * (role="region") inside its body once the app resolves. Apps render in the
- * host React tree (not a detached root), so a leaked window leaves a stray
- * `.app-shell`; this count is the zero-leak invariant the close path must keep.
- */
-function appBodyCount(): number {
-  return document.querySelectorAll(".window-chrome__body .app-shell").length;
-}
-
 beforeEach(() => {
   _clearCachesForTesting();
 });
@@ -150,7 +80,7 @@ afterEach(() => {
   _clearCachesForTesting();
 });
 
-describe("Marketplace windowed open flow (WIN, injected deps)", () => {
+describe("DesktopShell windowed open flow (WIN, injected deps)", () => {
   it("opens an app as a window on the desktop (one app body)", async () => {
     const { user } = renderMarketplace();
 

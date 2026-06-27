@@ -1,6 +1,5 @@
 import { Sun, Moon, Monitor, User } from "lucide-react";
 import { useTheme, type ThemeMode } from "./ThemeProvider";
-import { ThemeSelector } from "./ThemeSelector";
 
 // Icon + next-action label for each theme mode. aria-label communicates the
 // NEXT action, not the current state (UI-SPEC §2).
@@ -27,9 +26,8 @@ export function AppBar({ onOpenAccount }: AppBarProps) {
     <header role="banner" className="app-bar">
       <span className="app-bar__wordmark">Marketplace</span>
       <div className="app-bar__controls">
-        {/* Named-theme switcher — temporary home; Phase 16 relocates it to the
-            menu bar. The existing light/dark/system toggle below stays intact. */}
-        <ThemeSelector />
+        {/* Named-theme switcher relocated to the MenuBar in Phase 16. The
+            light/dark/system toggle below stays intact. */}
         <button
           type="button"
           className="app-bar__icon-btn"

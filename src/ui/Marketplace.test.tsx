@@ -1,9 +1,11 @@
-// UI integration tests for the Marketplace open flow.
+// UI integration tests for the DesktopShell open flow (Phase 16 migration of the
+// former Marketplace open-flow tests).
 //
-// These render the REAL Marketplace with INJECTED dependencies — a canned
+// These render the REAL DesktopShell with INJECTED dependencies — a canned
 // transport (no network) and an in-memory registry (no real IndexedDB) — and
-// drive the full user flow through the rendered DOM. Test doubles are named
-// "canned"/"stub"/"testTransport" (never the banned hygiene tokens).
+// drive the full user flow through the rendered DOM. Apps are opened via the
+// launcher (dock magnifier → app button) since the flat storefront grid is gone.
+// Test doubles are named "canned"/"stub"/"testTransport" (never banned tokens).
 //
 // Coverage:
 //   1. Open a seeded app (Notes) → its UI appears in the open region.
@@ -13,17 +15,10 @@
 //   4. Close then re-open a cached app → it renders again (silent-failure guard).
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within, waitFor, fireEvent } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import {
-  createTestServices,
-  cannedTransport,
-  type TestServicesOverrides,
-} from "../services/testServices";
+import { cleanup, screen, within, waitFor, fireEvent } from "@testing-library/react";
+import { cannedTransport } from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
-import type { Services } from "../services/services";
+import { renderDesktopShell as renderMarketplace, openApp } from "./desktopShellTestKit";
 
 // A produced component mirroring real output: ships with `export default`,
 // uses a hook, and is interactive. Before the transpile fix this rendered
@@ -39,31 +34,6 @@ export default function App() {
   );
 }
 `;
-
-function renderMarketplace(overrides: TestServicesOverrides = {}): {
-  services: Services;
-  user: ReturnType<typeof userEvent.setup>;
-} {
-  const services = createTestServices(overrides);
-  const user = userEvent.setup();
-  render(
-    <ServicesProvider services={services}>
-      <Marketplace />
-    </ServicesProvider>,
-  );
-  return { services, user };
-}
-
-/** Click a storefront card by its display name (aria-label starts with it). */
-async function openApp(
-  user: ReturnType<typeof userEvent.setup>,
-  displayName: string,
-): Promise<void> {
-  const card = screen.getByRole("button", {
-    name: new RegExp("^" + displayName + " —"),
-  });
-  await user.click(card);
-}
 
 beforeEach(() => {
   _clearCachesForTesting();

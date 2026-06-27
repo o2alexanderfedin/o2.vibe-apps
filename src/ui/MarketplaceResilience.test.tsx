@@ -12,14 +12,7 @@
 // Doubles are named canned/stub/testTransport (never the banned hygiene tokens).
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import {
-  createTestServices,
-  type TestServicesOverrides,
-} from "../services/testServices";
+import { cleanup, screen, within, waitFor } from "@testing-library/react";
 import { _clearCachesForTesting } from "../execution/loader";
 import {
   ModelHttpError,
@@ -33,35 +26,16 @@ import {
   installGlobalErrorBackstop,
   type ErrorReport,
 } from "../host/globalErrorBackstop";
+import {
+  renderDesktopShell as renderMarketplace,
+  openApp,
+  expectLauncherLists,
+} from "./desktopShellTestKit";
 
 const OK: MessagesResponse = {
   content: [{ type: "text", text: "function App() { return React.createElement('div', null, 'x'); }" }],
   stop_reason: "end_turn",
 };
-
-function renderMarketplace(overrides: TestServicesOverrides = {}): {
-  user: ReturnType<typeof userEvent.setup>;
-} {
-  const services = createTestServices(overrides);
-  const user = userEvent.setup();
-  render(
-    <ServicesProvider services={services}>
-      <Marketplace />
-    </ServicesProvider>,
-  );
-  return { user };
-}
-
-/** Click a storefront card by its display name. */
-async function openApp(
-  user: ReturnType<typeof userEvent.setup>,
-  displayName: string,
-): Promise<void> {
-  const card = screen.getByRole("button", {
-    name: new RegExp("^" + displayName + " —"),
-  });
-  await user.click(card);
-}
 
 beforeEach(() => {
   _clearCachesForTesting();
@@ -88,10 +62,9 @@ describe("Marketplace — 401 degrades to inline reconfigure (RESIL-03)", () => 
     });
     expect(connectBtn).toBeInTheDocument();
 
-    // The storefront is still browsable — the other app cards are present.
-    expect(
-      screen.getByRole("button", { name: /^Notes —/ }),
-    ).toBeInTheDocument();
+    // The desktop is still usable — the launcher still lists the other apps as
+    // openable (the windowed equivalent of "storefront stays browsable").
+    await expectLauncherLists(user, "Notes");
 
     // Clicking it opens the KeyDialog inline (a dialog with the connect title).
     await user.click(connectBtn);

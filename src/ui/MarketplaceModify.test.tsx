@@ -16,17 +16,11 @@
 //   6. A tweak that fails to resolve surfaces the existing neutral fallback.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within, waitFor } from "@testing-library/react";
+import { cleanup, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import {
-  createTestServices,
-  type TestServicesOverrides,
-} from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
-import type { Services } from "../services/services";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
+import { renderDesktopShell as renderMarketplace, openApp } from "./desktopShellTestKit";
 
 // A canned app component used as the FRESH tweak result so the replacement is
 // assertable (distinct text not present in any seed/original).
@@ -49,30 +43,6 @@ const APP_WITH_WIDGET = (
 );
 const WIDGET_ORIGINAL = "```tsx\nfunction App(){ return React.createElement('div', null, 'Original Gauge'); }\n```";
 const WIDGET_TWEAKED = "```tsx\nfunction App(){ return React.createElement('div', null, 'Tweaked Gauge'); }\n```";
-
-function renderMarketplace(overrides: TestServicesOverrides = {}): {
-  services: Services;
-  user: ReturnType<typeof userEvent.setup>;
-} {
-  const services = createTestServices(overrides);
-  const user = userEvent.setup();
-  render(
-    <ServicesProvider services={services}>
-      <Marketplace />
-    </ServicesProvider>,
-  );
-  return { services, user };
-}
-
-async function openApp(
-  user: ReturnType<typeof userEvent.setup>,
-  displayName: string,
-): Promise<void> {
-  const card = screen.getByRole("button", {
-    name: new RegExp("^" + displayName + " —"),
-  });
-  await user.click(card);
-}
 
 /** Open the app's `⋮`, type the instruction, and click Apply. */
 async function applyModification(
