@@ -125,7 +125,9 @@ describe("SandboxFrame", () => {
 
     unmount();
 
-    expect(unregisterFrameFn).toHaveBeenCalledWith("test-instance");
+    // WR-04: the cleanup passes the SPECIFIC element so a StrictMode double-mount
+    // does not evict the entry the second mount re-registered.
+    expect(unregisterFrameFn).toHaveBeenCalledWith("test-instance", iframe);
     expect(clearPendingFn).toHaveBeenCalledWith("test-instance");
   });
 

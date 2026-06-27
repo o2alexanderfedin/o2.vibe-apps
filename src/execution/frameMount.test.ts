@@ -95,6 +95,10 @@ describe("frame registry and broadcastTheme", () => {
       get: () => contentWindow,
       configurable: true,
     });
+    // Attach to the document so el.isConnected is true: broadcastTheme skips
+    // detached frames (WR-04), so a frame under test must be connected to
+    // receive a broadcast — mirroring a really-mounted frame in the DOM.
+    document.body.appendChild(el);
     return { el, postMessage };
   }
 
@@ -103,6 +107,9 @@ describe("frame registry and broadcastTheme", () => {
     unregisterFrame("a");
     unregisterFrame("b");
     unregisterFrame("c");
+    // Detach any frames a prior test appended so the DOM (and isConnected) is
+    // clean for the next one.
+    document.body.querySelectorAll("iframe").forEach((n) => n.remove());
   });
 
   it("broadcastTheme calls postMessage once on a single registered frame", () => {
@@ -143,5 +150,30 @@ describe("frame registry and broadcastTheme", () => {
 
   it("unregisterFrame with a never-registered key is a no-op", () => {
     expect(() => unregisterFrame("never-registered")).not.toThrow();
+  });
+
+  it("unregisterFrame(id, el) only deletes when the registered element matches (WR-04)", () => {
+    const { el: elA, postMessage: pmA } = makeFrameEl();
+    const { el: elStale } = makeFrameEl();
+    registerFrame("a", elA);
+    // A cleanup carrying a STALE element (e.g. the first StrictMode mount's el,
+    // after the second mount re-registered elA) must NOT evict the live entry.
+    unregisterFrame("a", elStale);
+    broadcastTheme(THEME_VARS);
+    expect(pmA).toHaveBeenCalledTimes(1);
+    // Cleanup with the MATCHING element does evict.
+    unregisterFrame("a", elA);
+    pmA.mockClear();
+    broadcastTheme(THEME_VARS);
+    expect(pmA).not.toHaveBeenCalled();
+  });
+
+  it("broadcastTheme skips a detached (disconnected) frame (WR-04)", () => {
+    const { el, postMessage } = makeFrameEl();
+    registerFrame("a", el);
+    el.remove(); // detach — isConnected becomes false
+    broadcastTheme(THEME_VARS);
+    expect(postMessage).not.toHaveBeenCalled();
+    unregisterFrame("a");
   });
 });
