@@ -215,7 +215,19 @@ Plans:
   2. A user types a description (e.g. "a pomodoro timer") and submits — the panel enters a working state with branded, mechanic-free step copy ("Reading your vibe…", "Sketching the layout…") that reflects real production time on a cache miss, then transitions to a result state; the result opens as a window on the desktop.
   3. On a cache hit for a previously-described app type, the panel's working state resolves immediately and the window opens — no redundant model call.
   4. A user selects a pre-installed app from the panel's list and it opens as a window on the desktop and appears in the dock as running; no surface in the flow contains a banned lexicon token.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1** *(independent)*
+- [ ] 17-01-PLAN.md — slugFromText utility + SearchLauncherPanel component + unit tests (TDD RED→GREEN)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 17-02-PLAN.md — DesktopShell integration: wire describe→produce + hygiene gate update
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 17-03-PLAN.md — Fixture + describe→produce integration tests + cache-hit test
+
+**Wave 4** *(blocked on Wave 3)*
+- [ ] 17-04-PLAN.md — Final verification: delete MinimalLauncher, full suite green
 **UI hint**: yes
 **Research pitfalls defended**: Pitfall 11 (create panel copy is the highest new hygiene risk; name sanitization before display; CI gate covers CreatePanel.tsx), Pitfall 12 (create panel input does not steal focus from open app windows)
 
@@ -256,7 +268,7 @@ v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 
 | 14. Theme Foundation | v2.0 | 5/5 | Complete   | 2026-06-26 |
 | 15. Window Manager | v2.0 | 4/4 | Complete   | 2026-06-26 |
 | 16. Desktop Shell | v2.0 | 0/4 | Planned | - |
-| 17. Search / Launcher Panel | v2.0 | 0/TBD | Not started | - |
+| 17. Search / Launcher Panel | v2.0 | 0/4 | Planned | - |
 | 18. Theme-Aware Generation | v2.0 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
