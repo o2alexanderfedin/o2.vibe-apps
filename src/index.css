@@ -683,3 +683,97 @@ body {
   outline: 2px solid var(--color-accent-primary);
   outline-offset: 2px;
 }
+
+/* --- Desktop + window chrome (Phase 15) ------------------------------------ */
+
+.desktop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  isolation: isolate;
+  pointer-events: none;
+}
+
+.window-chrome {
+  pointer-events: auto;
+  position: absolute;
+  /* Box origin pinned to the desktop's top-left (0,0). Position is supplied
+     purely by transform: translate() (set by React via inline style and,
+     during a drag, imperatively by useDrag). The desktop is position:fixed
+     inset:0, so these translate values are absolute viewport coordinates. */
+  top: 0;
+  left: 0;
+  min-width: 320px;
+  min-height: 240px;
+  background: var(--glass, var(--color-background-secondary));
+  border: 1px solid var(--bord, var(--color-border-secondary));
+  border-radius: 12px;
+  backdrop-filter: blur(32px) saturate(195%);
+  overflow: hidden;
+  will-change: transform;
+}
+
+.window-chrome--minimized {
+  display: none;
+}
+
+.window-chrome__titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.window-chrome__titlebar:active {
+  cursor: grabbing;
+}
+
+.window-chrome__traffic-lights {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.window-chrome__traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.window-chrome__traffic-light--close {
+  background: #ff5f57;
+}
+
+.window-chrome__traffic-light--min {
+  background: #ffbd2e;
+}
+
+.window-chrome__traffic-light--max {
+  background: #28c840;
+}
+
+.window-chrome__title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, var(--color-text-primary));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-chrome__body {
+  height: calc(100% - 36px);
+  overflow: auto;
+}
+
+.desktop--dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}

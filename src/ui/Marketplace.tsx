@@ -10,13 +10,17 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { createElement, type ComponentType } from "react";
+import { type ComponentType } from "react";
 import type { AppRecord } from "../registry/db";
 import { APP_REGISTRY } from "../data/appRegistry";
 import { rankPopular, titleCase } from "./marketplaceUtils";
-import { AppShell } from "./AppShell";
-import { ErrorBoundary } from "./ErrorBoundary";
 import { KeyDialog } from "./KeyDialog";
+import { WindowFrame } from "./WindowFrame";
+import {
+  WindowManagerProvider,
+  useWindowManager,
+  type WindowManagerValue,
+} from "./useWindowManager";
 import { resolveOpenApp } from "../intent/resolver";
 import { resolveComponent, evictLiveComponent } from "../execution/loader";
 import { ProduceAuthError } from "../execution/producer";
@@ -38,24 +42,6 @@ const ICONS: Record<string, LucideIcon> = {
   calendar: CalendarDays,
   budget: Wallet,
 };
-
-interface OpenedApp {
-  instanceId: string;
-  appType: string;
-  displayName: string;
-  // Component is present on a successful open; null when the open failed and a
-  // neutral fallback should render in its place instead of vanishing silently.
-  Component: ComponentType | null;
-  // True when the open failed specifically because the account connection is
-  // missing/invalid (401) — the fallback then offers the inline reconfigure path
-  // (RESIL-03) instead of the generic retry.
-  needsAuth?: boolean;
-  // True when the open was soft-capped by the produce-cost guardrail (RESIL-05) —
-  // too many fresh opens in a short window. The fallback then shows the softer
-  // "give it a moment" copy (it is transient and recovers as the window slides),
-  // reusing the same neutral failed-open region instead of a separate surface.
-  throttled?: boolean;
-}
 
 // Neutral, hygiene-safe fallback shown when an app fails to open for a generic
 // reason. No mechanic-revealing language and no banned tokens — it just tells the
@@ -122,28 +108,79 @@ function ThrottledAppContent({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-// Instance counter — monotonically increasing per session so ids are unique.
-let instanceCounter = 0;
-
-function nextInstanceId(appType: string): string {
-  instanceCounter += 1;
-  return `${appType}-${instanceCounter}`;
+// Marketplace owns its OWN WindowManagerProvider so the component is testable
+// standalone (the existing Marketplace.test.tsx and friends render a bare
+// <Marketplace/> with no App wrapper and would otherwise throw when
+// MarketplaceInner consumes useWindowManager). App.tsx ALSO mounts a
+// WindowManagerProvider for any future desktop-level consumers; nesting is
+// harmless — the inner provider wins for Marketplace's own consumers.
+export function Marketplace() {
+  return (
+    <WindowManagerProvider>
+      <MarketplaceInner />
+    </WindowManagerProvider>
+  );
 }
 
-export function Marketplace() {
+function MarketplaceInner() {
   const services = useServices();
+  const windowManager = useWindowManager();
   const [openingId, setOpeningId] = useState<string | null>(null);
-  const [openedApps, setOpenedApps] = useState<OpenedApp[]>([]);
+  // The resolved component (or a fallback component) per window instance. The
+  // window is minted by the manager FIRST (so a frame appears immediately and
+  // the isOpen guard works); this map carries the body once produce settles.
+  // A null value renders WindowFrame's neutral "Preparing…" placeholder.
+  const [components, setComponents] = useState<
+    Map<string, ComponentType | null>
+  >(new Map());
+  // onMove position overrides keyed by instanceId. Committed drags update this
+  // so a re-render keeps the dragged position (useDrag's imperative transform
+  // is the during-drag source of truth; this is the committed source of truth).
+  const [positions, setPositions] = useState<
+    Map<string, { x: number; y: number }>
+  >(new Map());
   // Owns the inline reconfigure dialog (RESIL-03): the storefront stays mounted
   // and browsable while the KeyDialog is open over it, so a 401 never crashes
   // the page or blocks the rest of the storefront.
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [popularApps, setPopularApps] = useState<AppRecord[]>([]);
-  // A ref mirror of openedApps so handleModify can read the current list (e.g.
-  // the target's appType/Component) without re-creating on every list change.
-  const openedAppsRef = useRef<OpenedApp[]>(openedApps);
-  openedAppsRef.current = openedApps;
+
+  // Stable refs so callbacks can read current manager/services without
+  // re-creating handlers (and so handleModify can look up the live window list).
+  const windowManagerRef = useRef<WindowManagerValue>(windowManager);
+  windowManagerRef.current = windowManager;
+
+  // Tear down a window: evict its live component, route close through the
+  // manager (which unmounts the single root), and drop its body/position.
+  const handleClose = useCallback(
+    (id: string, instanceId: string) => {
+      evictLiveComponent(instanceId);
+      windowManagerRef.current.close(id);
+      setComponents((prev) => {
+        const next = new Map(prev);
+        next.delete(instanceId);
+        return next;
+      });
+      setPositions((prev) => {
+        if (!prev.has(instanceId)) return prev;
+        const next = new Map(prev);
+        next.delete(instanceId);
+        return next;
+      });
+    },
+    [],
+  );
+
+  // Store a finished open's body under its instanceId. The fallback variants
+  // build a small component so a failed open still renders a neutral region
+  // (role="region" via the window's AppShell) rather than a blank placeholder.
+  const storeComponent = useCallback(
+    (instanceId: string, Component: ComponentType | null) => {
+      setComponents((prev) => new Map(prev).set(instanceId, Component));
+    },
+    [],
+  );
 
   const handleOpen = useCallback(
     async (appType: string, displayName: string) => {
@@ -151,9 +188,28 @@ export function Marketplace() {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setOpeningId(appType);
 
+      // Mint the window FIRST so a frame appears immediately (its body shows the
+      // neutral "Preparing…" placeholder while produce is in flight) and the
+      // manager-minted instanceId is the SINGLE source of truth keying resolve,
+      // the components map, and the close/isOpen guard.
+      const wm = windowManagerRef.current;
+      const instanceId = wm.open(appType, {
+        title: displayName,
+        icon: appType,
+      });
+
+      // Close the window for a failed/aborted open, keyed by instanceId. The
+      // manager owns the instanceId↔id mapping; if the entry is already gone
+      // (window closed concurrently) the close is a harmless no-op.
+      const closeByInstance = (iid: string) => {
+        const wid = windowManagerRef.current.windows.find(
+          (x) => x.instanceId === iid,
+        )?.id;
+        if (wid) handleClose(wid, iid);
+      };
+
       try {
         const intent = await resolveOpenApp(appType);
-        const instanceId = nextInstanceId(appType);
         const Component = await resolveComponent(
           instanceId,
           appType,
@@ -161,28 +217,41 @@ export function Marketplace() {
           services,
         );
 
-        setOpenedApps((prev) => [
-          ...prev,
-          { instanceId, appType, displayName, Component },
-        ]);
+        // PRIMARY mid-produce-close guard (Pitfall 9): if the window was closed
+        // while produce was in flight, drop the result and evict — never store a
+        // body for a window that no longer exists. Keyed on the manager-minted
+        // instanceId (synchronously mirrored), so it never depends on the
+        // windows array having flushed.
+        if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
+          evictLiveComponent(instanceId);
+          return;
+        }
+
+        storeComponent(instanceId, Component);
       } catch (err) {
-        // Silent-failure fix: instead of only logging and dropping the app
-        // (the user saw nothing), surface a neutral fallback region so the
-        // failure is visible and debuggable. Diagnostics still go to the
-        // gated logger; the user-facing copy stays mechanic-free.
-        //
-        // A ProduceAuthError (missing/invalid key, 401) routes to the inline
-        // reconfigure prompt instead of the generic retry (RESIL-03). A
-        // ProduceThrottledError (cost guardrail, RESIL-05) routes to the softer
-        // "give it a moment" copy — transient, recovers as the window slides.
+        // Surface a neutral fallback so the failure is visible and debuggable;
+        // diagnostics go to the gated logger, the user-facing copy stays
+        // mechanic-free. 401 → inline reconfigure (RESIL-03); throttle (RESIL-05)
+        // → softer "give it a moment"; otherwise the generic "couldn't load".
         const needsAuth = err instanceof ProduceAuthError;
         const throttled = err instanceof ProduceThrottledError;
         logger.error("Failed to open " + appType + ": " + String(err));
-        const instanceId = nextInstanceId(appType);
-        setOpenedApps((prev) => [
-          ...prev,
-          { instanceId, appType, displayName, Component: null, needsAuth, throttled },
-        ]);
+
+        // Even on failure, only render the fallback if the window still exists.
+        if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
+          return;
+        }
+
+        const Fallback = makeFallback({
+          needsAuth,
+          throttled,
+          onConnect: () => setKeyDialogOpen(true),
+          onRetry: () => {
+            closeByInstance(instanceId);
+            void handleOpenRef.current(appType, displayName);
+          },
+        });
+        storeComponent(instanceId, Fallback);
       } finally {
         timeoutRef.current = setTimeout(() => {
           setOpeningId(null);
@@ -190,57 +259,56 @@ export function Marketplace() {
         }, 300);
       }
     },
-    [services],
+    [services, storeComponent, handleClose],
   );
 
-  const handleClose = useCallback((instanceId: string) => {
-    evictLiveComponent(instanceId);
-    setOpenedApps((prev) => prev.filter((a) => a.instanceId !== instanceId));
-  }, []);
+  // Stable self-reference so the fallback retry handler can re-invoke the
+  // latest handleOpen without adding it to its own dependency list.
+  const handleOpenRef = useRef(handleOpen);
+  handleOpenRef.current = handleOpen;
 
   // Contextual modification (Phase 5, MOD-02/03/04). A free-form instruction
   // from an app's `⋮` prompt is routed CLIENT-SIDE:
-  //   - remove → drop the instance (same teardown as the close button) — no model call.
-  //   - clone  → add a NEW instance reusing the SAME resolved component — no model call.
-  //   - tweak  → derive a NEW cache key from (type + instruction), resolve it
-  //              (cache hit or produce with the instruction woven in), and REPLACE
-  //              the same entry's Component IN PLACE so React re-renders this
-  //              AppShell. The resolve runs through instantiateWithWidgets, so a
-  //              tweak that changes the `@widget` set re-pre-warms widgets.
+  //   - remove → close the window (same teardown as the close traffic-light).
+  //   - clone  → mint a NEW window reusing the SAME resolved component.
+  //   - tweak  → derive a NEW cache key from (type + instruction), resolve it,
+  //              and REPLACE this instance's component IN PLACE so the window's
+  //              single root re-renders. The resolve runs through
+  //              instantiateWithWidgets, so a tweak changing the `@widget` set
+  //              re-pre-warms widgets.
   const handleModify = useCallback(
     async (instanceId: string, instruction: string) => {
-      const target = openedAppsRef.current.find(
-        (a) => a.instanceId === instanceId,
-      );
+      const wm = windowManagerRef.current;
+      const target = wm.windows.find((w) => w.instanceId === instanceId);
       if (!target) return;
       const routed = routeModification(instruction);
 
       if (routed.kind === "remove") {
-        handleClose(instanceId);
+        handleClose(target.id, instanceId);
         return;
       }
 
       if (routed.kind === "clone") {
-        // Reuse the SAME resolved component/record under a new instance id — no
-        // model call. (A failed-to-open target has a null Component; the clone
-        // carries the same null and renders the same neutral fallback.)
-        const cloneId = nextInstanceId(target.appType);
-        setOpenedApps((prev) => [
-          ...prev,
-          {
-            instanceId: cloneId,
-            appType: target.appType,
-            displayName: target.displayName,
-            Component: target.Component,
-          },
-        ]);
+        // Mint a new window reusing the SAME resolved component under the new
+        // instance id — no model call. (A failed-to-open target carries a
+        // fallback component; the clone renders the same fallback.)
+        const cloneInstanceId = wm.open(target.appType, {
+          title: target.title,
+          icon: target.icon,
+        });
+        const sourceComponent = components.get(instanceId) ?? null;
+        storeComponent(cloneInstanceId, sourceComponent);
         return;
       }
 
-      // Tweak — re-resolve and replace this entry's Component in place.
+      // Tweak — re-resolve and replace this instance's component in place.
       logger.info("Tweaking " + target.appType);
       try {
-        const tweakKey = await registryKey("app", target.appType, routed.instruction);
+        const tweakKey = await registryKey(
+          "app",
+          target.appType,
+          routed.instruction,
+        );
         const Component = await resolveComponent(
           instanceId + "-tweak-" + tweakKey.slice(0, 8),
           target.appType,
@@ -248,23 +316,24 @@ export function Marketplace() {
           services,
           routed.instruction,
         );
-        setOpenedApps((prev) =>
-          prev.map((a) =>
-            a.instanceId === instanceId ? { ...a, Component } : a,
-          ),
-        );
+        storeComponent(instanceId, Component);
       } catch (err) {
-        // A tweak that fails to resolve surfaces the existing neutral fallback
-        // (Component: null) rather than vanishing the app or showing a mechanic.
+        // A tweak that fails to resolve surfaces the neutral fallback (in place)
+        // rather than vanishing the app or showing a mechanic.
         logger.error("Failed to tweak " + target.appType + ": " + String(err));
-        setOpenedApps((prev) =>
-          prev.map((a) =>
-            a.instanceId === instanceId ? { ...a, Component: null } : a,
-          ),
-        );
+        const Fallback = makeFallback({
+          needsAuth: false,
+          throttled: false,
+          onConnect: () => setKeyDialogOpen(true),
+          onRetry: () => {
+            handleClose(target.id, instanceId);
+            void handleOpenRef.current(target.appType, target.title);
+          },
+        });
+        storeComponent(instanceId, Fallback);
       }
     },
-    [services, handleClose],
+    [services, handleClose, storeComponent, components],
   );
 
   // Clear any pending reset timer on unmount.
@@ -357,39 +426,41 @@ export function Marketplace() {
         </section>
       )}
 
-      {/* Opened apps — each in an AppShell, wrapped in ErrorBoundary */}
-      <div className="opened-apps">
-        {openedApps.map((app) => (
-          <ErrorBoundary key={app.instanceId}>
-            <AppShell
-              displayName={app.displayName}
-              onClose={() => handleClose(app.instanceId)}
-              onModify={(instruction) =>
-                void handleModify(app.instanceId, instruction)
+      {/* Desktop — each open app is a draggable WindowFrame. The frame mounts an
+          AppShell-wrapped body as ONE managed root (keyed by instanceId), so the
+          ⋮ contextual prompt and close traffic-light live inside the same root
+          and closing tears the whole root down with zero leaked roots. */}
+      <div className="desktop">
+        {windowManager.windows.map((entry) => {
+          const override = positions.get(entry.instanceId);
+          const x = override?.x ?? entry.x;
+          const y = override?.y ?? entry.y;
+          return (
+            <WindowFrame
+              key={entry.id}
+              id={entry.id}
+              instanceId={entry.instanceId}
+              title={entry.title}
+              icon={entry.icon}
+              x={x}
+              y={y}
+              z={entry.z}
+              minimized={entry.minimized}
+              Component={components.get(entry.instanceId) ?? null}
+              onClose={() => handleClose(entry.id, entry.instanceId)}
+              onMinimize={() => windowManager.minimize(entry.id)}
+              onFocus={() => windowManager.focus(entry.id)}
+              onMove={(nx, ny) =>
+                setPositions((prev) =>
+                  new Map(prev).set(entry.instanceId, { x: nx, y: ny }),
+                )
               }
-            >
-              {app.Component !== null ? (
-                createElement(app.Component)
-              ) : app.needsAuth ? (
-                <NeedsAuthContent onConnect={() => setKeyDialogOpen(true)} />
-              ) : app.throttled ? (
-                <ThrottledAppContent
-                  onRetry={() => {
-                    handleClose(app.instanceId);
-                    void handleOpen(app.appType, app.displayName);
-                  }}
-                />
-              ) : (
-                <FailedAppContent
-                  onRetry={() => {
-                    handleClose(app.instanceId);
-                    void handleOpen(app.appType, app.displayName);
-                  }}
-                />
-              )}
-            </AppShell>
-          </ErrorBoundary>
-        ))}
+              onModify={(instruction) =>
+                void handleModify(entry.instanceId, instruction)
+              }
+            />
+          );
+        })}
       </div>
 
       {/* Inline key reconfiguration (RESIL-03): opened from a 401 fallback. The
@@ -398,4 +469,21 @@ export function Marketplace() {
       {keyDialogOpen && <KeyDialog onClose={() => setKeyDialogOpen(false)} />}
     </>
   );
+}
+
+// Build a fallback body component for a failed open/tweak. Returning a component
+// (not an element) lets it be stored in the components map and rendered by the
+// window's AppShell, so it still appears inside a role="region" labeled by the
+// app — the failure is visible, never a silent blank.
+function makeFallback(opts: {
+  needsAuth: boolean;
+  throttled: boolean;
+  onConnect: () => void;
+  onRetry: () => void;
+}): ComponentType {
+  return function Fallback() {
+    if (opts.needsAuth) return <NeedsAuthContent onConnect={opts.onConnect} />;
+    if (opts.throttled) return <ThrottledAppContent onRetry={opts.onRetry} />;
+    return <FailedAppContent onRetry={opts.onRetry} />;
+  };
 }
