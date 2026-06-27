@@ -56,12 +56,25 @@ const DOCK_RESERVE = 88;
 // SAME signal as the preview) via WindowFrame's onSnap callback (WR-02), not a
 // recomputed x + nominal-width — which was unreliable for wide frames.
 
-// The work-area rect a maximized window fills. Read from the live viewport so a
-// resize-then-maximize uses the current size. The rect starts below the menu bar
-// and stops above the dock reserve.
-function workArea(): { x: number; y: number; w: number; h: number } {
-  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
-  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+// Read the current viewport size, guarded for SSR/older jsdom. The component
+// mirrors this into state via a resize listener (WR-03) so a maximized/snapped
+// window's rect is recomputed when the browser resizes rather than going stale.
+function readViewport(): { vw: number; vh: number } {
+  return {
+    vw: typeof window !== "undefined" ? window.innerWidth : 1280,
+    vh: typeof window !== "undefined" ? window.innerHeight : 800,
+  };
+}
+
+// The work-area rect a maximized window fills, computed from the GIVEN viewport
+// size (mirrored into state, WR-03) so a resize recomputes it. The rect starts
+// below the menu bar and stops above the dock reserve.
+function workArea(vw: number, vh: number): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} {
   return {
     x: 0,
     y: MENU_BAR_H,
@@ -70,17 +83,22 @@ function workArea(): { x: number; y: number; w: number; h: number } {
   };
 }
 
-// The half-rect a snapped window fills (Phase 19, plan 19-03). A LEFT snap takes
-// the left half of the work area; a RIGHT snap the right half. Same model as
-// maximize (work area, NOT the full viewport) so the menu bar + dock stay
-// visible — quarter/corner snap is deferred (CHROME-F1, half only this phase).
-function snapHalf(side: "left" | "right"): {
+// The half-rect a snapped window fills (Phase 19, plan 19-03), computed from the
+// GIVEN viewport size (WR-03). A LEFT snap takes the left half of the work area;
+// a RIGHT snap the right half. Same model as maximize (work area, NOT the full
+// viewport) so the menu bar + dock stay visible — quarter/corner snap is
+// deferred (CHROME-F1, half only this phase).
+function snapHalf(
+  side: "left" | "right",
+  vw: number,
+  vh: number,
+): {
   x: number;
   y: number;
   w: number;
   h: number;
 } {
-  const wa = workArea();
+  const wa = workArea(vw, vh);
   const halfW = Math.round(wa.w / 2);
   return {
     x: side === "left" ? wa.x : wa.x + halfW,
@@ -209,6 +227,12 @@ function DesktopShellInner() {
   // null renders no overlay. Driven by each WindowFrame's during-drag onEdgeChange
   // signal and cleared at commit.
   const [snapPreview, setSnapPreview] = useState<"left" | "right" | null>(null);
+  // Mirror the viewport size into state (WR-03) so a maximized/snapped window's
+  // rect (workArea/snapHalf) recomputes on browser resize instead of going
+  // stale until some unrelated state change forces a re-render. Seeded from the
+  // live viewport and kept in-step via a resize listener (mirrors the matchMedia
+  // effect pattern below).
+  const [viewport, setViewport] = useState(() => readViewport());
 
   // Stable refs so callbacks can read current manager/services without
   // re-creating handlers (and so handleModify can look up the live window list).
@@ -490,6 +514,18 @@ function DesktopShellInner() {
     return () => mql.removeListener(onChange);
   }, []);
 
+  // Mirror the viewport size into state on browser resize (WR-03) so pinned
+  // (maximized/snapped) windows recompute their rect from the fresh size. Guard
+  // for environments without window. Re-syncs once on mount in case the size
+  // changed between the lazy initializer and the effect attaching.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onResize = () => setViewport(readViewport());
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // Window-management keyboard shortcuts (Phase 19, plans 19-03 + 19-04).
   // ONE global keydown listener serves every window shortcut:
   //   • Ctrl+Left / Ctrl+Right (CHROME-03) — snap the ACTIVE window to the
@@ -617,9 +653,9 @@ function DesktopShellInner() {
           // plain window renders transform-only from the entry's authoritative
           // x/y (committed drags write back via setGeometry — WR-01), CSS min-size.
           const area = entry.maximized
-            ? workArea()
+            ? workArea(viewport.vw, viewport.vh)
             : entry.snapSide
-              ? snapHalf(entry.snapSide)
+              ? snapHalf(entry.snapSide, viewport.vw, viewport.vh)
               : null;
           const x = area ? area.x : entry.x;
           const y = area ? area.y : entry.y;
