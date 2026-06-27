@@ -304,6 +304,66 @@ describe("DesktopShell windowed open flow (WIN, injected deps)", () => {
     ).toBeInTheDocument();
   });
 
+  it("double-click titlebar maximizes to the work area (dock + menu bar stay); double-click restores", async () => {
+    const { user } = renderMarketplace();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    const frame = frameByTitle("Notes");
+    const titlebar = frame.querySelector(
+      ".window-chrome__titlebar",
+    ) as HTMLElement;
+
+    // Capture the pre-maximize rendered position so we can assert restore.
+    const startPos = frameTranslate(frame);
+
+    // Double-click the titlebar → maximize to the work area.
+    fireEvent.doubleClick(titlebar);
+
+    // The frame fills the work area = viewport minus the menu bar (top, 40px)
+    // minus the dock reserve (bottom, 88px). This is NOT OS full-screen — the
+    // menu bar + dock remain in the document.
+    await waitFor(() => {
+      const f = frameByTitle("Notes");
+      expect(f.className).toContain("window-chrome--maximized");
+      expect(f.style.width).toBe(`${window.innerWidth}px`);
+      expect(f.style.height).toBe(`${window.innerHeight - 40 - 88}px`);
+    });
+
+    // The maximized frame sits at the top of the work area (y = menu bar height).
+    {
+      const f = frameByTitle("Notes");
+      const pos = frameTranslate(f);
+      expect(pos.x).toBe(0);
+      expect(pos.y).toBe(40);
+    }
+
+    // The menu bar + dock are STILL present — maximize is zoom-to-work-area,
+    // never the OS Fullscreen API.
+    expect(document.querySelector(".menu-bar")).toBeInTheDocument();
+    expect(document.querySelector(".dock")).toBeInTheDocument();
+
+    // Second double-click → restore to the prior geometry (no explicit size).
+    fireEvent.doubleClick(
+      frameByTitle("Notes").querySelector(
+        ".window-chrome__titlebar",
+      ) as HTMLElement,
+    );
+
+    await waitFor(() => {
+      const f = frameByTitle("Notes");
+      expect(f.className).not.toContain("window-chrome--maximized");
+      // The explicit maximized width/height is gone → back to CSS-min sizing.
+      expect(f.style.width).toBe("");
+      expect(f.style.height).toBe("");
+      // Position returns to the pre-maximize cascade placement.
+      const pos = frameTranslate(f);
+      expect(pos.x).toBeCloseTo(startPos.x, 5);
+      expect(pos.y).toBeCloseTo(startPos.y, 5);
+    });
+  });
+
   it("the contextual `⋮` MOD still works inside a window (remove closes it)", async () => {
     const { user } = renderMarketplace();
 
