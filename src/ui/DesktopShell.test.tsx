@@ -338,6 +338,94 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     expect(frames()).toHaveLength(0);
   });
 
+  // Phase 19 (plan 19-04): Cmd/Ctrl+W closes and Cmd/Ctrl+M minimizes the ACTIVE
+  // window (CHROME-04). Both call preventDefault so the browser tab is never
+  // closed and the browser's minimize is never triggered — and both fire ONLY
+  // when a Vibe OS window is active. These branches live in the SAME keydown
+  // effect plan 19-03 created (no second global listener).
+
+  it("Cmd+W closes the active window and prevents the browser tab-close default", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+    await waitFor(() => expect(appBodyCount()).toBe(1));
+
+    // The event MUST be cancelable for defaultPrevented to be observable.
+    const event = new KeyboardEvent("keydown", {
+      key: "w",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(window, event);
+
+    // preventDefault fired (the browser tab is never closed) AND the active
+    // Vibe OS window closes (frame + app body torn down).
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(frames()).toHaveLength(0));
+    await waitFor(() => expect(appBodyCount()).toBe(0));
+  });
+
+  it("Ctrl+W (non-Cmd path) also closes the active window", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    const event = new KeyboardEvent("keydown", {
+      key: "w",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(window, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(frames()).toHaveLength(0));
+  });
+
+  it("Cmd+M minimizes the active window and prevents the browser default", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    const event = new KeyboardEvent("keydown", {
+      key: "m",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(window, event);
+
+    // preventDefault fired AND the active window gains the minimized marker
+    // (the frame stays mounted in the dock; the browser window is never
+    // minimized).
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() =>
+      expect(frameByTitle("Notes").className).toContain(
+        "window-chrome--minimized",
+      ),
+    );
+  });
+
+  it("Cmd+W with NO window open is a harmless no-op (the browser tab stays closable)", () => {
+    renderDesktopShell();
+
+    // No active Vibe OS window — the handler must not throw and must not prevent
+    // the browser's default (so the user can still close the browser tab).
+    const event = new KeyboardEvent("keydown", {
+      key: "w",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    expect(() => fireEvent(window, event)).not.toThrow();
+    expect(event.defaultPrevented).toBe(false);
+    expect(frames()).toHaveLength(0);
+  });
+
   it("the contextual `⋮` MOD 'remove' still closes a window", async () => {
     const { user } = renderDesktopShell();
 
