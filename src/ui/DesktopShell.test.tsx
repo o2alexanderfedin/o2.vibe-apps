@@ -268,6 +268,76 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     });
   });
 
+  // Phase 19 (plan 19-03): Ctrl+Left / Ctrl+Right snap the ACTIVE window to the
+  // work-area half WITHOUT a drag (CHROME-03). The keydown effect introduced
+  // here is the same one Plan 04 (wave 4) will extend with Cmd/Ctrl+W/M.
+
+  it("Ctrl+ArrowLeft snaps the active window to the left half", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowLeft",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(window, event);
+
+    await waitFor(() => {
+      const f = frameByTitle("Notes");
+      expect(f.className).toContain("window-chrome--snap-left");
+      expect(f.style.width).toBe(`${Math.round(window.innerWidth / 2)}px`);
+      const m = /translate\(\s*(-?[\d.]+)px/.exec(f.style.transform)!;
+      expect(parseFloat(m[1]!)).toBe(0);
+    });
+    // The active-window snap prevents default (so the key never reaches browser
+    // text navigation when a Vibe OS window is front-most).
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("Ctrl+ArrowRight snaps the active window to the right half", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    fireEvent(
+      window,
+      new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await waitFor(() => {
+      const f = frameByTitle("Notes");
+      expect(f.className).toContain("window-chrome--snap-right");
+      const m = /translate\(\s*(-?[\d.]+)px/.exec(f.style.transform)!;
+      expect(parseFloat(m[1]!)).toBe(Math.round(window.innerWidth / 2));
+    });
+  });
+
+  it("Ctrl+ArrowLeft with NO window open is a harmless no-op", () => {
+    renderDesktopShell();
+
+    // No window is active — the handler must not throw and must not prevent the
+    // browser's default (so Ctrl+Arrow text navigation outside a window is free).
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowLeft",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    expect(() => fireEvent(window, event)).not.toThrow();
+    expect(event.defaultPrevented).toBe(false);
+    expect(frames()).toHaveLength(0);
+  });
+
   it("the contextual `⋮` MOD 'remove' still closes a window", async () => {
     const { user } = renderDesktopShell();
 
