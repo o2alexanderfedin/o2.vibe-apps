@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 export interface UseDragOptions {
   elementRef: React.RefObject<HTMLElement | null>;
@@ -22,6 +22,16 @@ export function useDrag({ elementRef, initialX, initialY, onCommit }: UseDragOpt
   const startPointer = useRef({ x: 0, y: 0 });
   const startPos = useRef({ x: initialX, y: initialY });
   const lastClamped = useRef({ x: initialX, y: initialY });
+
+  // Defensively cancel any pending rAF if the frame unmounts mid-drag (e.g. the
+  // window is closed through a path other than pointerup while a drag is
+  // active). The rAF callback is already guarded by `if (elementRef.current)`,
+  // but cancelling on unmount avoids relying solely on onEnd ever running.
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(rafId.current);
+    };
+  }, []);
 
   const clamp = useCallback((raw: { x: number; y: number }): { x: number; y: number } => {
     const el = elementRef.current;
