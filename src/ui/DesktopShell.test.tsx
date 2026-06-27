@@ -268,6 +268,58 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     });
   });
 
+  // Phase 19 (WR-02): preview and commit must AGREE. A frame WIDER than the
+  // nominal 400px, dragged hard against the right edge, clamps so its top-left
+  // x + 400 no longer reaches the right edge — but the POINTER is within the
+  // snap threshold, so the during-drag preview showed the right drop-zone. The
+  // commit must follow the reported edge side (the preview), not a recomputed
+  // x + nominal-width, so the window actually snaps right.
+
+  it("a frame wider than 400px dragged to the right edge snaps right (preview == commit) — WR-02", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    const frame = frameByTitle("Notes");
+    const handle = frame.querySelector(".titlebar-handle") as HTMLElement;
+
+    // Force a WIDE frame: jsdom reports 0×0 rects by default, so stub
+    // getBoundingClientRect to a 700px-wide box. With innerWidth 1280 the drag
+    // clamps the top-left to x = 1280 − 700 = 580; 580 + 400 = 980 < 1280 − 20,
+    // so the OLD x + DEFAULT_FRAME_W commit would NOT snap. The pointer at the
+    // right edge still reports "right", so the new commit must snap right.
+    const originalRect = frame.getBoundingClientRect.bind(frame);
+    frame.getBoundingClientRect = () =>
+      ({ width: 700, height: 300, top: 0, left: 0, right: 700, bottom: 300, x: 0, y: 0, toJSON() {} }) as DOMRect;
+
+    try {
+      // Drag the pointer to the right edge (within SNAP_THRESHOLD), reporting a
+      // right-edge preview, then release.
+      fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 100 });
+      fireEvent.pointerMove(handle, {
+        pointerId: 1,
+        clientX: window.innerWidth - 5,
+        clientY: 100,
+      });
+      fireEvent.pointerUp(handle, {
+        pointerId: 1,
+        clientX: window.innerWidth - 5,
+        clientY: 100,
+      });
+
+      await waitFor(() => {
+        const f = frameByTitle("Notes");
+        expect(f.className).toContain("window-chrome--snap-right");
+        expect(f.style.width).toBe(`${Math.round(window.innerWidth / 2)}px`);
+        const m = /translate\(\s*(-?[\d.]+)px/.exec(f.style.transform)!;
+        expect(parseFloat(m[1]!)).toBe(Math.round(window.innerWidth / 2));
+      });
+    } finally {
+      frame.getBoundingClientRect = originalRect;
+    }
+  });
+
   // Phase 19 (CR-01): a snapped window must be recoverable — it can be dragged
   // back to a free position (losing window-chrome--snap-*), and snapping then
   // maximizing then un-maximizing must NOT fall back into the snapped half.
