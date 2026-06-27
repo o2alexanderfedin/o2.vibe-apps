@@ -498,6 +498,41 @@ function DesktopShellInner() {
     return () => mql.removeListener(onChange);
   }, []);
 
+  // Window-management keyboard shortcuts (Phase 19, plan 19-03, CHROME-03).
+  // Ctrl+Left / Ctrl+Right snap the ACTIVE window to the work-area half WITHOUT
+  // a drag. Ctrl (not Cmd) is used for snap — Cmd is reserved for Plan 04's
+  // close/minimize so the two never collide. The handler only acts (and only
+  // calls preventDefault) when a Vibe OS window is active, so Ctrl+Arrow text
+  // navigation outside a window stays free (T-19-08). Lifecycle mirrors the
+  // matchMedia effect above (mount add / unmount remove). Reads the live manager
+  // via windowManagerRef so it never closes over a stale window list.
+  //
+  // EXTENSION POINT (Plan 04, wave 4): Cmd/Ctrl+W (close) and Cmd/Ctrl+M
+  // (minimize) attach to THIS same handler — add their branches alongside the
+  // Arrow snap branches rather than registering a second global keydown listener.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function handleKeyDown(e: KeyboardEvent): void {
+      // Snap uses Ctrl specifically (Cmd is reserved for Plan 04 close/minimize).
+      if (!e.ctrlKey) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+
+      const wm = windowManagerRef.current;
+      const active = wm.activeId();
+      // No active Vibe OS window → leave the key alone (no snap, no preventDefault)
+      // so it does not hijack browser text navigation.
+      if (active === null) return;
+
+      e.preventDefault();
+      if (e.key === "ArrowLeft") wm.snapLeft(active);
+      else wm.snapRight(active);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // The active window feeding the menu-bar name: the highest-z, non-minimized
   // window is the front-most one (same z-ordering the manager's zTop tracks).
   const activeWindow =
