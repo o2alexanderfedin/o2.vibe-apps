@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, cleanup, fireEvent, within, act } from "@testing-library/react";
 import { SearchLauncherPanel } from "./SearchLauncherPanel";
 import { APP_REGISTRY } from "../data/appRegistry";
@@ -227,59 +227,135 @@ describe("SearchLauncherPanel", () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it("Tab from last focusable wraps to first (Tab trap)", () => {
-      // jsdom has no layout, so offsetParent is null for all elements —
-      // the implementation's offsetParent guard produces an empty focusable list
-      // and the trap early-returns. We test the wrap logic by focusing the last
-      // element WITHOUT the offsetParent filter (same elements, jsdom-compatible).
-      const { container } = render(
-        <SearchLauncherPanel
-          onOpen={vi.fn()}
-          onDescribe={vi.fn()}
-          onClose={vi.fn()}
-        />,
-      );
-      const overlay = container.querySelector(".launcher-overlay")!;
-      const dialog = container.querySelector('[role="dialog"]')!;
-      // Query without offsetParent filter so we get real elements in jsdom.
-      const focusable = [
-        ...dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled])',
-        ),
-      ];
-      expect(focusable.length).toBeGreaterThan(0);
-      const last = focusable[focusable.length - 1]!;
-      last.focus();
-      // In jsdom the trap skips wrap (offsetParent is null), but we verify
-      // the handler does not throw and the element can be focused.
-      expect(() => {
-        fireEvent.keyDown(overlay, { key: "Tab", shiftKey: false });
-      }).not.toThrow();
-    });
+    // jsdom reports offsetParent === null for every element (it has no layout),
+    // so the component's `offsetParent !== null` focusable filter would yield an
+    // EMPTY list and the trap would early-return without running any wrap logic.
+    // Stub offsetParent to return a truthy node so the real filter passes and the
+    // wrap logic is genuinely exercised. Restored in afterEach so the stub never
+    // leaks to other suites in this file.
+    describe("Tab trap (offsetParent stubbed so the real wrap logic runs)", () => {
+      let offsetParentDescriptor: PropertyDescriptor | undefined;
 
-    it("Shift+Tab from first focusable wraps to last (Tab trap)", () => {
-      // jsdom has no layout, so offsetParent is null for all elements —
-      // see comment in the Tab test above for the same reasoning.
-      const { container } = render(
-        <SearchLauncherPanel
-          onOpen={vi.fn()}
-          onDescribe={vi.fn()}
-          onClose={vi.fn()}
-        />,
-      );
-      const overlay = container.querySelector(".launcher-overlay")!;
-      const dialog = container.querySelector('[role="dialog"]')!;
-      const focusable = [
-        ...dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled])',
-        ),
-      ];
-      expect(focusable.length).toBeGreaterThan(0);
-      const first = focusable[0]!;
-      first.focus();
-      expect(() => {
+      beforeEach(() => {
+        offsetParentDescriptor = Object.getOwnPropertyDescriptor(
+          HTMLElement.prototype,
+          "offsetParent",
+        );
+        Object.defineProperty(HTMLElement.prototype, "offsetParent", {
+          configurable: true,
+          get() {
+            // A truthy node satisfies the component's `offsetParent !== null`
+            // filter. document.body is always present and non-null.
+            return document.body;
+          },
+        });
+      });
+
+      afterEach(() => {
+        if (offsetParentDescriptor) {
+          Object.defineProperty(
+            HTMLElement.prototype,
+            "offsetParent",
+            offsetParentDescriptor,
+          );
+        } else {
+          // jsdom does not define offsetParent on the prototype by default;
+          // delete our stub so the prototype returns to its original shape.
+          delete (HTMLElement.prototype as unknown as Record<string, unknown>)
+            .offsetParent;
+        }
+      });
+
+      // The component's focusable query: enabled controls in document order,
+      // filtered by the (now-stubbed) offsetParent. Mirrors the selector in
+      // SearchLauncherPanel so the test drives the same element list the
+      // implementation computes.
+      const focusableOf = (dialog: Element): HTMLElement[] =>
+        [
+          ...dialog.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+          ),
+        ].filter(
+          (el) => !el.hasAttribute("disabled") && el.offsetParent !== null,
+        );
+
+      it("forward Tab from the last control wraps focus to the first", () => {
+        const { container } = render(
+          <SearchLauncherPanel
+            onOpen={vi.fn()}
+            onDescribe={vi.fn()}
+            onClose={vi.fn()}
+          />,
+        );
+        const overlay = container.querySelector(".launcher-overlay")!;
+        const dialog = container.querySelector('[role="dialog"]')!;
+        const focusable = focusableOf(dialog);
+        // More than one control so the wrap branch (not the single-control trap)
+        // is the path under test.
+        expect(focusable.length).toBeGreaterThan(1);
+        const first = focusable[0]!;
+        const last = focusable[focusable.length - 1]!;
+
+        last.focus();
+        expect(document.activeElement).toBe(last);
+
+        fireEvent.keyDown(overlay, { key: "Tab", shiftKey: false });
+
+        // The actual contract: a forward Tab off the last control wraps to first.
+        expect(document.activeElement).toBe(first);
+      });
+
+      it("Shift+Tab from the first control wraps focus to the last", () => {
+        const { container } = render(
+          <SearchLauncherPanel
+            onOpen={vi.fn()}
+            onDescribe={vi.fn()}
+            onClose={vi.fn()}
+          />,
+        );
+        const overlay = container.querySelector(".launcher-overlay")!;
+        const dialog = container.querySelector('[role="dialog"]')!;
+        const focusable = focusableOf(dialog);
+        expect(focusable.length).toBeGreaterThan(1);
+        const first = focusable[0]!;
+        const last = focusable[focusable.length - 1]!;
+
+        first.focus();
+        expect(document.activeElement).toBe(first);
+
         fireEvent.keyDown(overlay, { key: "Tab", shiftKey: true });
-      }).not.toThrow();
+
+        // The actual contract: a backward Tab off the first control wraps to last.
+        expect(document.activeElement).toBe(last);
+      });
+
+      it("with one focusable control, Tab is trapped on that sole control (WR-03)", () => {
+        // isWorking=true disables the input, every chip, and the whole app grid,
+        // leaving the close button as the only focusable control.
+        const { container } = render(
+          <SearchLauncherPanel
+            onOpen={vi.fn()}
+            onDescribe={vi.fn()}
+            onClose={vi.fn()}
+            isWorking={true}
+          />,
+        );
+        const overlay = container.querySelector(".launcher-overlay")!;
+        const dialog = container.querySelector('[role="dialog"]')!;
+        const focusable = focusableOf(dialog);
+        expect(focusable).toHaveLength(1);
+        const sole = focusable[0]!;
+
+        // Drift focus OFF the sole control (onto the dialog container) to model
+        // the escape WR-03 fixes; the unconditional single-control trap must
+        // still pull focus back rather than letting native Tab leave the modal.
+        (dialog as HTMLElement).setAttribute("tabindex", "-1");
+        (dialog as HTMLElement).focus();
+
+        fireEvent.keyDown(overlay, { key: "Tab", shiftKey: false });
+
+        expect(document.activeElement).toBe(sole);
+      });
     });
   });
 
