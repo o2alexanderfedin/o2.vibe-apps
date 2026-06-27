@@ -21,6 +21,25 @@ describe("slugFromText", () => {
   it('converts "a/b + c" to "a-b-c" (non-alphanumeric become hyphens)', () => {
     expect(slugFromText("a/b + c")).toBe("a-b-c");
   });
+
+  // Empty-slug boundary cases — the inputs behind the WR-02 guard. Pure
+  // punctuation strips to nothing; a bare article keeps its letters because the
+  // article strip only fires at a trailing word boundary.
+  it('reduces pure punctuation "!!!" to an empty slug', () => {
+    expect(slugFromText("!!!")).toBe("");
+  });
+
+  it('reduces "???" to an empty slug', () => {
+    expect(slugFromText("???")).toBe("");
+  });
+
+  it('reduces "   .  " (whitespace + punctuation) to an empty slug', () => {
+    expect(slugFromText("   .  ")).toBe("");
+  });
+
+  it('keeps a bare article "the" (no trailing word boundary to strip)', () => {
+    expect(slugFromText("the")).toBe("the");
+  });
 });
 
 describe("EXAMPLE_CHIPS", () => {
