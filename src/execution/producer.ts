@@ -239,6 +239,7 @@ export function buildRepairPrompt(
       `Requirements:\n` +
       `- export const initialState (one object), export function view(state) returning markup whose interactive elements carry data-action="..." and have NO handlers, and export const actionSpec (a string), then export { initialState, view, actionSpec }\n` +
       `- No imports — React is injected as a global; no event handlers in this module\n` +
+      `- Style EVERYTHING with inline style={{ ... }} and the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
       mutationLine(userPrompt) +
       `Return ONLY the corrected TSX code block, no explanation.`
     );
@@ -286,6 +287,7 @@ export function buildLengthPrompt(
       `Requirements:\n` +
       `- export const initialState (one object), export function view(state) returning compact markup whose interactive elements carry data-action="..." and have NO handlers, and export const actionSpec (a short string), then export { initialState, view, actionSpec }\n` +
       `- No imports — React is injected as a global; no behavior in this module\n` +
+      `- Style with inline style={{ ... }} and the host CSS variables: var(--accentA) and var(--accentB) for brand colors, var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
       mutationLine(userPrompt) +
       `Return ONLY the complete TSX code block, no explanation.`
     );
@@ -299,6 +301,7 @@ export function buildLengthPrompt(
     `- Uses React.useState / React.useEffect (React is available as a global)\n` +
     `- No imports — React is injected; no import statements at all\n` +
     `- Fully functional, no placeholders, minimal inline styling\n` +
+    `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors, var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
     mutationLine(userPrompt) +
     `Return ONLY the complete TSX code block, no explanation.`
   );

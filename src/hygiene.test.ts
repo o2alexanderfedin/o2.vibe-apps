@@ -75,7 +75,12 @@ const REPO_ROOT = process.cwd();
 const SRC_DIR = resolve(REPO_ROOT, "src");
 const SCANNABLE = /\.(ts|tsx|css|html)$/;
 const EXCLUDED_DIRS = new Set(["node_modules", "dist", ".git"]);
-const SELF = "hygiene.test.ts";
+// SELF exclusion: anchor on the FULL repo-relative path, not the bare filename.
+// A filename-only compare ("hygiene.test.ts") would silently exempt ANY file
+// named hygiene.test.ts in any subdirectory (e.g. src/ui/hygiene.test.ts) from
+// the scan — a latent escape hatch. Only THIS exact file may carry the gate's
+// own regex literals (Pitfall 6).
+const SELF_PATH = "src/hygiene.test.ts";
 
 function walk(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -83,8 +88,9 @@ function walk(dir: string, acc: string[] = []): string[] {
     const st = statSync(full);
     if (st.isDirectory()) {
       if (!EXCLUDED_DIRS.has(entry)) walk(full, acc);
-    } else if (SCANNABLE.test(entry) && entry !== SELF) {
-      acc.push(full);
+    } else if (SCANNABLE.test(entry)) {
+      const relPath = relative(REPO_ROOT, full).split(sep).join("/");
+      if (relPath !== SELF_PATH) acc.push(full);
     }
   }
   return acc;

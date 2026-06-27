@@ -42,6 +42,12 @@ export function checkForHardcodedColors(code: string): void {
       r = parseInt(hex[0]! + hex[0]!, 16);
       g = parseInt(hex[1]! + hex[1]!, 16);
       b = parseInt(hex[2]! + hex[2]!, 16);
+    } else if (hex.length === 4) {
+      // 4-digit #rgba shorthand (CSS Colors Level 4): expand each nibble.
+      // Alpha (hex[3]) is irrelevant to the saturation check.
+      r = parseInt(hex[0]! + hex[0]!, 16);
+      g = parseInt(hex[1]! + hex[1]!, 16);
+      b = parseInt(hex[2]! + hex[2]!, 16);
     } else if (hex.length === 6) {
       r = parseInt(hex.slice(0, 2), 16);
       g = parseInt(hex.slice(2, 4), 16);
@@ -52,13 +58,18 @@ export function checkForHardcodedColors(code: string): void {
       g = parseInt(hex.slice(2, 4), 16);
       b = parseInt(hex.slice(4, 6), 16);
     } else {
-      // 4, 5, or 7-digit: unusual; skip to avoid false positives.
+      // 5 or 7-digit: not valid CSS; skip to avoid false positives.
       continue;
     }
 
     if (!isGrayscale(r, g, b)) {
+      // Include the offending literal so two DIFFERENT color violations produce
+      // DIFFERENT error messages. The producer's self-heal early-stop fires on
+      // an identical consecutive error; a generic message would collapse the
+      // effective retry budget from 3 to 2. A specific message also gives the
+      // model the exact value to find and replace.
       throw new TranspileError(
-        "Produced code contains hardcoded colors — use the theme CSS variables (var(--accentA), var(--accentB), var(--text), etc.) instead of hardcoded hex or rgb color values.",
+        `Produced code contains a hardcoded color (#${hex}) — use the theme CSS variables (var(--accentA), var(--accentB), var(--text), etc.) instead of hardcoded hex or rgb color values.`,
         null,
       );
     }
@@ -72,8 +83,10 @@ export function checkForHardcodedColors(code: string): void {
     const g = parseInt(rgbMatch[2]!, 10);
     const b = parseInt(rgbMatch[3]!, 10);
     if (!isGrayscale(r, g, b)) {
+      // Include the offending literal — see the hex branch for why a specific
+      // (not generic) message protects the self-heal retry budget.
       throw new TranspileError(
-        "Produced code contains hardcoded colors — use the theme CSS variables (var(--accentA), var(--accentB), var(--text), etc.) instead of hardcoded hex or rgb color values.",
+        `Produced code contains a hardcoded color (rgb(${r}, ${g}, ${b})) — use the theme CSS variables (var(--accentA), var(--accentB), var(--text), etc.) instead of hardcoded hex or rgb color values.`,
         null,
       );
     }

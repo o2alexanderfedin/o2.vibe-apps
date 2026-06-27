@@ -82,7 +82,7 @@ function App() {
 
         <div
           style={{
-            backgroundColor: "rgba(var(--color-accent-rgb, 100, 100, 255), 0.1)",
+            backgroundColor: "rgba(var(--color-accent-rgb, 128, 128, 128), 0.1)",
             padding: "20px",
             borderRadius: "8px",
             marginBottom: "30px",
@@ -216,11 +216,11 @@ function App() {
 
         <div
           style={{
-            backgroundColor: "rgba(var(--color-accent-rgb, 100, 100, 255), 0.05)",
+            backgroundColor: "rgba(var(--color-accent-rgb, 128, 128, 128), 0.05)",
             padding: "20px",
             borderRadius: "8px",
             marginBottom: "30px",
-            border: "1px solid rgba(var(--color-accent-rgb, 100, 100, 255), 0.2)",
+            border: "1px solid rgba(var(--color-accent-rgb, 128, 128, 128), 0.2)",
           }}
         >
           <h3 style={{ marginTop: 0, marginBottom: "15px" }}>Add Expense</h3>
@@ -312,9 +312,9 @@ function App() {
                     justifyContent: "space-between",
                     alignItems: "center",
                     padding: "12px",
-                    backgroundColor: "rgba(var(--color-accent-rgb, 100, 100, 255), 0.05)",
+                    backgroundColor: "rgba(var(--color-accent-rgb, 128, 128, 128), 0.05)",
                     borderRadius: "4px",
-                    border: "1px solid rgba(var(--color-accent-rgb, 100, 100, 255), 0.2)",
+                    border: "1px solid rgba(var(--color-accent-rgb, 128, 128, 128), 0.2)",
                   }}
                 >
                   <div style={{ flex: 1 }}>

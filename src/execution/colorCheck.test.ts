@@ -42,6 +42,13 @@ describe("checkForHardcodedColors — flagged colors (saturated)", () => {
       checkForHardcodedColors(`<div style={{color: "#ff0000aa"}} />`)
     ).toThrow(TranspileError);
   });
+
+  it("throws TranspileError for saturated 4-digit hex #f0f8 (CSS rgba shorthand)", () => {
+    // #f0f8 → r=ff, g=00, b=ff (saturated magenta); alpha (8) ignored.
+    expect(() =>
+      checkForHardcodedColors(`<div style={{color: "#f0f8"}} />`)
+    ).toThrow(TranspileError);
+  });
 });
 
 describe("checkForHardcodedColors — allowed colors (grayscale + shadows)", () => {
@@ -105,7 +112,14 @@ describe("checkForHardcodedColors — allowed colors (grayscale + shadows)", () 
     ).not.toThrow();
   });
 
-  it("does NOT throw for rgba(50, 50, 50, 0.8) — near-grayscale shadow (R=G=B=50)", () => {
+  it("does NOT throw for #ccc8 — grayscale 4-digit with alpha (R=G=B=c)", () => {
+    // 4-digit #rgba: r=g=b=cc (grayscale), alpha (8) ignored.
+    expect(() =>
+      checkForHardcodedColors(`<div style={{color: "#ccc8"}} />`)
+    ).not.toThrow();
+  });
+
+  it("does NOT throw for rgba(50, 50, 50, 0.8) — exact grayscale shadow (R=G=B=50)", () => {
     expect(() =>
       checkForHardcodedColors(`<div style={{boxShadow: "0 2px 8px rgba(50, 50, 50, 0.8)"}} />`)
     ).not.toThrow();

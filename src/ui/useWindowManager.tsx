@@ -120,6 +120,11 @@ export function WindowManagerProvider({
       const n = ++counter;
       const id = `win-${n}`;
       const instanceId = `${appType}-${n}`;
+      // Mint the z-value OUTSIDE the state updater. React invokes updaters twice
+      // in Strict Mode (dev) to surface impure updaters; incrementing zTop inside
+      // one would advance it by 2 per call and create z-order gaps. Compute it
+      // once here and close over the constant so the updater stays pure.
+      const z = ++zTop;
 
       setWindows(prev => {
         const { x, y } = cascadePlace(prev);
@@ -131,7 +136,7 @@ export function WindowManagerProvider({
           icon: meta.icon,
           x,
           y,
-          z: ++zTop,
+          z,
           minimized: false,
         };
         // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
@@ -151,8 +156,10 @@ export function WindowManagerProvider({
   );
 
   const focus = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    const z = ++zTop;
     setWindows(prev =>
-      prev.map(w => (w.id === id ? { ...w, z: ++zTop } : w)),
+      prev.map(w => (w.id === id ? { ...w, z } : w)),
     );
   }, []);
 
@@ -163,9 +170,11 @@ export function WindowManagerProvider({
   }, []);
 
   const restore = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    const z = ++zTop;
     setWindows(prev =>
       prev.map(w =>
-        w.id === id ? { ...w, minimized: false, z: ++zTop } : w,
+        w.id === id ? { ...w, minimized: false, z } : w,
       ),
     );
   }, []);

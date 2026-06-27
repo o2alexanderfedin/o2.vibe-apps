@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPrompt,
   buildRepairPrompt,
+  buildLengthPrompt,
   extractCode,
   produceComponent,
   ProduceError,
@@ -124,6 +125,27 @@ describe("buildPrompt", () => {
     expect(repair).toContain("var(--text)");
     expect(repair).not.toContain("var(--color-surface)");
   });
+
+  it("shell prompt mandates the new theme CSS variable contract (TGEN-01)", () => {
+    const prompt = buildPrompt("calculator", "shell");
+    expect(prompt).toContain("var(--accentA)");
+    expect(prompt).toContain("var(--text)");
+    expect(prompt).not.toContain("var(--color-surface)");
+  });
+
+  it("delegated prompt mandates the new theme CSS variable contract (TGEN-01)", () => {
+    const prompt = buildPrompt("todo", "delegated");
+    expect(prompt).toContain("var(--accentA)");
+    expect(prompt).toContain("var(--glass)");
+    expect(prompt).not.toContain("var(--color-accent)");
+  });
+
+  it("delegated repair prompt carries the theme var contract (TGEN-01, WR-02)", () => {
+    const repair = buildRepairPrompt("todo", VALID_COMPONENT, "some error", "delegated");
+    expect(repair).toContain("var(--accentA)");
+    expect(repair).toContain("var(--text)");
+    expect(repair).not.toContain("var(--color-accent)");
+  });
 });
 
 describe("buildRepairPrompt", () => {
@@ -147,6 +169,21 @@ describe("buildRepairPrompt", () => {
   it("repair prompt references the Babel error label", () => {
     const prompt = buildRepairPrompt("timer", VALID_COMPONENT, "Missing semicolon");
     expect(prompt.toLowerCase()).toMatch(/babel error|compile error|error/);
+  });
+});
+
+describe("buildLengthPrompt — theme var contract on truncation retry (TGEN-01)", () => {
+  it("length prompt (app/widget) carries the new theme var contract (WR-01)", () => {
+    const prompt = buildLengthPrompt("timer");
+    expect(prompt).toContain("var(--accentA)");
+    expect(prompt).not.toContain("var(--color-surface)");
+  });
+
+  it("length prompt (delegated) carries the new theme var contract (WR-02)", () => {
+    const prompt = buildLengthPrompt("todo", "delegated");
+    expect(prompt).toContain("var(--accentA)");
+    expect(prompt).toContain("var(--glass)");
+    expect(prompt).not.toContain("var(--color-accent)");
   });
 });
 
