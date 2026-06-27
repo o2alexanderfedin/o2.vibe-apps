@@ -571,9 +571,9 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
   });
 
   // Phase 19 (CR-02): the global window shortcuts must NOT hijack keys the user
-  // is typing into an app's OWN input/textarea/contentEditable. Generated apps
-  // render real inputs in-tree (e.g. the seeded Notes "Add a note…" field), and
-  // Ctrl+Arrow / Cmd+W are standard text-editing chords there.
+  // is typing into an app's OWN input/textarea/contentEditable. Apps render real
+  // inputs in-tree (e.g. the seeded Notes "Add a note…" field), and Ctrl+Arrow /
+  // Cmd+W are standard text-editing chords there.
 
   it("Ctrl+ArrowLeft inside an app's own input does NOT snap the window (CR-02)", async () => {
     const { user } = renderDesktopShell();

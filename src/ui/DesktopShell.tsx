@@ -555,10 +555,10 @@ function DesktopShellInner() {
 
     function handleKeyDown(e: KeyboardEvent): void {
       // CR-02: never hijack keys the user is typing into an app's OWN editable
-      // field. Generated apps render real inputs in-tree, and Ctrl+Arrow (word-
-      // by-word caret), Cmd/Ctrl+W, and Cmd/Ctrl+M are standard editing chords
-      // there — bail early when the event originates from an editable target
-      // (mirrors the document.activeElement / tag checks in KeyDialog and
+      // field. Apps render real inputs in-tree, and Ctrl+Arrow (word-by-word
+      // caret), Cmd/Ctrl+W, and Cmd/Ctrl+M are standard editing chords there —
+      // bail early when the event originates from an editable target (mirrors
+      // the document.activeElement / tag checks in KeyDialog and
       // SearchLauncherPanel).
       const t = e.target as HTMLElement | null;
       if (
