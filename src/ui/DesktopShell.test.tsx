@@ -678,6 +678,58 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     expect(frameByTitle("Notes")).toBeInTheDocument();
   });
 
+  // Phase 19 (WR-03): a maximized/snapped window's rect is read from the live
+  // viewport. After the browser is resized the pinned rect must be recomputed —
+  // the shell mirrors the viewport size into state via a resize listener so a
+  // resize re-renders pinned windows with a fresh rect.
+
+  it("a maximized window's rect tracks a browser resize (WR-03)", async () => {
+    const setInner = (w: number, h: number) => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        writable: true,
+        value: w,
+      });
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        writable: true,
+        value: h,
+      });
+    };
+    const origW = window.innerWidth;
+    const origH = window.innerHeight;
+    setInner(1280, 800);
+
+    try {
+      const { user } = renderDesktopShell();
+
+      await openApp(user, "Notes"); // seeded
+      await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+      // Maximize via double-click.
+      const titlebar = frameByTitle("Notes").querySelector(
+        ".window-chrome__titlebar",
+      ) as HTMLElement;
+      fireEvent.doubleClick(titlebar);
+      await waitFor(() =>
+        expect(frameByTitle("Notes").style.width).toBe("1280px"),
+      );
+
+      // Resize the browser wider/taller and fire the resize event. The pinned
+      // rect must recompute from the NEW viewport (stale geometry is the bug).
+      setInner(1600, 1000);
+      fireEvent(window, new Event("resize"));
+
+      await waitFor(() => {
+        const f = frameByTitle("Notes");
+        expect(f.style.width).toBe("1600px");
+        expect(f.style.height).toBe(`${1000 - 40 - 88}px`);
+      });
+    } finally {
+      setInner(origW, origH);
+    }
+  });
+
   it("the contextual `⋮` MOD 'remove' still closes a window", async () => {
     const { user } = renderDesktopShell();
 
