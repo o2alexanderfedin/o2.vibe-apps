@@ -158,6 +158,16 @@ None. The deleted MinimalLauncher was a complete (now-superseded) component, not
 - **Phase 17 is COMPLETE** (4/4 plans). The dock-launched search/launcher panel describes-or-picks an app, routes through the real resolve→produce→cache→mount loop, opens results as windows, and names no mechanic — proven by 664 green tests offline.
 - **Ready for Phase 18 (Theme-Aware Generation):** the windows-on-the-desktop end-to-end path now exists (the precondition Phase 18 depends on for verifying live re-skin). No blockers carried forward.
 
+## Self-Check: PASSED
+
+- `.planning/phases/17-search-launcher/17-04-SUMMARY.md` — FOUND
+- `src/ui/MinimalLauncher.tsx` — CONFIRMED DELETED
+- `src/ui/MinimalLauncher.test.tsx` — CONFIRMED DELETED
+- Commit `e570ea8` (Task 1: delete MinimalLauncher + scrub references) — FOUND
+- Commit `2b078bb` (metadata: SUMMARY + ROADMAP) — FOUND
+- `grep -rn "MinimalLauncher" src/` — 0 lines
+- Full suite 664 passed (81 files), tsc exit 0, build 0 source maps, hygiene 3/3
+
 ---
 *Phase: 17-search-launcher*
 *Completed: 2026-06-26*
