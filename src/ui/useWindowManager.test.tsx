@@ -323,6 +323,104 @@ describe("useWindowManager", () => {
     expect(result.current.activeId()).toBeNull();
   });
 
+  // Phase 19 (plan 19-03): snap-to-half state on the manager (CHROME-03).
+  // The manager carries `snapSide` + snapLeft/snapRight (capturing restoreRect,
+  // clearing maximized, raising z); the work-area HALF rect itself is resolved
+  // in DesktopShell (same model as maximize).
+
+  it("a new window defaults to snapSide=null", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+
+    expect(result.current.windows[0]!.snapSide).toBeNull();
+  });
+
+  it("snapLeft sets snapSide='left' and captures restoreRect (non-null)", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+
+    const winId = result.current.windows[0]!.id;
+    const { x: priorX, y: priorY } = result.current.windows[0]!;
+
+    act(() => {
+      result.current.snapLeft(winId);
+    });
+
+    const win = result.current.windows[0]!;
+    expect(win.snapSide).toBe("left");
+    expect(win.restoreRect).not.toBeNull();
+    // restoreRect captures the pre-snap geometry so an unsnap could restore.
+    expect(win.restoreRect!.x).toBe(priorX);
+    expect(win.restoreRect!.y).toBe(priorY);
+  });
+
+  it("snapRight sets snapSide='right'", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+
+    const winId = result.current.windows[0]!.id;
+
+    act(() => {
+      result.current.snapRight(winId);
+    });
+
+    expect(result.current.windows[0]!.snapSide).toBe("right");
+  });
+
+  it("snapping a maximized window clears maximized (a window can't be both)", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+
+    const winId = result.current.windows[0]!.id;
+
+    act(() => {
+      result.current.maximize(winId);
+    });
+    expect(result.current.windows[0]!.maximized).toBe(true);
+
+    act(() => {
+      result.current.snapLeft(winId);
+    });
+    expect(result.current.windows[0]!.maximized).toBe(false);
+    expect(result.current.windows[0]!.snapSide).toBe("left");
+  });
+
+  it("snapLeft raises the window's z above a second window", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    let id1 = "", id2 = "";
+    act(() => {
+      id1 = result.current.open("a", { title: "A", icon: "a" });
+      id2 = result.current.open("b", { title: "B", icon: "b" });
+    });
+
+    // After opening, the second window (B) is on top.
+    const win1 = result.current.windows.find((w) => w.instanceId === id1)!;
+    const win2 = result.current.windows.find((w) => w.instanceId === id2)!;
+    expect(win2.z).toBeGreaterThan(win1.z);
+
+    // Snapping the first window raises it above the second.
+    act(() => {
+      result.current.snapLeft(win1.id);
+    });
+
+    const after1 = result.current.windows.find((w) => w.instanceId === id1)!;
+    const after2 = result.current.windows.find((w) => w.instanceId === id2)!;
+    expect(after1.z).toBeGreaterThan(after2.z);
+  });
+
   it("isOpen is the primary guard: open returns true; close returns false; guarded late mount stays at baseline", () => {
     const { result } = renderHook(() => useWindowManager(), { wrapper });
 
