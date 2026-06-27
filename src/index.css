@@ -880,6 +880,36 @@ body {
   }
 }
 
+/* Snap drop-zone preview (Phase 19, plan 19-03, CHROME-03). Shown while a window
+   is dragged to the left/right screen edge — a translucent overlay marks the
+   work-area HALF the window will snap to on release. Decorative + pointer-
+   transparent so it never intercepts the drag. Sits within the work area (below
+   the 40px menu bar, above the dock reserve) and below the dock/menu-bar chrome
+   (z 9000) but above the window stack. Theme-aware via --glass / --hi. */
+.desktop-snap-preview {
+  position: fixed;
+  top: 40px;
+  bottom: 88px;
+  width: 50vw;
+  z-index: 8000;
+  pointer-events: none;
+  border-radius: 16px;
+  background: var(--glass, rgba(255, 255, 255, 0.14));
+  border: 2px solid var(--hi, rgba(255, 255, 255, 0.5));
+  backdrop-filter: blur(8px) saturate(160%);
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  opacity: 0.75;
+}
+
+.desktop-snap-preview--left {
+  left: 0;
+}
+
+.desktop-snap-preview--right {
+  right: 0;
+}
+
 /* ===========================================================================
    Desktop chrome — menu bar, dock, launcher (Phase 16, plan 16-02)
    Glass surfaces reference the active theme vars (--glass / --bord / --text /

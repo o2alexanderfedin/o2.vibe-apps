@@ -49,6 +49,17 @@ import { slugFromText } from "./launcherUtils";
 const MENU_BAR_H = 40;
 const DOCK_RESERVE = 88;
 
+// Snap-to-half (Phase 19, plan 19-03, CHROME-03). When a drag commits with the
+// pointer within SNAP_THRESHOLD px of the left/right viewport edge, the window
+// snaps to that HALF of the work area instead of taking the dragged position.
+// The same threshold drives the during-drag drop-zone preview.
+const SNAP_THRESHOLD = 20;
+
+// Nominal frame width used for the right-edge snap check (mirrors the window
+// manager's DEFAULT_W). A drag whose committed x + this width reaches the right
+// edge snaps right, the symmetric counterpart to x ≤ SNAP_THRESHOLD on the left.
+const DEFAULT_FRAME_W = 400;
+
 // The work-area rect a maximized window fills. Read from the live viewport so a
 // resize-then-maximize uses the current size. The rect starts below the menu bar
 // and stops above the dock reserve.
@@ -60,6 +71,26 @@ function workArea(): { x: number; y: number; w: number; h: number } {
     y: MENU_BAR_H,
     w: vw,
     h: vh - MENU_BAR_H - DOCK_RESERVE,
+  };
+}
+
+// The half-rect a snapped window fills (Phase 19, plan 19-03). A LEFT snap takes
+// the left half of the work area; a RIGHT snap the right half. Same model as
+// maximize (work area, NOT the full viewport) so the menu bar + dock stay
+// visible — quarter/corner snap is deferred (CHROME-F1, half only this phase).
+function snapHalf(side: "left" | "right"): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} {
+  const wa = workArea();
+  const halfW = Math.round(wa.w / 2);
+  return {
+    x: side === "left" ? wa.x : wa.x + halfW,
+    y: wa.y,
+    w: halfW,
+    h: wa.h,
   };
 }
 
@@ -176,6 +207,12 @@ function DesktopShellInner() {
   // a hook). The CSS media query is the primary, JS-free degrade; this is the
   // testable signal on top of it.
   const [reducedMotion, setReducedMotion] = useState(false);
+  // Snap drop-zone preview (Phase 19, plan 19-03, CHROME-03). While a window is
+  // dragged within SNAP_THRESHOLD of the left/right edge, this carries that side
+  // so a translucent overlay marks the half the window will snap to on release;
+  // null renders no overlay. Driven by each WindowFrame's during-drag onEdgeChange
+  // signal and cleared at commit.
+  const [snapPreview, setSnapPreview] = useState<"left" | "right" | null>(null);
 
   // Stable refs so callbacks can read current manager/services without
   // re-creating handlers (and so handleModify can look up the live window list).
@@ -497,8 +534,16 @@ function DesktopShellInner() {
           // window renders exactly as before (transform-only, positions override
           // ?? entry x/y, CSS min-size) — no width/height passed, so the existing
           // position/drag tests stay byte-identical.
+          // A maximized window fills the work area; a SNAPPED window fills the
+          // left/right HALF of the work area (same rect-application path). Both
+          // ignore the drag positions override. A plain window renders unchanged
+          // (transform-only, positions override ?? entry x/y, CSS min-size).
           const override = positions.get(entry.instanceId);
-          const area = entry.maximized ? workArea() : null;
+          const area = entry.maximized
+            ? workArea()
+            : entry.snapSide
+              ? snapHalf(entry.snapSide)
+              : null;
           const x = area ? area.x : (override?.x ?? entry.x);
           const y = area ? area.y : (override?.y ?? entry.y);
           return (
@@ -513,6 +558,7 @@ function DesktopShellInner() {
               z={entry.z}
               minimized={entry.minimized}
               maximized={entry.maximized}
+              snapSide={entry.snapSide}
               w={area?.w}
               h={area?.h}
               Component={components.get(entry.instanceId) ?? null}
@@ -524,11 +570,27 @@ function DesktopShellInner() {
                   ? windowManager.unmaximize(entry.id)
                   : windowManager.maximize(entry.id)
               }
-              onMove={(nx, ny) =>
-                setPositions((prev) =>
-                  new Map(prev).set(entry.instanceId, { x: nx, y: ny }),
-                )
-              }
+              // During a drag, report edge proximity so the drop-zone preview
+              // shows the half the window would snap to (cleared on commit).
+              onEdgeChange={(side) => setSnapPreview(side)}
+              onMove={(nx, ny) => {
+                // At commit, snap to a half if the dragged position reached an
+                // edge (within SNAP_THRESHOLD), else keep the dragged position.
+                // Either way the during-drag preview clears.
+                setSnapPreview(null);
+                if (nx <= SNAP_THRESHOLD) {
+                  windowManager.snapLeft(entry.id);
+                } else if (
+                  nx + DEFAULT_FRAME_W >=
+                  window.innerWidth - SNAP_THRESHOLD
+                ) {
+                  windowManager.snapRight(entry.id);
+                } else {
+                  setPositions((prev) =>
+                    new Map(prev).set(entry.instanceId, { x: nx, y: ny }),
+                  );
+                }
+              }}
               onModify={(instruction) =>
                 void handleModify(entry.instanceId, instruction)
               }
@@ -536,6 +598,17 @@ function DesktopShellInner() {
           );
         })}
       </div>
+
+      {/* Snap drop-zone preview (Phase 19, plan 19-03, CHROME-03). While a drag
+          reaches a screen edge, a translucent overlay marks the work-area half
+          the window will snap to on release. Decorative (aria-hidden), pointer-
+          transparent, and sits above the windows but below the dock/menu bar. */}
+      {snapPreview !== null && (
+        <div
+          className={"desktop-snap-preview desktop-snap-preview--" + snapPreview}
+          aria-hidden="true"
+        />
+      )}
 
       {/* Layer 4: chrome over the windows — the menu bar (top) carries the
           front-most window's name + the account control (KeyDialog gate); the

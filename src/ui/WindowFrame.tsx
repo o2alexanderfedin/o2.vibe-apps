@@ -74,8 +74,13 @@ export interface WindowFrameProps {
   minimized: boolean;
   /** When true, the frame is zoomed to the work area (Phase 19). Disables drag. */
   maximized: boolean;
-  /** Optional explicit width/height applied ONLY when maximized, so the frame
-   *  fills the work area; the non-maximized path stays transform-only + CSS-min. */
+  /** When set, the frame is snapped to the left/right HALF of the work area
+   *  (Phase 19, plan 19-03, CHROME-03); null = not snapped. A snapped frame, like
+   *  a maximized one, gets an explicit work-area half-rect w/h. */
+  snapSide?: "left" | "right" | null;
+  /** Optional explicit width/height applied when maximized OR snapped, so the
+   *  frame fills the work area (or a half of it); a plain window stays
+   *  transform-only + CSS-min. */
   w?: number;
   h?: number;
   /** Resolved app component; null renders a neutral placeholder body. */
@@ -86,6 +91,10 @@ export interface WindowFrameProps {
   /** Toggle maximize ↔ restore (green traffic-light + double-click titlebar). */
   onMaximize: () => void;
   onMove: (x: number, y: number) => void;
+  /** During a drag, report whether the pointer is within the snap threshold of
+   *  the left/right edge (or null when not near an edge) so the desktop can show
+   *  a drop-zone preview (Phase 19, plan 19-03). */
+  onEdgeChange?: (side: "left" | "right" | null) => void;
   onModify?: (instruction: string) => void;
 }
 
@@ -98,6 +107,7 @@ export function WindowFrame({
   z,
   minimized,
   maximized,
+  snapSide,
   w,
   h,
   Component,
@@ -106,10 +116,38 @@ export function WindowFrame({
   onFocus,
   onMaximize,
   onMove,
+  onEdgeChange,
   onModify,
 }: WindowFrameProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [promptOpen, setPromptOpen] = useState(false);
+  // True only while a titlebar drag is in flight — gates the edge-proximity
+  // signal so a hover (non-drag pointermove) never raises a snap drop-zone.
+  const draggingRef = useRef(false);
+  // Last edge side reported to onEdgeChange — avoids re-notifying the parent on
+  // every pointermove when the side has not changed.
+  const lastEdgeRef = useRef<"left" | "right" | null>(null);
+
+  // A snapped frame, like a maximized one, is pinned to an explicit work-area
+  // rect (the left/right half) and gets explicit w/h. Both ignore the
+  // transform-only + CSS-min path so the frame fills its assigned rect.
+  const pinned = maximized || snapSide != null;
+
+  // The snap threshold mirrors DesktopShell's SNAP_THRESHOLD: a drag whose
+  // pointer is within this many px of the left/right viewport edge surfaces a
+  // drop-zone preview (and snaps on release, handled at commit in DesktopShell).
+  const EDGE_THRESHOLD = 20;
+
+  function reportEdge(clientX: number): void {
+    if (!onEdgeChange) return;
+    let side: "left" | "right" | null = null;
+    if (clientX <= EDGE_THRESHOLD) side = "left";
+    else if (clientX >= window.innerWidth - EDGE_THRESHOLD) side = "right";
+    if (side !== lastEdgeRef.current) {
+      lastEdgeRef.current = side;
+      onEdgeChange(side);
+    }
+  }
 
   function handleApply(instruction: string): void {
     setPromptOpen(false);
@@ -134,7 +172,8 @@ export function WindowFrame({
       className={
         "window-chrome" +
         (minimized ? " window-chrome--minimized" : "") +
-        (maximized ? " window-chrome--maximized" : "")
+        (maximized ? " window-chrome--maximized" : "") +
+        (snapSide ? " window-chrome--snap-" + snapSide : "")
       }
       // Position is driven ENTIRELY by transform (box origin stays at the
       // desktop's top-left 0,0 via the CSS top/left). useDrag writes the same
@@ -150,7 +189,7 @@ export function WindowFrame({
       style={{
         transform: `translate(${x}px, ${y}px)`,
         zIndex: z,
-        ...(maximized && w !== undefined && h !== undefined
+        ...(pinned && w !== undefined && h !== undefined
           ? { width: w, height: h }
           : null),
       }}
@@ -163,8 +202,25 @@ export function WindowFrame({
           // path is to disable drag while maximized). Early-return before
           // onFocus()/handlePointerDown so neither a drag nor a focus-raise fires.
           if (maximized) return;
+          draggingRef.current = true;
+          lastEdgeRef.current = null;
           onFocus();
           handlePointerDown(e);
+        }}
+        // During the drag, surface the edge-proximity signal so the desktop can
+        // show a snap drop-zone preview. Pointer capture (set by useDrag) routes
+        // moves here even past the titlebar bounds. Gated by draggingRef so a
+        // bare hover never raises a preview.
+        onPointerMove={(e) => {
+          if (!draggingRef.current) return;
+          reportEdge(e.clientX);
+        }}
+        onPointerUp={() => {
+          // The drag committed (or ended) — stop reporting and let DesktopShell
+          // clear the preview at onCommit. Clearing the local edge marker keeps
+          // the next drag's first report fresh.
+          draggingRef.current = false;
+          lastEdgeRef.current = null;
         }}
         // Double-clicking the titlebar toggles maximize ↔ restore.
         onDoubleClick={onMaximize}
