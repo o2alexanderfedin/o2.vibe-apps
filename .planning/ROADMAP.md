@@ -104,7 +104,12 @@ Carried forward from v1.0–v2.0 and extended for v3.0 — these are acceptance 
   - Snap preview requires a translucent overlay rendered by `DesktopShell` — coordinate with the existing `useDrag` pointer-capture rAF loop to detect edge proximity without breaking existing drag behavior.
   - Maximize must target the work area (`100vh - menuBarHeight - dockHeight`), not OS full-screen. Hard-code as a constraint; OS full-screen is permanently excluded.
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 19-01-menu-relocation-PLAN.md — Relocate the ⋮ contextual menu into the WindowFrame titlebar; strip AppShell to a content-only wrapper (CHROME-01)
+- [ ] 19-02-maximize-work-area-PLAN.md — Maximize = zoom-to-work-area via double-click + the green traffic-light; restore prior geometry (CHROME-02)
+- [ ] 19-03-snap-half-PLAN.md — Snap to left/right half via edge-drag drop-zone preview + Ctrl+Left/Right (CHROME-03)
+- [ ] 19-04-keyboard-shortcuts-PLAN.md — Cmd/Ctrl+W close + Cmd/Ctrl+M minimize with preventDefault; phase-19 gate (CHROME-04)
 **UI hint**: yes
 
 ---
