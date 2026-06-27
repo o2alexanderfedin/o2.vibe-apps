@@ -49,10 +49,12 @@ function makeProps(over: Partial<WindowFrameProps> = {}): WindowFrameProps {
     y: 50,
     z: 210,
     minimized: false,
+    maximized: false,
     Component: SimpleComponent as ComponentType,
     onClose: vi.fn(),
     onMinimize: vi.fn(),
     onFocus: vi.fn(),
+    onMaximize: vi.fn(),
     onMove: vi.fn(),
     onModify: vi.fn(),
     ...over,
@@ -155,6 +157,66 @@ describe("WindowFrame", () => {
       ".window-chrome",
     ) as HTMLElement;
     expect(chrome.className).toContain("window-chrome--minimized");
+  });
+
+  // Phase 19 (plan 19-02): the green max traffic-light is enabled and toggles
+  // maximize; double-clicking the titlebar does too; drag is gated while maxed.
+
+  it("clicking the green max traffic-light calls onMaximize once (and is enabled)", () => {
+    const onMaximizeSpy = vi.fn();
+    const { container } = render(
+      createElement(WindowFrame, makeProps({ onMaximize: onMaximizeSpy })),
+    );
+
+    const maxBtn = container.querySelector(
+      ".window-chrome__traffic-light--max",
+    ) as HTMLButtonElement;
+    expect(maxBtn).not.toBeNull();
+    // The button is no longer disabled (Phase 19 enables maximize).
+    expect(maxBtn.disabled).toBe(false);
+
+    fireEvent.click(maxBtn);
+    expect(onMaximizeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("double-clicking the titlebar calls onMaximize once", () => {
+    const onMaximizeSpy = vi.fn();
+    const { container } = render(
+      createElement(WindowFrame, makeProps({ onMaximize: onMaximizeSpy })),
+    );
+
+    const titlebar = container.querySelector(
+      ".window-chrome__titlebar",
+    ) as HTMLElement;
+    expect(titlebar).not.toBeNull();
+
+    fireEvent.doubleClick(titlebar);
+    expect(onMaximizeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start a drag (onFocus/onMove) on titlebar pointerdown while maximized", () => {
+    const onFocusSpy = vi.fn();
+    const onMoveSpy = vi.fn();
+    const { container } = render(
+      createElement(
+        WindowFrame,
+        makeProps({ maximized: true, onFocus: onFocusSpy, onMove: onMoveSpy }),
+      ),
+    );
+
+    const handle = container.querySelector(
+      ".titlebar-handle",
+    ) as HTMLElement;
+    expect(handle).not.toBeNull();
+
+    // While maximized, pointerdown on the titlebar must not begin a drag —
+    // neither onFocus nor a committed onMove fires.
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 160, clientY: 140 });
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 160, clientY: 140 });
+
+    expect(onFocusSpy).not.toHaveBeenCalled();
+    expect(onMoveSpy).not.toHaveBeenCalled();
   });
 
   it("pointerdown on titlebar calls onFocus and does not steal input focus from a body input", () => {
