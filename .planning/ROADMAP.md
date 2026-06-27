@@ -44,7 +44,7 @@ All 5 phases complete and merged to `develop`; 12/12 requirements satisfied; 552
 ### v2.0 Vibe OS (Phases 14–18)
 
 - [x] **Phase 14: Theme Foundation** — The CSS-variable theme contract and FOUC-safe persistence are established; the alias bridge keeps pre-v2 cached apps rendering. Dependency root for all v2.0 phases. (completed 2026-06-26)
-- [ ] **Phase 15: Window Manager** — Apps open as draggable glass windows with z-order, focus, minimize, close, and no React root leaks.
+- [x] **Phase 15: Window Manager** — Apps open as draggable glass windows with z-order, focus, minimize, close, and no React root leaks. ✅ merged b115f8a
 - [ ] **Phase 16: Desktop Shell** — The desktop surface, animated wallpaper, dock (with running indicators and the launcher icon), and menu bar (wordmark, active-app name, clock) replace the flat storefront as the root UI.
 - [ ] **Phase 17: Search / Launcher Panel** — A dock-launched panel lets the user describe an app or pick a pre-installed one; results open as windows on the desktop via the real produce loop.
 - [ ] **Phase 18: Theme-Aware Generation** — All produce-prompt branches mandate the CSS-var contract; a post-compile static check feeds violations into the self-heal loop; model-supplied names are sanitized; the CI lexicon gate covers all new surfaces.
@@ -242,7 +242,7 @@ v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 
 | 12. Sanctioned Network-Data Path | v1.1 | 5/5 | Complete | 2026-06-26 |
 | 13. Activate Widget Composition | v1.1 | TBD | Complete | 2026-06-26 |
 | 14. Theme Foundation | v2.0 | 5/5 | Complete   | 2026-06-26 |
-| 15. Window Manager | v2.0 | 0/4 | Planned | - |
+| 15. Window Manager | v2.0 | 4/4 | Complete   | 2026-06-26 |
 | 16. Desktop Shell | v2.0 | 0/TBD | Not started | - |
 | 17. Search / Launcher Panel | v2.0 | 0/TBD | Not started | - |
 | 18. Theme-Aware Generation | v2.0 | 0/TBD | Not started | - |
