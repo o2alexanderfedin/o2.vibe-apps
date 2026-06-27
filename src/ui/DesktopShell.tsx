@@ -280,11 +280,17 @@ function DesktopShellInner() {
   // free-text helper both paths route through.
   const handleDescribe = useCallback(
     async (text: string) => {
-      const slug = slugFromText(text);
-      const displayName = deriveDisplayName(slug, text);
-      const cacheKey = await registryKey("app", slug, text);
       setLauncherWorking(true);
       try {
+        // Derive the slug, title, and cache key INSIDE the try so a rejection
+        // from any of them (notably registryKey → crypto.subtle.digest, which
+        // rejects on a non-secure origin / hardened CSP / certain embedded
+        // webviews) still reaches the finally below: the launcher always closes
+        // and the working indicator always clears, and the rejection never
+        // escapes into the panel's handleSubmit as an unhandled rejection.
+        const slug = slugFromText(text);
+        const displayName = deriveDisplayName(slug, text);
+        const cacheKey = await registryKey("app", slug, text);
         // Route through the windowing machinery: mint the window first (so a
         // frame appears immediately showing the neutral "Preparing…" placeholder
         // while resolve is in flight), then resolve the component under the
