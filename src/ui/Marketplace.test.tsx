@@ -13,7 +13,7 @@
 //   4. Close then re-open a cached app → it renders again (silent-failure guard).
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, within, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Marketplace } from "./Marketplace";
 import { ServicesProvider } from "../services/ServicesProvider";
@@ -134,9 +134,11 @@ describe("Marketplace open flow (UI integration, injected deps)", () => {
     const region1 = await screen.findByRole("region", { name: "Calculator" });
     expect(within(region1).getByText("Produced Component")).toBeInTheDocument();
 
-    // Close it.
-    const closeButton = within(region1).getByRole("button", { name: "Close Calculator" });
-    await user.click(closeButton);
+    // Close it via the traffic-light (the authoritative close in windowed mode).
+    // Use fireEvent.click to avoid userEvent pointer-lifecycle issues on unmount.
+    const frame = region1.closest(".window-chrome") as HTMLElement;
+    const closeButton = within(frame).getByRole("button", { name: "Close" });
+    fireEvent.click(closeButton);
     await waitFor(() =>
       expect(screen.queryByRole("region", { name: "Calculator" })).not.toBeInTheDocument(),
     );

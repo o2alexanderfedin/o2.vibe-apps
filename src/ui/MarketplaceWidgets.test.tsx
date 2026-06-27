@@ -225,7 +225,9 @@ describe("Marketplace — composed app: all declared widgets render on first pai
     // Close the first window before re-opening (the open flow is windowed now —
     // each open mounts its own WindowFrame; closing the first keeps the assertion
     // about a clean SECOND open and avoids two concurrent copies of the same app).
-    fireEvent.click(within(firstRegion).getByRole("button", { name: "Close Calculator" }));
+    // Use the traffic-light close (authoritative in windowed mode; hideClose=true suppresses the inner ×).
+    const firstFrame = firstRegion.closest(".window-chrome") as HTMLElement;
+    fireEvent.click(within(firstFrame).getByRole("button", { name: "Close" }));
     await waitFor(() =>
       expect(screen.queryByRole("region", { name: "Calculator" })).not.toBeInTheDocument(),
     );
