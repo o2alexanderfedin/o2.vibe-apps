@@ -421,6 +421,90 @@ describe("useWindowManager", () => {
     expect(after1.z).toBeGreaterThan(after2.z);
   });
 
+  // Phase 19 (CR-01): a snapped window must be recoverable. The manager owns the
+  // transitions that FREE a snapped window — maximize clears snapSide (mutual
+  // exclusivity both ways), and an explicit unsnap clears snapSide back to null.
+
+  it("maximize clears snapSide (a snapped window can be cleanly maximized) — CR-01", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+    const winId = result.current.windows[0]!.id;
+
+    act(() => {
+      result.current.snapLeft(winId);
+    });
+    expect(result.current.windows[0]!.snapSide).toBe("left");
+
+    // Maximizing a snapped window must clear the snap marker — otherwise the
+    // frame carries BOTH window-chrome--maximized AND --snap-left, and the next
+    // un-maximize falls back into the snapped half rather than free geometry.
+    act(() => {
+      result.current.maximize(winId);
+    });
+    expect(result.current.windows[0]!.maximized).toBe(true);
+    expect(result.current.windows[0]!.snapSide).toBeNull();
+  });
+
+  it("unsnap clears snapSide back to null and restores prior geometry (CR-01/WR-01)", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+    const winId = result.current.windows[0]!.id;
+    const { x: priorX, y: priorY } = result.current.windows[0]!;
+
+    act(() => {
+      result.current.snapLeft(winId);
+    });
+    expect(result.current.windows[0]!.snapSide).toBe("left");
+
+    act(() => {
+      result.current.unsnap(winId);
+    });
+    const win = result.current.windows[0]!;
+    // unsnap frees the window back to a non-snapped state.
+    expect(win.snapSide).toBeNull();
+    // WR-01: unsnap READS restoreRect to return the window to its prior geometry.
+    expect(win.x).toBe(priorX);
+    expect(win.y).toBe(priorY);
+  });
+
+  it("unmaximize restores the captured prior geometry from restoreRect (WR-01)", () => {
+    const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+    act(() => {
+      result.current.open("notes", { title: "Notes", icon: "N" });
+    });
+    const winId = result.current.windows[0]!.id;
+
+    // Capture an explicit pre-maximize geometry, then maximize from it.
+    act(() => {
+      result.current.setGeometry(winId, 123, 234);
+    });
+    expect(result.current.windows[0]!.x).toBe(123);
+    expect(result.current.windows[0]!.y).toBe(234);
+
+    act(() => {
+      result.current.maximize(winId);
+    });
+    // restoreRect must capture the EFFECTIVE current geometry, not stale 0,0.
+    expect(result.current.windows[0]!.restoreRect!.x).toBe(123);
+    expect(result.current.windows[0]!.restoreRect!.y).toBe(234);
+
+    act(() => {
+      result.current.unmaximize(winId);
+    });
+    const win = result.current.windows[0]!;
+    expect(win.maximized).toBe(false);
+    // WR-01: unmaximize READS restoreRect so the window returns to where it was.
+    expect(win.x).toBe(123);
+    expect(win.y).toBe(234);
+  });
+
   it("isOpen is the primary guard: open returns true; close returns false; guarded late mount stays at baseline", () => {
     const { result } = renderHook(() => useWindowManager(), { wrapper });
 

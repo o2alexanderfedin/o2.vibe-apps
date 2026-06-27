@@ -268,6 +268,98 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     });
   });
 
+  // Phase 19 (CR-01): a snapped window must be recoverable — it can be dragged
+  // back to a free position (losing window-chrome--snap-*), and snapping then
+  // maximizing then un-maximizing must NOT fall back into the snapped half.
+
+  it("dragging a SNAPPED window to a free middle position un-snaps it and lands there (CR-01)", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    // Snap left first (via Ctrl+ArrowLeft so no drag is needed).
+    fireEvent(
+      window,
+      new KeyboardEvent("keydown", {
+        key: "ArrowLeft",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(frameByTitle("Notes").className).toContain(
+        "window-chrome--snap-left",
+      ),
+    );
+
+    // Now drag the titlebar to a free middle position (well away from either
+    // edge). The window must un-snap and land at the dragged position.
+    const handle = frameByTitle("Notes").querySelector(
+      ".titlebar-handle",
+    ) as HTMLElement;
+    const midX = Math.round(window.innerWidth / 2);
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: 200, clientY: 200 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: midX, clientY: 300 });
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: midX, clientY: 300 });
+
+    await waitFor(() => {
+      const f = frameByTitle("Notes");
+      // The snap marker is gone — the window is free again.
+      expect(f.className).not.toContain("window-chrome--snap-left");
+      expect(f.className).not.toContain("window-chrome--snap-right");
+      // It is no longer pinned to a half-rect (no explicit width override).
+      expect(f.style.width).toBe("");
+    });
+  });
+
+  it("snap → maximize → un-maximize does NOT fall back into the snapped half (CR-01)", async () => {
+    const { user } = renderDesktopShell();
+
+    await openApp(user, "Notes"); // seeded
+    await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
+
+    // Snap left.
+    fireEvent(
+      window,
+      new KeyboardEvent("keydown", {
+        key: "ArrowLeft",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(frameByTitle("Notes").className).toContain(
+        "window-chrome--snap-left",
+      ),
+    );
+
+    // Maximize (double-click the titlebar) — must clear the snap marker.
+    const titlebar = frameByTitle("Notes").querySelector(
+      ".window-chrome__titlebar",
+    ) as HTMLElement;
+    fireEvent.doubleClick(titlebar);
+    await waitFor(() => {
+      const f = frameByTitle("Notes");
+      expect(f.className).toContain("window-chrome--maximized");
+      expect(f.className).not.toContain("window-chrome--snap-left");
+    });
+
+    // Un-maximize — must return to a FREE window, not the snapped half.
+    const titlebar2 = frameByTitle("Notes").querySelector(
+      ".window-chrome__titlebar",
+    ) as HTMLElement;
+    fireEvent.doubleClick(titlebar2);
+    await waitFor(() => {
+      const f = frameByTitle("Notes");
+      expect(f.className).not.toContain("window-chrome--maximized");
+      expect(f.className).not.toContain("window-chrome--snap-left");
+      expect(f.className).not.toContain("window-chrome--snap-right");
+    });
+  });
+
   // Phase 19 (plan 19-03): Ctrl+Left / Ctrl+Right snap the ACTIVE window to the
   // work-area half WITHOUT a drag (CHROME-03). The keydown effect introduced
   // here is the same one Plan 04 (wave 4) will extend with Cmd/Ctrl+W/M.
