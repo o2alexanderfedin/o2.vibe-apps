@@ -55,6 +55,13 @@ export interface WindowManagerValue {
   close: (id: string) => void;
   /** Synchronous guard: returns false immediately after close even inside async flows. */
   isOpen: (id: string) => boolean;
+  /**
+   * Synchronous guard keyed on the manager-minted instanceId (not the window
+   * id). Mirrors open instanceIds the same way isOpen mirrors window ids, so an
+   * async open flow can check whether ITS instance is still open without a
+   * stale-windows-array round-trip through instanceId → id.
+   */
+  isOpenByInstance: (instanceId: string) => boolean;
 }
 
 export const WindowManagerContext =
@@ -96,8 +103,15 @@ export function WindowManagerProvider({
   // for the next React render cycle.
   const openIdsRef = useRef<Set<string>>(new Set());
 
+  // Parallel ref mirror keyed on instanceId, updated synchronously alongside
+  // openIdsRef in open()/close(). Lets isOpenByInstance() guard an async open
+  // flow without round-tripping instanceId → id through the (possibly
+  // not-yet-flushed) windows array.
+  const openInstanceIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     openIdsRef.current = new Set(windows.map(w => w.id));
+    openInstanceIdsRef.current = new Set(windows.map(w => w.instanceId));
   }, [windows]);
 
   const open = useCallback(
@@ -119,8 +133,13 @@ export function WindowManagerProvider({
           z: ++zTop,
           minimized: false,
         };
-        // Sync the ref immediately so isOpen() is accurate before the effect runs.
+        // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
+        // before the effect runs.
         openIdsRef.current = new Set([...prev.map(w => w.id), id]);
+        openInstanceIdsRef.current = new Set([
+          ...prev.map(w => w.instanceId),
+          instanceId,
+        ]);
         logger.info(`Window opened: ${id} (${appType})`);
         return [...prev, entry];
       });
@@ -158,17 +177,28 @@ export function WindowManagerProvider({
         // entry below lets React unmount the window's whole subtree.
         logger.info(`Window closed: ${id} (${entry.appType})`);
       }
-      // Remove from ref mirror synchronously so isOpen() returns false
-      // immediately, before the next render cycle.
+      // Remove from both ref mirrors synchronously so isOpen()/
+      // isOpenByInstance() return false immediately, before the next render.
       openIdsRef.current = new Set(
         [...openIdsRef.current].filter(wid => wid !== id),
       );
+      if (entry) {
+        openInstanceIdsRef.current = new Set(
+          [...openInstanceIdsRef.current].filter(
+            iid => iid !== entry.instanceId,
+          ),
+        );
+      }
       return prev.filter(w => w.id !== id);
     });
   }, []);
 
   const isOpen = useCallback((id: string): boolean => {
     return openIdsRef.current.has(id);
+  }, []);
+
+  const isOpenByInstance = useCallback((instanceId: string): boolean => {
+    return openInstanceIdsRef.current.has(instanceId);
   }, []);
 
   const value: WindowManagerValue = {
@@ -179,6 +209,7 @@ export function WindowManagerProvider({
     restore,
     close,
     isOpen,
+    isOpenByInstance,
   };
 
   return (

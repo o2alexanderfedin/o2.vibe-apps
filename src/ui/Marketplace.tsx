@@ -198,12 +198,15 @@ function MarketplaceInner() {
         icon: appType,
       });
 
-      // Resolve a manager instanceId to its current window id (the manager keeps
-      // a 1:1 instanceId↔id mapping). Used by the isOpen guard and the fallback
-      // retry handler. Reads the LIVE window list each call so it stays correct.
-      const windowIdOf = (iid: string): string =>
-        windowManagerRef.current.windows.find((x) => x.instanceId === iid)?.id ??
-        `win-from-${iid}`;
+      // Close the window for a failed/aborted open, keyed by instanceId. The
+      // manager owns the instanceId↔id mapping; if the entry is already gone
+      // (window closed concurrently) the close is a harmless no-op.
+      const closeByInstance = (iid: string) => {
+        const wid = windowManagerRef.current.windows.find(
+          (x) => x.instanceId === iid,
+        )?.id;
+        if (wid) handleClose(wid, iid);
+      };
 
       try {
         const intent = await resolveOpenApp(appType);
@@ -216,8 +219,10 @@ function MarketplaceInner() {
 
         // PRIMARY mid-produce-close guard (Pitfall 9): if the window was closed
         // while produce was in flight, drop the result and evict — never store a
-        // body for a window that no longer exists (would orphan a root).
-        if (!windowManagerRef.current.isOpen(windowIdOf(instanceId))) {
+        // body for a window that no longer exists. Keyed on the manager-minted
+        // instanceId (synchronously mirrored), so it never depends on the
+        // windows array having flushed.
+        if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
           evictLiveComponent(instanceId);
           return;
         }
@@ -233,7 +238,7 @@ function MarketplaceInner() {
         logger.error("Failed to open " + appType + ": " + String(err));
 
         // Even on failure, only render the fallback if the window still exists.
-        if (!windowManagerRef.current.isOpen(windowIdOf(instanceId))) {
+        if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
           return;
         }
 
@@ -242,7 +247,7 @@ function MarketplaceInner() {
           throttled,
           onConnect: () => setKeyDialogOpen(true),
           onRetry: () => {
-            handleClose(windowIdOf(instanceId), instanceId);
+            closeByInstance(instanceId);
             void handleOpenRef.current(appType, displayName);
           },
         });
