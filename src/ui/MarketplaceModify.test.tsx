@@ -44,14 +44,20 @@ const APP_WITH_WIDGET = (
 const WIDGET_ORIGINAL = "```tsx\nfunction App(){ return React.createElement('div', null, 'Original Gauge'); }\n```";
 const WIDGET_TWEAKED = "```tsx\nfunction App(){ return React.createElement('div', null, 'Tweaked Gauge'); }\n```";
 
-/** Open the app's `⋮`, type the instruction, and click Apply. */
+/** Open the app's `⋮`, type the instruction, and click Apply.
+ *  Phase 19: the ⋮ button is in the WindowFrame titlebar, not in the app region.
+ */
 async function applyModification(
   user: ReturnType<typeof userEvent.setup>,
   region: HTMLElement,
   instruction: string,
 ): Promise<void> {
-  await user.click(within(region).getByRole("button", { name: "App options" }));
-  const dialog = within(region).getByRole("dialog");
+  // Locate the enclosing window-chrome frame, then the titlebar within it.
+  const frame = region.closest(".window-chrome") as HTMLElement;
+  const titlebar = frame.querySelector(".window-chrome__titlebar") as HTMLElement;
+  await user.click(within(titlebar).getByRole("button", { name: "App options" }));
+  // The ContextualPrompt dialog renders inside the frame (not inside the region).
+  const dialog = within(frame).getByRole("dialog");
   await user.type(within(dialog).getByRole("textbox"), instruction);
   await user.click(within(dialog).getByRole("button", { name: "Apply" }));
 }
@@ -75,8 +81,12 @@ describe("Marketplace — `⋮` opens the shared popover naming the target (MOD-
     await openApp(user, "Notes"); // seeded — no transport needed
     const region = await screen.findByRole("region", { name: "Notes" });
 
-    await user.click(within(region).getByRole("button", { name: "App options" }));
-    const dialog = within(region).getByRole("dialog");
+    // Phase 19: the ⋮ button is in the WindowFrame titlebar, not in the region.
+    const frame = region.closest(".window-chrome") as HTMLElement;
+    const titlebar = frame.querySelector(".window-chrome__titlebar") as HTMLElement;
+    await user.click(within(titlebar).getByRole("button", { name: "App options" }));
+    // The ContextualPrompt dialog renders inside the frame (not inside the region).
+    const dialog = within(frame).getByRole("dialog");
     expect(within(dialog).getByText("Modify: Notes")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Apply" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeInTheDocument();

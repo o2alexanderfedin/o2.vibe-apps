@@ -40,6 +40,74 @@ import { Dock } from "./Dock";
 import { SearchLauncherPanel } from "./SearchLauncherPanel";
 import { slugFromText } from "./launcherUtils";
 
+// Work-area geometry (Phase 19, plan 19-02, CHROME-02). Maximize = zoom-to-work-
+// area, NOT the OS Fullscreen API: a maximized window fills the viewport MINUS
+// the menu bar (top) and the dock (bottom), so both stay visible — they ARE the
+// product identity. These constants mirror the CSS layout chrome:
+//   MENU_BAR_H  → .menu-bar { height: 40px } (src/index.css)
+//   DOCK_RESERVE → .dock bottom:16px + padding 9px*2 + icon 52px ≈ 88px reserved
+const MENU_BAR_H = 40;
+const DOCK_RESERVE = 88;
+
+// Snap-to-half (Phase 19, plan 19-03, CHROME-03). The SNAP_THRESHOLD that drives
+// both the during-drag drop-zone preview (WindowFrame) and the on-release commit
+// is the SHARED constant (IN-04), so preview and commit can never desynchronize.
+// The commit decision itself is driven off the frame's reported edge side (the
+// SAME signal as the preview) via WindowFrame's onSnap callback (WR-02), not a
+// recomputed x + nominal-width — which was unreliable for wide frames.
+
+// Read the current viewport size, guarded for SSR/older jsdom. The component
+// mirrors this into state via a resize listener (WR-03) so a maximized/snapped
+// window's rect is recomputed when the browser resizes rather than going stale.
+function readViewport(): { vw: number; vh: number } {
+  return {
+    vw: typeof window !== "undefined" ? window.innerWidth : 1280,
+    vh: typeof window !== "undefined" ? window.innerHeight : 800,
+  };
+}
+
+// The work-area rect a maximized window fills, computed from the GIVEN viewport
+// size (mirrored into state, WR-03) so a resize recomputes it. The rect starts
+// below the menu bar and stops above the dock reserve.
+function workArea(vw: number, vh: number): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} {
+  return {
+    x: 0,
+    y: MENU_BAR_H,
+    w: vw,
+    h: vh - MENU_BAR_H - DOCK_RESERVE,
+  };
+}
+
+// The half-rect a snapped window fills (Phase 19, plan 19-03), computed from the
+// GIVEN viewport size (WR-03). A LEFT snap takes the left half of the work area;
+// a RIGHT snap the right half. Same model as maximize (work area, NOT the full
+// viewport) so the menu bar + dock stay visible — quarter/corner snap is
+// deferred (CHROME-F1, half only this phase).
+function snapHalf(
+  side: "left" | "right",
+  vw: number,
+  vh: number,
+): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} {
+  const wa = workArea(vw, vh);
+  const halfW = Math.round(wa.w / 2);
+  return {
+    x: side === "left" ? wa.x : wa.x + halfW,
+    y: wa.y,
+    w: halfW,
+    h: wa.h,
+  };
+}
+
 // Neutral, hygiene-safe fallback shown when an app fails to open for a generic
 // reason. No mechanic-revealing language and no banned tokens — it just tells the
 // user the app didn't load and offers a retry, which also makes failures
@@ -127,12 +195,12 @@ function DesktopShellInner() {
   const [components, setComponents] = useState<
     Map<string, ComponentType | null>
   >(new Map());
-  // onMove position overrides keyed by instanceId. Committed drags update this
-  // so a re-render keeps the dragged position (useDrag's imperative transform
-  // is the during-drag source of truth; this is the committed source of truth).
-  const [positions, setPositions] = useState<
-    Map<string, { x: number; y: number }>
-  >(new Map());
+  // Committed free-drag positions live on the manager entry itself (via
+  // setGeometry), so x/y is the SINGLE authoritative source of truth (WR-01) —
+  // there is no separate positions map to drift from it. useDrag's imperative
+  // transform remains the during-drag source of truth; setGeometry is the
+  // committed one. Keeping geometry on the entry lets maximize/snap capture the
+  // EFFECTIVE current position into restoreRect for a faithful restore.
   // Owns the inline reconfigure dialog (RESIL-03): the desktop stays mounted and
   // usable while the KeyDialog is open over it, so a 401 never crashes the page
   // or blocks the rest of the desktop. Also reachable from the menu-bar account
@@ -153,6 +221,18 @@ function DesktopShellInner() {
   // a hook). The CSS media query is the primary, JS-free degrade; this is the
   // testable signal on top of it.
   const [reducedMotion, setReducedMotion] = useState(false);
+  // Snap drop-zone preview (Phase 19, plan 19-03, CHROME-03). While a window is
+  // dragged within SNAP_THRESHOLD of the left/right edge, this carries that side
+  // so a translucent overlay marks the half the window will snap to on release;
+  // null renders no overlay. Driven by each WindowFrame's during-drag onEdgeChange
+  // signal and cleared at commit.
+  const [snapPreview, setSnapPreview] = useState<"left" | "right" | null>(null);
+  // Mirror the viewport size into state (WR-03) so a maximized/snapped window's
+  // rect (workArea/snapHalf) recomputes on browser resize instead of going
+  // stale until some unrelated state change forces a re-render. Seeded from the
+  // live viewport and kept in-step via a resize listener (mirrors the matchMedia
+  // effect pattern below).
+  const [viewport, setViewport] = useState(() => readViewport());
 
   // Stable refs so callbacks can read current manager/services without
   // re-creating handlers (and so handleModify can look up the live window list).
@@ -170,12 +250,8 @@ function DesktopShellInner() {
         next.delete(instanceId);
         return next;
       });
-      setPositions((prev) => {
-        if (!prev.has(instanceId)) return prev;
-        const next = new Map(prev);
-        next.delete(instanceId);
-        return next;
-      });
+      // No positions map to clean up — the entry's own x/y (removed by the
+      // manager's close) is the only geometry store (WR-01).
     },
     [],
   );
@@ -438,12 +514,109 @@ function DesktopShellInner() {
     return () => mql.removeListener(onChange);
   }, []);
 
-  // The active window feeding the menu-bar name: the highest-z, non-minimized
-  // window is the front-most one (same z-ordering the manager's zTop tracks).
-  const activeWindow =
-    [...windowManager.windows]
-      .filter((w) => !w.minimized)
-      .sort((a, b) => b.z - a.z)[0] ?? null;
+  // Mirror the viewport size into state on browser resize (WR-03) so pinned
+  // (maximized/snapped) windows recompute their rect from the fresh size. Guard
+  // for environments without window. Re-syncs once on mount in case the size
+  // changed between the lazy initializer and the effect attaching.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onResize = () => setViewport(readViewport());
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Window-management keyboard shortcuts (Phase 19, plans 19-03 + 19-04).
+  // ONE global keydown listener serves every window shortcut:
+  //   • Ctrl+Left / Ctrl+Right (CHROME-03) — snap the ACTIVE window to the
+  //     work-area half WITHOUT a drag. Ctrl (not Cmd) is the snap modifier.
+  //   • Cmd/Ctrl+W (CHROME-04) — close the active window. The browser tab is
+  //     NEVER closed: preventDefault() suppresses the native tab-close.
+  //   • Cmd/Ctrl+M (CHROME-04) — minimize the active window. preventDefault()
+  //     suppresses the browser's native minimize.
+  // Snap keys on e.ctrlKey; close/minimize key on (metaKey || ctrlKey) so Cmd+W
+  // on macOS and Ctrl+W elsewhere both work — both branches coexist here.
+  //
+  // The handler acts (and calls preventDefault) ONLY when a Vibe OS window is
+  // active — i.e. activeId() resolves a front-most non-minimized window. With no
+  // window open the handler is a no-op (no preventDefault), so the browser tab
+  // stays closable (T-19-10) and Ctrl+Arrow text navigation outside a window
+  // stays free (T-19-08). The active-window-present gate is the same one the
+  // snap branch uses; it is the reliable T-19-10 mitigation (document.hasFocus()
+  // is unreliable in headless/background contexts and would silently disable the
+  // shortcut, so it is NOT used as the gate). It resolves the active window via
+  // activeId() (the same highest-z non-minimized definition the menu bar uses,
+  // T-19-12), reading the live manager via windowManagerRef so it never closes
+  // over a stale list. Lifecycle mirrors the matchMedia effect above (mount add /
+  // unmount remove); handleClose is in the deps (it is memoized — re-register is
+  // a no-op).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function handleKeyDown(e: KeyboardEvent): void {
+      // CR-02: never hijack keys the user is typing into an app's OWN editable
+      // field. Apps render real inputs in-tree, and Ctrl+Arrow (word-by-word
+      // caret), Cmd/Ctrl+W, and Cmd/Ctrl+M are standard editing chords there —
+      // bail early when the event originates from an editable target (mirrors
+      // the document.activeElement / tag checks in KeyDialog and
+      // SearchLauncherPanel).
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+
+      const wm = windowManagerRef.current;
+      const mod = e.metaKey || e.ctrlKey;
+      // WR-04: normalize case (Caps Lock / Shift produce "W"/"M") so the close/
+      // minimize chord still matches; the resulting key is compared lowercase.
+      const key = e.key.toLowerCase();
+
+      // Close / minimize the active window (Cmd on macOS, Ctrl elsewhere).
+      // WR-04: exclude Shift — Cmd+Shift+W is the browser's "close all tabs"
+      // chord and must NOT match OUR close shortcut, so the browser tab is never
+      // closed (CHROME-04).
+      if (mod && !e.shiftKey && (key === "w" || key === "m")) {
+        const activeId = wm.activeId();
+        // No active Vibe OS window → leave the native shortcut alone so the user
+        // can still close the browser tab (T-19-10).
+        if (activeId === null) return;
+        const active = wm.windows.find((w) => w.id === activeId);
+        if (!active) return;
+
+        e.preventDefault();
+        if (key === "w") handleClose(active.id, active.instanceId);
+        else wm.minimize(active.id);
+        return;
+      }
+
+      // Snap uses Ctrl specifically.
+      if (!e.ctrlKey) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+
+      const active = wm.activeId();
+      // No active Vibe OS window → leave the key alone (no snap, no preventDefault)
+      // so it does not hijack browser text navigation.
+      if (active === null) return;
+
+      e.preventDefault();
+      if (e.key === "ArrowLeft") wm.snapLeft(active);
+      else wm.snapRight(active);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleClose]);
+
+  // The active window feeding the menu-bar name comes from the manager's
+  // activeWindow() — the SINGLE source of truth for "front-most" that the
+  // keyboard-shortcut target also uses, so the name and the shortcut target can
+  // never disagree (WR-05).
+  const activeWindow = windowManager.activeWindow();
 
   return (
     <div
@@ -468,9 +641,23 @@ function DesktopShellInner() {
           so its z-index:100 sits above the blobs and below the dock/menu-bar. */}
       <div className="desktop">
         {windowManager.windows.map((entry) => {
-          const override = positions.get(entry.instanceId);
-          const x = override?.x ?? entry.x;
-          const y = override?.y ?? entry.y;
+          // A maximized window is pinned to the work area: its x/y come from
+          // workArea() (NOT the drag positions override / cascade), and it is
+          // sized to the work-area w/h so it fills the area. A non-maximized
+          // window renders exactly as before (transform-only, positions override
+          // ?? entry x/y, CSS min-size) — no width/height passed, so the existing
+          // position/drag tests stay byte-identical.
+          // A maximized window fills the work area; a SNAPPED window fills the
+          // left/right HALF of the work area (same rect-application path). A
+          // plain window renders transform-only from the entry's authoritative
+          // x/y (committed drags write back via setGeometry — WR-01), CSS min-size.
+          const area = entry.maximized
+            ? workArea(viewport.vw, viewport.vh)
+            : entry.snapSide
+              ? snapHalf(entry.snapSide, viewport.vw, viewport.vh)
+              : null;
+          const x = area ? area.x : entry.x;
+          const y = area ? area.y : entry.y;
           return (
             <WindowFrame
               key={entry.id}
@@ -482,15 +669,43 @@ function DesktopShellInner() {
               y={y}
               z={entry.z}
               minimized={entry.minimized}
+              maximized={entry.maximized}
+              snapSide={entry.snapSide}
+              w={area?.w}
+              h={area?.h}
               Component={components.get(entry.instanceId) ?? null}
               onClose={() => handleClose(entry.id, entry.instanceId)}
               onMinimize={() => windowManager.minimize(entry.id)}
               onFocus={() => windowManager.focus(entry.id)}
-              onMove={(nx, ny) =>
-                setPositions((prev) =>
-                  new Map(prev).set(entry.instanceId, { x: nx, y: ny }),
-                )
+              onMaximize={() =>
+                entry.maximized
+                  ? windowManager.unmaximize(entry.id)
+                  : windowManager.maximize(entry.id)
               }
+              // During a drag, report edge proximity so the drop-zone preview
+              // shows the half the window would snap to (cleared on commit).
+              onEdgeChange={(side) => setSnapPreview(side)}
+              // The drag ended within the snap threshold of an edge — snap to the
+              // SAME side the preview reported (WR-02). The during-drag preview
+              // clears. Always raise-to-front via the snap* call.
+              onSnap={(side) => {
+                setSnapPreview(null);
+                if (side === "left") windowManager.snapLeft(entry.id);
+                else windowManager.snapRight(entry.id);
+              }}
+              onMove={(nx, ny) => {
+                // Free (non-edge) commit. The during-drag preview clears.
+                setSnapPreview(null);
+                // If the window was snapped, clear the snap so it can actually
+                // move (CR-01) — otherwise the snap-half rect would keep winning
+                // in render and the drag would spring back.
+                if (entry.snapSide !== null) {
+                  windowManager.unsnap(entry.id);
+                }
+                // Write the dragged position back to the entry as the
+                // authoritative geometry (WR-01).
+                windowManager.setGeometry(entry.id, nx, ny);
+              }}
               onModify={(instruction) =>
                 void handleModify(entry.instanceId, instruction)
               }
@@ -498,6 +713,17 @@ function DesktopShellInner() {
           );
         })}
       </div>
+
+      {/* Snap drop-zone preview (Phase 19, plan 19-03, CHROME-03). While a drag
+          reaches a screen edge, a translucent overlay marks the work-area half
+          the window will snap to on release. Decorative (aria-hidden), pointer-
+          transparent, and sits above the windows but below the dock/menu bar. */}
+      {snapPreview !== null && (
+        <div
+          className={"desktop-snap-preview desktop-snap-preview--" + snapPreview}
+          aria-hidden="true"
+        />
+      )}
 
       {/* Layer 4: chrome over the windows — the menu bar (top) carries the
           front-most window's name + the account control (KeyDialog gate); the

@@ -43,6 +43,20 @@ export interface WindowEntry {
   y: number;
   z: number;
   minimized: boolean;
+  // Phase 19 (plan 19-02): maximize = zoom-to-work-area (NOT OS full-screen).
+  // `maximized` flags the window as filling the work area; `restoreRect` carries
+  // the pre-maximize geometry so unmaximize can return the window to where it
+  // was. The work-area rect itself is resolved in DesktopShell (it owns the
+  // menu-bar/dock layout constants); the manager only carries the toggle state.
+  maximized: boolean;
+  restoreRect: { x: number; y: number; w: number; h: number } | null;
+  // Phase 19 (plan 19-03): snap-to-half (CHROME-03). `snapSide` marks the window
+  // as snapped to the left or right HALF of the work area (null = not snapped).
+  // Like maximize, the half-rect geometry itself is resolved in DesktopShell
+  // (it owns the menu-bar/dock layout constants); the manager only carries the
+  // side marker so DesktopShell knows to apply a half-rect. A window cannot be
+  // both maximized and snapped — snapLeft/snapRight clear `maximized`.
+  snapSide: "left" | "right" | null;
 }
 
 export interface WindowManagerValue {
@@ -52,6 +66,27 @@ export interface WindowManagerValue {
   focus: (id: string) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
+  /** Commit a free (non-pinned) position back to the entry so `x`/`y` are the
+   *  authoritative source of truth — used when a drag commits to a free position.
+   *  Keeping geometry on the entry lets maximize/snap capture the EFFECTIVE
+   *  current position into restoreRect (WR-01) rather than a stale value. */
+  setGeometry: (id: string, x: number, y: number) => void;
+  /** Maximize: zoom to the work area (NOT OS full-screen). Captures the
+   *  EFFECTIVE pre-maximize geometry into restoreRect, clears any snap (a window
+   *  cannot be both maximized and snapped — CR-01), and raises the window. */
+  maximize: (id: string) => void;
+  /** Restore from maximized to the prior (pre-maximize) geometry: READS
+   *  restoreRect and writes x/y back so the window lands exactly where it was
+   *  (WR-01); raises the window. */
+  unmaximize: (id: string) => void;
+  /** Snap to the LEFT half of the work area (CHROME-03). Captures the EFFECTIVE
+   *  pre-snap geometry into restoreRect, clears `maximized`, and raises the window. */
+  snapLeft: (id: string) => void;
+  /** Snap to the RIGHT half of the work area (CHROME-03). Same capture + raise. */
+  snapRight: (id: string) => void;
+  /** Clear a snap: returns a snapped window to a FREE, non-pinned state, READING
+   *  restoreRect to restore its prior geometry (CR-01/WR-01); raises the window. */
+  unsnap: (id: string) => void;
   /** Close window: removes the entry; React unmounts the in-tree subtree. */
   close: (id: string) => void;
   /** Synchronous guard: returns false immediately after close even inside async flows. */
@@ -63,6 +98,14 @@ export interface WindowManagerValue {
    * stale-windows-array round-trip through instanceId → id.
    */
   isOpenByInstance: (instanceId: string) => boolean;
+  /** Returns the active (topmost non-minimized) window ENTRY, or null if none.
+   *  The SINGLE source of truth for "which window is front-most" — both the
+   *  keyboard-shortcut target and the menu-bar active name derive from it so
+   *  they can never disagree (WR-05). */
+  activeWindow: () => WindowEntry | null;
+  /** Returns the active (topmost non-minimized) window id, or null if none.
+   *  Convenience wrapper over activeWindow() (same selection logic, WR-05). */
+  activeId: () => string | null;
 }
 
 export const WindowManagerContext =
@@ -110,6 +153,12 @@ export function WindowManagerProvider({
   // not-yet-flushed) windows array.
   const openInstanceIdsRef = useRef<Set<string>>(new Set());
 
+  // Ref mirror of the full windows array, kept in-step with state. Lets
+  // activeId() (and any other live-read accessor) resolve the front-most window
+  // synchronously inside an event handler without a stale-closure round-trip.
+  const windowsRef = useRef<WindowEntry[]>(windows);
+  windowsRef.current = windows;
+
   useEffect(() => {
     openIdsRef.current = new Set(windows.map(w => w.id));
     openInstanceIdsRef.current = new Set(windows.map(w => w.instanceId));
@@ -138,6 +187,9 @@ export function WindowManagerProvider({
           y,
           z,
           minimized: false,
+          maximized: false,
+          restoreRect: null,
+          snapSide: null,
         };
         // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
         // before the effect runs.
@@ -179,6 +231,121 @@ export function WindowManagerProvider({
     );
   }, []);
 
+  const setGeometry = useCallback((id: string, x: number, y: number) => {
+    // Write a committed free position back to the entry so `x`/`y` stay the
+    // authoritative geometry. A pinned (maximized/snapped) window ignores this
+    // (its rect is resolved in DesktopShell), so guard against overwriting the
+    // pre-pin geometry that restoreRect/un-pin relies on.
+    setWindows(prev =>
+      prev.map(w =>
+        w.id === id && !w.maximized && w.snapSide === null
+          ? { ...w, x, y }
+          : w,
+      ),
+    );
+  }, []);
+
+  const maximize = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    // Maximizing raises the window to the front (standard desktop behavior).
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w => {
+        if (w.id !== id) return w;
+        // Capture the EFFECTIVE current geometry (w.x/w.y are kept authoritative
+        // via setGeometry on drag commit, WR-01) so unmaximize returns the
+        // window exactly where it was. Clear any snap — a window cannot be both
+        // maximized and snapped (CR-01). The maximized rect itself is the work
+        // area, resolved in DesktopShell; w/h default to the app size.
+        return {
+          ...w,
+          maximized: true,
+          snapSide: null,
+          restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H },
+          z,
+        };
+      }),
+    );
+  }, []);
+
+  const unmaximize = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w => {
+        if (w.id !== id) return w;
+        // READ restoreRect to return the window to its prior geometry (WR-01).
+        // Fall back to the current x/y if no rect was captured.
+        const rect = w.restoreRect;
+        return {
+          ...w,
+          maximized: false,
+          x: rect ? rect.x : w.x,
+          y: rect ? rect.y : w.y,
+          z,
+        };
+      }),
+    );
+  }, []);
+
+  const snapLeft = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    // Snapping raises the window to the front (standard desktop behavior).
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w => {
+        if (w.id !== id) return w;
+        // Capture the EFFECTIVE pre-snap geometry so unsnap returns the window
+        // where it was (WR-01). A window cannot be both maximized and snapped —
+        // clear `maximized`. The half-rect itself is resolved in DesktopShell.
+        return {
+          ...w,
+          snapSide: "left",
+          maximized: false,
+          restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H },
+          z,
+        };
+      }),
+    );
+  }, []);
+
+  const snapRight = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w => {
+        if (w.id !== id) return w;
+        return {
+          ...w,
+          snapSide: "right",
+          maximized: false,
+          restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H },
+          z,
+        };
+      }),
+    );
+  }, []);
+
+  const unsnap = useCallback((id: string) => {
+    // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
+    // Clear the snap and return the window to a FREE, non-pinned state, READING
+    // restoreRect to restore its prior geometry (CR-01/WR-01).
+    const z = ++zTop;
+    setWindows(prev =>
+      prev.map(w => {
+        if (w.id !== id) return w;
+        const rect = w.restoreRect;
+        return {
+          ...w,
+          snapSide: null,
+          x: rect ? rect.x : w.x,
+          y: rect ? rect.y : w.y,
+          z,
+        };
+      }),
+    );
+  }, []);
+
   const close = useCallback((id: string) => {
     setWindows(prev => {
       const entry = prev.find(w => w.id === id);
@@ -211,15 +378,39 @@ export function WindowManagerProvider({
     return openInstanceIdsRef.current.has(instanceId);
   }, []);
 
+  const activeWindow = useCallback((): WindowEntry | null => {
+    // The active window is the highest-z, non-minimized one (the same z-ordering
+    // zTop tracks). Read the live ref mirror so an event-handler caller resolves
+    // the current front-most window without a stale-closure round-trip. This is
+    // the SINGLE definition both activeId() and DesktopShell's menu-bar name
+    // derive from (WR-05).
+    const top = [...windowsRef.current]
+      .filter(w => !w.minimized)
+      .sort((a, b) => b.z - a.z)[0];
+    return top ?? null;
+  }, []);
+
+  const activeId = useCallback((): string | null => {
+    return activeWindow()?.id ?? null;
+  }, [activeWindow]);
+
   const value: WindowManagerValue = {
     windows,
     open,
     focus,
     minimize,
     restore,
+    setGeometry,
+    maximize,
+    unmaximize,
+    snapLeft,
+    snapRight,
+    unsnap,
     close,
     isOpen,
     isOpenByInstance,
+    activeWindow,
+    activeId,
   };
 
   return (

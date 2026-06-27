@@ -57,7 +57,7 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
 
 ### v3.0 Trusted Desktop (Phases 19–22)
 
-- [ ] **Phase 19: Window Chrome & Menu Relocation** - Relocate the `⋮` contextual menu into the window titlebar (right-aligned), add maximize/snap/keyboard shortcuts; hard prerequisite for all iframe work.
+- [x] **Phase 19: Window Chrome & Menu Relocation** - Relocate the `⋮` contextual menu into the window titlebar (right-aligned), add maximize/snap/keyboard shortcuts; hard prerequisite for all iframe work. (completed 2026-06-27)
 - [ ] **Phase 20: Opaque-Origin Frame Isolation** - Convert each app body to `<iframe sandbox="allow-scripts">` brokered by `postMessage`; the API key never enters the frame; 727 RTL tests remain green via in-tree fallback.
 - [ ] **Phase 21: Desktop Persistence** - Restore window geometry, z-order, open-app set, and minimized state across reloads using additive keys in the existing IDB `settings` store; no DB version bump.
 - [ ] **Phase 22: Theme Editor & Custom Themes** - Create, name, edit, and save custom themes over the 12-var contract; custom themes appear in the menu-bar switcher and survive reload FOUC-free.
@@ -94,7 +94,7 @@ Carried forward from v1.0–v2.0 and extended for v3.0 — these are acceptance 
 
 **Success Criteria** (what must be TRUE):
   1. A user clicks the `⋮` button in the window titlebar (right of the traffic lights) and the contextual modify/clone/remove prompt opens — the in-body app-shell header with its `⋮` is gone; MOD-01 through MOD-04 all still work.
-  2. A user double-clicks the titlebar (or presses `Cmd/Ctrl+Z` maximize shortcut) and the window zooms to fill the work area between menu bar and dock — not OS full-screen, dock and menu bar remain visible; double-clicking again restores the prior geometry.
+  2. A user double-clicks the titlebar (or clicks the green traffic-light) and the window zooms to fill the work area between menu bar and dock — not OS full-screen, dock and menu bar remain visible; double-clicking again restores the prior geometry.
   3. A user drags a window to the left or right screen edge, sees a translucent drop-zone preview, releases, and the window snaps to that half; pressing `Ctrl+Left` or `Ctrl+Right` snaps the active window to the corresponding half without a drag.
   4. Pressing `Cmd/Ctrl+W` closes the active window and pressing `Cmd/Ctrl+M` minimizes it — the browser tab is never accidentally closed (`preventDefault` confirmed by a test that asserts `event.defaultPrevented`).
   5. All prior 727 tests remain green; the hygiene gate passes; no new runtime npm dependencies.
@@ -104,7 +104,19 @@ Carried forward from v1.0–v2.0 and extended for v3.0 — these are acceptance 
   - Snap preview requires a translucent overlay rendered by `DesktopShell` — coordinate with the existing `useDrag` pointer-capture rAF loop to detect edge proximity without breaking existing drag behavior.
   - Maximize must target the work area (`100vh - menuBarHeight - dockHeight`), not OS full-screen. Hard-code as a constraint; OS full-screen is permanently excluded.
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+- [x] 19-01-menu-relocation-PLAN.md — Relocate the ⋮ contextual menu into the WindowFrame titlebar; strip AppShell to a content-only wrapper (CHROME-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 19-02-maximize-work-area-PLAN.md — Maximize = zoom-to-work-area via double-click + the green traffic-light; restore prior geometry (CHROME-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 19-03-snap-half-PLAN.md — Snap to left/right half via edge-drag drop-zone preview + Ctrl+Left/Right (CHROME-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 19-04-keyboard-shortcuts-PLAN.md — Cmd/Ctrl+W close + Cmd/Ctrl+M minimize with preventDefault; phase-19 gate (CHROME-04)
 **UI hint**: yes
 
 ---
@@ -218,7 +230,7 @@ v1.0 → v1.1 → v2.0 → v3.0 phases execute in numeric order: 1 → … → 1
 | 16. Desktop Shell | v2.0 | 4/4 | Complete | 2026-06-27 |
 | 17. Search / Launcher Panel | v2.0 | 4/4 | Complete | 2026-06-26 |
 | 18. Theme-Aware Generation | v2.0 | 4/4 | Complete | 2026-06-26 |
-| 19. Window Chrome & Menu Relocation | v3.0 | 0/TBD | Not started | - |
+| 19. Window Chrome & Menu Relocation | v3.0 | 4/4 | Complete   | 2026-06-27 |
 | 20. Opaque-Origin Frame Isolation | v3.0 | 0/TBD | Not started | - |
 | 21. Desktop Persistence | v3.0 | 0/TBD | Not started | - |
 | 22. Theme Editor & Custom Themes | v3.0 | 0/TBD | Not started | - |

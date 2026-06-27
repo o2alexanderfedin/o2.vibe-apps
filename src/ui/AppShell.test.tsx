@@ -1,12 +1,11 @@
-// AppShell unit tests (Phase 16, plan 16-01).
+// AppShell unit tests (Phase 16, plan 16-01; updated Phase 19, plan 19-01).
 //
 // Coverage:
-//   1. Without hideClose → inner × close button renders (default/standalone behavior).
-//   2. With hideClose={true} → inner × close button is suppressed.
-//   3. With hideClose={true} → ⋮ "App options" button still renders.
+//   1. AppShell renders children inside a labeled region (role="region") with
+//      aria-label equal to displayName. No header, no buttons — content-only.
 
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, cleanup, screen } from "@testing-library/react";
+import { describe, it, expect, afterEach } from "vitest";
+import { render, cleanup, screen, within } from "@testing-library/react";
 import { createElement } from "react";
 import { AppShell } from "./AppShell";
 
@@ -15,58 +14,18 @@ afterEach(() => {
 });
 
 describe("AppShell", () => {
-  it("renders the inner × close button by default (no hideClose)", () => {
+  it("renders children inside a labeled region", () => {
     render(
       createElement(
         AppShell,
-        {
-          displayName: "Notes",
-          onClose: vi.fn(),
-        },
-        createElement("div", null, "content"),
+        { displayName: "Notes" },
+        createElement("div", { "data-testid": "child" }, "content"),
       ),
     );
 
-    // The inner × close button should be present with aria-label "Close Notes"
-    expect(
-      screen.getByRole("button", { name: "Close Notes" }),
-    ).toBeInTheDocument();
-  });
-
-  it("suppresses the inner × close button when hideClose={true}", () => {
-    render(
-      createElement(
-        AppShell,
-        {
-          displayName: "Notes",
-          onClose: vi.fn(),
-          hideClose: true,
-        },
-        createElement("div", null, "content"),
-      ),
-    );
-
-    // The inner × close button must NOT be present when framed
-    const closeBtn = screen.queryByRole("button", { name: "Close Notes" });
-    expect(closeBtn).toBeNull();
-  });
-
-  it("still renders the ⋮ App options button when hideClose={true}", () => {
-    render(
-      createElement(
-        AppShell,
-        {
-          displayName: "Notes",
-          onClose: vi.fn(),
-          hideClose: true,
-        },
-        createElement("div", null, "content"),
-      ),
-    );
-
-    // The ⋮ options button must remain even when hideClose suppresses the ×
-    expect(
-      screen.getByRole("button", { name: "App options" }),
-    ).toBeInTheDocument();
+    const region = screen.getByRole("region", { name: "Notes" });
+    expect(within(region).getByTestId("child")).toBeInTheDocument();
+    // AppShell is content-only: no buttons (⋮ and × are in WindowFrame titlebar)
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });
