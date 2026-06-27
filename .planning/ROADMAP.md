@@ -106,9 +106,16 @@ Carried forward from v1.0–v2.0 and extended for v3.0 — these are acceptance 
 
 **Plans**: 4 plans
 Plans:
+**Wave 1**
 - [ ] 19-01-menu-relocation-PLAN.md — Relocate the ⋮ contextual menu into the WindowFrame titlebar; strip AppShell to a content-only wrapper (CHROME-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 19-02-maximize-work-area-PLAN.md — Maximize = zoom-to-work-area via double-click + the green traffic-light; restore prior geometry (CHROME-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 19-03-snap-half-PLAN.md — Snap to left/right half via edge-drag drop-zone preview + Ctrl+Left/Right (CHROME-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 19-04-keyboard-shortcuts-PLAN.md — Cmd/Ctrl+W close + Cmd/Ctrl+M minimize with preventDefault; phase-19 gate (CHROME-04)
 **UI hint**: yes
 
