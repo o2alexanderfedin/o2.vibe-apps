@@ -309,8 +309,15 @@ function DesktopShellInner() {
           target.appType,
           routed.instruction,
         );
+        // Resolve the tweak under the window's OWN instanceId (not a synthetic
+        // id) so the live-component cache keeps exactly ONE key per window —
+        // the one handleClose evicts. First evict the current live component so
+        // tier-1 misses and the differing tweakKey drives a re-instantiate; the
+        // fresh component then lands back under this window's instanceId, and
+        // closing the window reclaims it with no leak (WR-01).
+        evictLiveComponent(instanceId);
         const Component = await resolveComponent(
-          instanceId + "-tweak-" + tweakKey.slice(0, 8),
+          instanceId,
           target.appType,
           tweakKey,
           services,
