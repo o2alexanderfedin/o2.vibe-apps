@@ -88,6 +88,9 @@ function requireShim(specifier: string): unknown {
 const fn = new Function("module", "exports", "React", "useWidget", "runHandler", "require", transpiledJS);
 fn(mod, mod.exports, sharedReact, useWidget, runHandler, requireShim);
 // App is read from mod.exports.default ?? mod.exports.App, with a second-pass return-App fallback.
+// NOTE: the app-component scope injects EXACTLY (module, exports, React, useWidget, runHandler, require).
+// `fetchData` is NOT in this scope — it lives only in the handler.ts constrained scope, reached
+// indirectly from the app via runHandler. The in-frame bootstrap must mirror THIS param list exactly.
 ```
 
 From src/ui/VibeThemeProvider.tsx (the 12 theme var NAMES — bake EXACTLY these into the srcdoc <style> and accept EXACTLY these in THEME_PUSH):
@@ -114,6 +117,8 @@ Parent CSP: default-src 'self'; script-src 'self' 'unsafe-eval' 'sha256-...'; st
 In-frame <meta> to emit inside the srcdoc (tighter — belt-and-suspenders): 
   default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'self' data:
 (unsafe-eval is REQUIRED for new Function; unsafe-inline for the bootstrap <script> and baked <style>; connect-src 'none' hard-blocks frame exfiltration — the parent brokers all data. VERIFY the inlined React + new Function still run under this meta before committing.)
+
+CSP-RISK NOTE: whether this exact in-frame CSP actually permits the inlined React + `new Function` to execute is NOT provable in JSDOM (JSDOM does not run the srcdoc document or enforce its meta CSP). It is only observable in Plan 05's Playwright run against a real Chromium frame. If 20-05's RENDER assertion fails (a blank frame / CSP-blocked script in the browser console), the most likely root cause is THIS in-frame CSP meta — the fix is to loosen `script-src` / `style-src` (e.g. confirm `'unsafe-inline' 'unsafe-eval'` are present and add a hash if a stricter posture is wanted) while keeping `connect-src 'none'` intact.
 </csp_facts>
 </context>
 
@@ -169,28 +174,60 @@ In-frame <meta> to emit inside the srcdoc (tighter — belt-and-suspenders):
 </task>
 
 <task type="tdd" tdd="true">
-  <name>Task 3: RED+GREEN — frameMount.ts: registry, broadcastTheme, and type-enforced buildSrcdoc</name>
+  <name>Task 3a: RED+GREEN — frameMount.ts: frame registry + broadcastTheme</name>
   <read_first>
     - src/execution/mount.ts lines 19-82 (the Map register/unregister/safe-delete lifecycle to mirror)
+    - src/ui/VibeThemeProvider.tsx lines 40-101 (the 12 theme var names — the broadcast payload shape)
+    - src/lib/logger.ts (the gated logger for the per-frame try/catch)
+    - .planning/phases/20-opaque-origin-frame-isolation/20-PATTERNS.md lines 112-163 (frameMount Map shape + broadcastTheme shape)
+  </read_first>
+  <behavior>
+    - Test: `registerFrame("a", el)` then `broadcastTheme({"--text":"#000"})` calls `el.contentWindow.postMessage` once with an envelope `{ type: "THEME_PUSH", payload: { vars } }` and targetOrigin `"*"`.
+    - Test: `registerFrame("a", elA)` + `registerFrame("b", elB)`, then `broadcastTheme(vars)` posts to BOTH; after `unregisterFrame("a")`, broadcast posts only to elB.
+    - Test: `unregisterFrame("never-registered")` is a no-op (no throw).
+    - Test: a registered frame whose `contentWindow` is null (or whose postMessage throws) does NOT break the broadcast loop — the other frames still receive the push (gated-logger swallow per frame).
+  </behavior>
+  <action>
+    Create `src/execution/frameMount.ts` and add the registry half. Mirror `mount.ts`: module-level `const frameRefs = new Map<string, HTMLIFrameElement>()`; `export function registerFrame(instanceId, el)`, `export function unregisterFrame(instanceId)` (safe-delete: no-op if absent), `export function broadcastTheme(vars: Record<string,string>)` iterating `frameRefs` and calling `el.contentWindow?.postMessage({ type: "THEME_PUSH", payload: { vars } }, "*")` (mirror 20-PATTERNS.md broadcastTheme). Wrap each per-frame post in try/catch routed to the gated `logger` so one dead frame never breaks the loop. No banned tokens anywhere in the file (HYGIENE-07). The `buildSrcdoc` builder + the React-embed bootstrap land in Task 3b in the SAME file.
+  </action>
+  <verify>
+    <automated>npx vitest run src/execution/frameMount.test.ts</automated>
+  </verify>
+  <acceptance_criteria>
+    - `src/execution/frameMount.ts` exports `registerFrame`, `unregisterFrame`, `broadcastTheme` (source assertions).
+    - `broadcastTheme` posts `{ type: "THEME_PUSH", payload: { vars } }` with targetOrigin `"*"` to every registered frame (behavior assertion).
+    - `unregisterFrame` of an absent id is a no-op; broadcast skips unregistered frames; a throwing/null frame does not break the loop (behavior assertions).
+    - `npx vitest run src/execution/frameMount.test.ts` exits 0.
+  </acceptance_criteria>
+  <done>frameMount.ts provides the frame registry + theme broadcast with a fault-tolerant per-frame loop, proven by tests.</done>
+</task>
+
+<task type="tdd" tdd="true">
+  <name>Task 3b: RED+GREEN — frameMount.ts: type-enforced buildSrcdoc + React-embed bootstrap + in-frame CSP meta</name>
+  <read_first>
+    - src/execution/frameMount.ts (the registry half from Task 3a — extend the SAME file)
     - src/execution/reactEmbed.generated.ts (the REACT_EMBED constant from Task 2 — consumed in the srcdoc bootstrap)
-    - src/execution/instantiate.ts lines 68-119 (the in-frame new Function scope + require-shim the bootstrap must mirror so the SAME generated code runs in-frame)
+    - src/execution/instantiate.ts lines 68-119 (the in-frame new Function scope + require-shim the bootstrap must mirror so the SAME generated code runs in-frame — EXACTLY (module, exports, React, useWidget, runHandler, require))
     - src/ui/VibeThemeProvider.tsx lines 40-101 (the 12 theme var names baked into the <style>)
-    - .planning/phases/20-opaque-origin-frame-isolation/20-PATTERNS.md lines 112-169 (frameMount Map shape, broadcastTheme shape, SRCDOC_TEMPLATE built-once constant)
+    - .planning/phases/20-opaque-origin-frame-isolation/20-PATTERNS.md lines 165-169 (the SRCDOC built-once module-level constant)
     - .planning/phases/20-opaque-origin-frame-isolation/20-CONTEXT.md lines 25-44 (srcdoc + inlined React + in-frame rendering mechanics + in-frame CSP + key-never-crosses)
-    - The `<csp_facts>` block above (the exact in-frame CSP meta to emit)
+    - The `<csp_facts>` block above (the exact in-frame CSP meta to emit + the CSP-RISK NOTE)
   </read_first>
   <behavior>
     - Test: `buildSrcdoc(transpiledJS, themeVars, parentOrigin)` returns a string containing `<iframe`-free document HTML with `<meta http-equiv="Content-Security-Policy"` whose content includes `connect-src 'none'` and `script-src 'unsafe-inline' 'unsafe-eval'`.
     - Test: the returned srcdoc contains a `<style>` block setting all 12 theme vars from `themeVars` on `:root` (assert at least `--text` and `--glass2` appear with their passed values).
     - Test (KEY NEVER CROSSES): `buildSrcdoc("const App=()=>null;", {"--text":"#fff"}, "https://host.test")` output does NOT match `/sk-ant/` even when called — and the function signature accepts exactly 3 params (a 4th arg is rejected at the type level; assert via a tsc-checked test or by reading `buildSrcdoc.length === 3`).
     - Test: the srcdoc embeds `parentOrigin` as the frame->parent postMessage target (assert the passed `parentOrigin` string appears in the bootstrap script, used for `parent.postMessage(env, PARENT_ORIGIN)`).
-    - Test: `registerFrame("a", el)` then `broadcastTheme({"--text":"#000"})` calls `el.contentWindow.postMessage` once with an envelope `{ type: "THEME_PUSH", payload: { vars } }` and targetOrigin `"*"`.
-    - Test: `registerFrame("a", elA)` + `registerFrame("b", elB)`, then `broadcastTheme(vars)` posts to BOTH; after `unregisterFrame("a")`, broadcast posts only to elB.
-    - Test: `unregisterFrame("never-registered")` is a no-op (no throw).
     - Test: the `SRCDOC_HEAD` / template constant that carries the ~553KB React embed is built once at module load (assert two `buildSrcdoc` calls reuse the same embedded-React substring, i.e. the embed is referenced, not rebuilt — assert the REACT_EMBED.react substring is present in output).
   </behavior>
   <action>
-    Create `src/execution/frameMount.ts`. Mirror `mount.ts`: module-level `const frameRefs = new Map<string, HTMLIFrameElement>()`; `export function registerFrame(instanceId, el)`, `export function unregisterFrame(instanceId)` (safe-delete), `export function broadcastTheme(vars: Record<string,string>)` iterating `frameRefs` and calling `el.contentWindow?.postMessage({ type: "THEME_PUSH", payload: { vars } }, "*")` (mirror 20-PATTERNS.md broadcastTheme; wrap each post in try/catch -> gated logger so one dead frame never breaks the loop). Build the srcdoc as `export function buildSrcdoc(transpiledJS: string, themeVars: Record<string, string>, parentOrigin: string): string` — EXACTLY three params, no `services`/key param (SANDBOX-02 structural guarantee). Compose the document: `<head>` with the in-frame CSP `<meta>` from `<csp_facts>`, a `<style>` injecting the 12 themeVars onto `:root` plus the infinite-resize guard (`#root{height:max-content} body{overflow:hidden;margin:0}`), then a bootstrap `<script>` that (1) defines a `process` shim if needed, (2) builds scheduler/react/react-dom/react-dom-client from `REACT_EMBED` via a CJS require-shim chain assigning `window.React`/`window.ReactDOM`, (3) defines the in-frame RPC stubs (`useWidget`, `runHandler`, `fetchData`) that postMessage to `parent` with `parentOrigin` and await correlated results, (4) listens for `VIBE_BOOTSTRAP` -> runs `new Function("module","exports","React","useWidget","runHandler","require", transpiledJS)` mirroring instantiate.ts, then `ReactDOM.createRoot(#root).render(React.createElement(App))`, (5) installs a `ResizeObserver` on `#root` posting `FRAME_RESIZE`, a `window.onerror` posting `FRAME_ERROR`, and a `FRAME_PING`->`FRAME_PONG` responder, and posts `FRAME_READY` on load. Hoist the heavy, app-independent prefix (CSP meta + React embed + bootstrap skeleton) into a module-level constant so it is concatenated, not rebuilt, per `buildSrcdoc` call. The `transpiledJS` and `themeVars` are injected via safe escaping (JSON.stringify for the JS string passed through postMessage at bootstrap time is preferable to literal interpolation — but since VIBE_BOOTSTRAP delivers transpiledJS over postMessage in SandboxFrame, buildSrcdoc may bake ONLY themeVars + parentOrigin into the document and receive transpiledJS at runtime; choose the postMessage-delivery approach so transpiledJS is NOT string-concatenated into the srcdoc — this also keeps the srcdoc app-independent and built-once). If transpiledJS is delivered via postMessage, `buildSrcdoc`'s `transpiledJS` param is still part of the signature for the in-tree/test path; document the chosen delivery in a neutral comment. No banned tokens anywhere in the file or the srcdoc strings (HYGIENE-07).
+    Extend `src/execution/frameMount.ts` with the srcdoc builder. Build it as `export function buildSrcdoc(transpiledJS: string, themeVars: Record<string, string>, parentOrigin: string): string` — EXACTLY three params, no `services`/key param (SANDBOX-02 structural guarantee). Compose the document: `<head>` with the in-frame CSP `<meta>` from `<csp_facts>`, a `<style>` injecting the 12 themeVars onto `:root` plus the infinite-resize guard (`#root{height:max-content} body{overflow:hidden;margin:0}`), then a bootstrap `<script>` that:
+    (1) defines a `process` shim if needed;
+    (2) builds scheduler/react/react-dom/react-dom-client from `REACT_EMBED` via a CJS require-shim chain assigning `window.React`/`window.ReactDOM`;
+    (3) defines the in-frame RPC stubs `useWidget` and `runHandler` ONLY — mirroring the app-component scope in instantiate.ts EXACTLY (do NOT add a `fetchData` stub: `fetchData` is not in the app scope; data reaches the frame via the app calling `runHandler` → the RUN_HANDLER RPC → the parent-side `runHandler` → its own `boundFetchData`, and the separate FETCH_DATA RPC is likewise brokered parent-side per Plans 03/04 — the frame never holds a direct `fetchData` binding);
+    (4) listens for `VIBE_BOOTSTRAP` -> runs `new Function("module","exports","React","useWidget","runHandler","require", transpiledJS)` mirroring instantiate.ts (6 params, no fetchData), then `ReactDOM.createRoot(#root).render(React.createElement(App))`;
+    (5) installs a `ResizeObserver` on `#root` posting `FRAME_RESIZE`, a `window.onerror` posting `FRAME_ERROR`, and a `FRAME_PING`->`FRAME_PONG` responder, and posts `FRAME_READY` on load.
+    Hoist the heavy, app-independent prefix (CSP meta + React embed + bootstrap skeleton) into a module-level constant so it is concatenated, not rebuilt, per `buildSrcdoc` call. The `transpiledJS` and `themeVars` are injected via safe escaping — since `VIBE_BOOTSTRAP` delivers transpiledJS over postMessage in SandboxFrame, `buildSrcdoc` may bake ONLY themeVars + parentOrigin into the document and receive transpiledJS at runtime; choose the postMessage-delivery approach so transpiledJS is NOT string-concatenated into the srcdoc (this keeps the srcdoc app-independent and built-once). The `transpiledJS` param stays in the signature for the in-tree/test path; document the chosen delivery in a neutral comment. Heed the CSP-RISK NOTE in `<csp_facts>`: whether this exact meta permits inlined React + `new Function` is only provable in Plan 05's Playwright run — if 20-05 RENDER fails, loosen `script-src`/`style-src` while keeping `connect-src 'none'`. No banned tokens anywhere in the file or the srcdoc strings (HYGIENE-07).
   </action>
   <verify>
     <automated>npx vitest run src/execution/frameMount.test.ts</automated>
@@ -199,17 +236,16 @@ In-frame <meta> to emit inside the srcdoc (tighter — belt-and-suspenders):
     - `src/execution/frameMount.ts` contains `export function buildSrcdoc(transpiledJS: string, themeVars: Record<string, string>, parentOrigin: string)` — exactly three params (source assertion); `buildSrcdoc.length === 3` asserted in test.
     - The srcdoc string contains `connect-src 'none'` and `<meta http-equiv="Content-Security-Policy"` (source/behavior assertion).
     - `buildSrcdoc(...)` output does NOT match `/sk-ant/` (behavior assertion).
-    - `broadcastTheme` posts `{ type: "THEME_PUSH", payload: { vars } }` with targetOrigin `"*"` to every registered frame (behavior assertion).
-    - `unregisterFrame` of an absent id is a no-op; broadcast skips unregistered frames (behavior assertion).
+    - The in-frame bootstrap `new Function(...)` line injects EXACTLY 6 params `("module","exports","React","useWidget","runHandler","require", ...)` — no `fetchData` param (source assertion: the file contains no `fetchData` scope binding in the bootstrap).
     - `npx vitest run src/execution/frameMount.test.ts` exits 0.
   </acceptance_criteria>
-  <done>frameMount.ts provides the frame registry, theme broadcast, and the type-enforced 3-param `buildSrcdoc` (no-key, in-frame CSP, baked theme vars, built-once React embed), all proven by tests including the no-`/sk-ant/` assertion.</done>
+  <done>frameMount.ts provides the type-enforced 3-param `buildSrcdoc` (no-key, in-frame CSP, baked theme vars, built-once React embed, scope mirroring instantiate.ts with NO fetchData), proven by tests including the no-`/sk-ant/` assertion; the CSP-render risk is flagged for Plan 05's Playwright proof.</done>
 </task>
 
 <task type="auto">
   <name>Task 4: Full-suite green + tsc clean</name>
   <read_first>
-    - src/execution/frameMount.ts (the completed module)
+    - src/execution/frameMount.ts (the completed module — registry + broadcastTheme + buildSrcdoc)
     - src/execution/loader.ts (the added accessor)
   </read_first>
   <action>
@@ -248,7 +284,7 @@ In-frame <meta> to emit inside the srcdoc (tighter — belt-and-suspenders):
 <verification>
 - `src/execution/loader.ts` contains `export function getTranspiledJS` over `transpiledCache.get(...)?.transpiledJS`.
 - `src/execution/reactEmbed.generated.ts` exists (>500KB) exporting `REACT_EMBED` with all four CJS bodies.
-- `src/execution/frameMount.ts` exports `registerFrame`/`unregisterFrame`/`broadcastTheme`/`buildSrcdoc`; `buildSrcdoc.length === 3`; output has `connect-src 'none'`, no `/sk-ant/`.
+- `src/execution/frameMount.ts` exports `registerFrame`/`unregisterFrame`/`broadcastTheme`/`buildSrcdoc`; `buildSrcdoc.length === 3`; output has `connect-src 'none'`, no `/sk-ant/`; the in-frame scope mirrors instantiate.ts (no fetchData).
 - `npx vitest run` and `npx tsc --noEmit` both exit 0.
 </verification>
 
@@ -256,6 +292,7 @@ In-frame <meta> to emit inside the srcdoc (tighter — belt-and-suspenders):
 - A frame can receive its compiled string via `getTranspiledJS` (no re-resolve).
 - React/ReactDOM/scheduler are embedded once for the srcdoc (React 19 has no UMD).
 - `buildSrcdoc` is structurally key-proof (3 params, no `/sk-ant/`), carries the in-frame CSP `connect-src 'none'`, and bakes the 12 theme vars.
+- The in-frame app scope mirrors instantiate.ts exactly (useWidget + runHandler, no fetchData) so the SAME generated code runs either side.
 - `broadcastTheme` reaches every live frame with `"*"` targetOrigin; the registry register/unregister lifecycle is safe.
 - Full suite + tsc green; render path unchanged.
 </success_criteria>
