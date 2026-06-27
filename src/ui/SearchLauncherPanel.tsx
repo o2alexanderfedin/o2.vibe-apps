@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Cloud } from "lucide-react";
 import { APP_REGISTRY } from "../data/appRegistry";
 import { ICONS } from "./iconForApp";
-import { EXAMPLE_CHIPS } from "./launcherUtils";
+import { EXAMPLE_CHIPS, slugFromText } from "./launcherUtils";
 
 export interface SearchLauncherPanelProps {
   onOpen: (appType: string, displayName: string) => void;
@@ -66,7 +66,12 @@ export function SearchLauncherPanel({
 
   const handleSubmit = useCallback(async () => {
     const trimmed = inputText.trim();
-    if (trimmed.length === 0) return;
+    // Reject input that reduces to an empty slug (pure punctuation / a bare
+    // article like "the "), not just whitespace-only input. Such input passes a
+    // plain length check but produces an empty type slug — a blank-titled window
+    // built from a degenerate empty-type prompt. Validating the slug keeps the
+    // produce path coherent.
+    if (slugFromText(trimmed).length === 0) return;
     await onDescribe(trimmed);
   }, [inputText, onDescribe]);
 
@@ -122,7 +127,7 @@ export function SearchLauncherPanel({
             type="button"
             className="launcher__open-btn"
             onClick={() => void handleSubmit()}
-            disabled={isWorking || inputText.trim().length === 0}
+            disabled={isWorking || slugFromText(inputText.trim()).length === 0}
             aria-label={isWorking ? "Working…" : "Open"}
           >
             {isWorking ? "Working…" : "Open"}
