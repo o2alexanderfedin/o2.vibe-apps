@@ -46,7 +46,7 @@ All 5 phases complete and merged to `develop`; 12/12 requirements satisfied; 552
 - [x] **Phase 14: Theme Foundation** — The CSS-variable theme contract and FOUC-safe persistence are established; the alias bridge keeps pre-v2 cached apps rendering. Dependency root for all v2.0 phases. (completed 2026-06-26)
 - [x] **Phase 15: Window Manager** — Apps open as draggable glass windows with z-order, focus, minimize, close, and no React root leaks. ✅ merged b115f8a
 - [x] **Phase 16: Desktop Shell** — The desktop surface, animated wallpaper, dock (with running indicators and the launcher icon), and menu bar (wordmark, active-app name, clock) replace the flat storefront as the root UI. ✅
-- [ ] **Phase 17: Search / Launcher Panel** — A dock-launched panel lets the user describe an app or pick a pre-installed one; results open as windows on the desktop via the real produce loop.
+- [x] **Phase 17: Search / Launcher Panel** — A dock-launched panel lets the user describe an app or pick a pre-installed one; results open as windows on the desktop via the real produce loop. ✅ (completed 2026-06-26)
 - [ ] **Phase 18: Theme-Aware Generation** — All produce-prompt branches mandate the CSS-var contract; a post-compile static check feeds violations into the self-heal loop; model-supplied names are sanitized; the CI lexicon gate covers all new surfaces.
 
 ## Phase Details
@@ -215,7 +215,19 @@ Plans:
   2. A user types a description (e.g. "a pomodoro timer") and submits — the panel enters a working state with branded, mechanic-free step copy ("Reading your vibe…", "Sketching the layout…") that reflects real production time on a cache miss, then transitions to a result state; the result opens as a window on the desktop.
   3. On a cache hit for a previously-described app type, the panel's working state resolves immediately and the window opens — no redundant model call.
   4. A user selects a pre-installed app from the panel's list and it opens as a window on the desktop and appears in the dock as running; no surface in the flow contains a banned lexicon token.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1** *(independent)*
+- [x] 17-01-PLAN.md — slugFromText utility + SearchLauncherPanel component + unit tests (TDD RED→GREEN)
+
+**Wave 2** *(blocked on Wave 1)*
+- [x] 17-02-PLAN.md — DesktopShell integration: wire describe→produce + hygiene gate update
+
+**Wave 3** *(blocked on Wave 2)*
+- [x] 17-03-PLAN.md — Fixture + describe→produce integration tests + cache-hit test
+
+**Wave 4** *(blocked on Wave 3)*
+- [x] 17-04-PLAN.md — Final verification: delete MinimalLauncher, full suite green
 **UI hint**: yes
 **Research pitfalls defended**: Pitfall 11 (create panel copy is the highest new hygiene risk; name sanitization before display; CI gate covers CreatePanel.tsx), Pitfall 12 (create panel input does not steal focus from open app windows)
 
@@ -256,7 +268,7 @@ v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 
 | 14. Theme Foundation | v2.0 | 5/5 | Complete   | 2026-06-26 |
 | 15. Window Manager | v2.0 | 4/4 | Complete   | 2026-06-26 |
 | 16. Desktop Shell | v2.0 | 0/4 | Planned | - |
-| 17. Search / Launcher Panel | v2.0 | 0/TBD | Not started | - |
+| 17. Search / Launcher Panel | v2.0 | 4/4 | Complete | 2026-06-26 |
 | 18. Theme-Aware Generation | v2.0 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**

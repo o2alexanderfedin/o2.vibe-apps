@@ -62,7 +62,7 @@ function launcherDialog(): HTMLElement {
 
 /**
  * Open an app through the launcher: click the dock magnifier to open the
- * MinimalLauncher, then click the app's button (aria-label === displayName)
+ * search/launcher panel, then click the app's button (aria-label === displayName)
  * inside the launcher dialog. The launcher closes itself after an open.
  */
 export async function openApp(

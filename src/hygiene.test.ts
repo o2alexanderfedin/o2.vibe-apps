@@ -149,11 +149,12 @@ describe("lexicon hygiene gate (HYGIENE-03)", () => {
     expect(fileCount).toBeGreaterThan(5);
   });
 
-  it("explicitly covers the Phase-16 desktop-shell source files (Pitfall 11 — new surfaces stay gated)", () => {
+  it("explicitly covers the Phase-16 and Phase-17 desktop-shell source files (Pitfall 11 — new surfaces stay gated)", () => {
     // Pitfall 11: v2.0 added new devtools-visible surfaces (the desktop shell,
-    // dock, menu bar, launcher, and app icons). The walk is recursive so these
-    // are covered automatically — but a future path/layout regression could stop
-    // scanning them silently. Assert the scanned set still contains each Phase-16
+    // dock, menu bar, search/launcher panel, and app icons). Phase 17 added
+    // SearchLauncherPanel as the launcher surface. The walk is recursive so
+    // these are covered automatically — but a future path/layout regression could
+    // stop scanning them silently. Assert the scanned set still contains each
     // file by name so that regression fails loudly here.
     const scanned = new Set(
       walk(SRC_DIR).map((f) => relative(REPO_ROOT, f).split(sep).join("/")),
@@ -162,7 +163,7 @@ describe("lexicon hygiene gate (HYGIENE-03)", () => {
       "src/ui/DesktopShell.tsx",
       "src/ui/Dock.tsx",
       "src/ui/MenuBar.tsx",
-      "src/ui/MinimalLauncher.tsx",
+      "src/ui/SearchLauncherPanel.tsx", // Phase 17 — the search/launcher surface
       "src/ui/iconForApp.tsx",
     ]) {
       expect(scanned, `hygiene gate must scan ${file}`).toContain(file);
