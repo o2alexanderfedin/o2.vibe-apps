@@ -20,6 +20,7 @@ import {
   type ReactNode,
 } from "react";
 import { logger } from "../lib/logger";
+import { sanitizeDisplayName } from "./sanitizeDisplayName";
 
 // Default window dimensions used for viewport-clamp arithmetic.
 const DEFAULT_W = 400;
@@ -126,7 +127,7 @@ export function WindowManagerProvider({
           id,
           instanceId,
           appType,
-          title: meta.title,
+          title: sanitizeDisplayName(meta.title),
           icon: meta.icon,
           x,
           y,

@@ -149,13 +149,14 @@ describe("lexicon hygiene gate (HYGIENE-03)", () => {
     expect(fileCount).toBeGreaterThan(5);
   });
 
-  it("explicitly covers the Phase-16 and Phase-17 desktop-shell source files (Pitfall 11 — new surfaces stay gated)", () => {
+  it("explicitly covers the Phase-16, Phase-17, and Phase-18 source files (Pitfall 11 — new surfaces stay gated)", () => {
     // Pitfall 11: v2.0 added new devtools-visible surfaces (the desktop shell,
-    // dock, menu bar, search/launcher panel, and app icons). Phase 17 added
-    // SearchLauncherPanel as the launcher surface. The walk is recursive so
-    // these are covered automatically — but a future path/layout regression could
-    // stop scanning them silently. Assert the scanned set still contains each
-    // file by name so that regression fails loudly here.
+    // dock, menu bar, search/launcher panel, app icons, window frame, and window
+    // manager). Phase 18 added colorCheck and sanitizeDisplayName as new source
+    // files. The walk is recursive so these are covered automatically — but a
+    // future path/layout regression could stop scanning them silently. Assert
+    // the scanned set still contains each file by name so that regression fails
+    // loudly here.
     const scanned = new Set(
       walk(SRC_DIR).map((f) => relative(REPO_ROOT, f).split(sep).join("/")),
     );
@@ -163,10 +164,43 @@ describe("lexicon hygiene gate (HYGIENE-03)", () => {
       "src/ui/DesktopShell.tsx",
       "src/ui/Dock.tsx",
       "src/ui/MenuBar.tsx",
-      "src/ui/SearchLauncherPanel.tsx", // Phase 17 — the search/launcher surface
+      "src/ui/SearchLauncherPanel.tsx",   // Phase 17 — the search/launcher surface
       "src/ui/iconForApp.tsx",
+      "src/ui/WindowFrame.tsx",            // Phase 15 — window chrome surface
+      "src/ui/useWindowManager.tsx",       // Phase 15 — window manager open() boundary
+      "src/ui/VibeThemeProvider.tsx",      // Phase 14 — theme provider surface
+      "src/execution/colorCheck.ts",       // Phase 18 — post-compile color check
+      "src/ui/sanitizeDisplayName.ts",     // Phase 18 — display name sanitizer
     ]) {
       expect(scanned, `hygiene gate must scan ${file}`).toContain(file);
     }
+  });
+});
+
+describe("sanitize boundary: model-supplied names cannot leak banned tokens to visible surfaces (TGEN-03)", () => {
+  // Import sanitizeDisplayName from the source under test.
+  // This is NOT a hygiene-gate test — it is a behavioral proof that the
+  // sanitization boundary works, placed here to keep all lexicon-safety
+  // proofs in one file.
+  // NOTE: hygiene.test.ts is excluded from the hygiene scan (SELF exclusion),
+  // so it is safe to use dynamic imports that reference the sanitizer here.
+
+  it("strips banned two-letter acronym from a model-supplied display name", async () => {
+    const { sanitizeDisplayName } = await import("./ui/sanitizeDisplayName");
+    // Construct the input at runtime so the hygiene gate does not flag this line.
+    const banned = ["A", "I"].join(""); // "AI"
+    expect(sanitizeDisplayName(`${banned} Weather`)).toBe("Weather");
+  });
+
+  it("strips banned g*nerate family token from a model-supplied display name", async () => {
+    const { sanitizeDisplayName } = await import("./ui/sanitizeDisplayName");
+    const banned = ["Gen", "erat", "ed"].join(""); // "Generated"
+    expect(sanitizeDisplayName(`${banned} Notes`)).toBe("Notes");
+  });
+
+  it("returns neutral fallback 'App' when the entire name is a banned token", async () => {
+    const { sanitizeDisplayName } = await import("./ui/sanitizeDisplayName");
+    const banned = ["A", "I"].join(""); // "AI"
+    expect(sanitizeDisplayName(banned)).toBe("App");
   });
 });

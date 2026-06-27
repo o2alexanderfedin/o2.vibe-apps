@@ -102,6 +102,28 @@ describe("buildPrompt", () => {
     const prompt = buildPrompt("notes");
     expect(prompt.toLowerCase()).toContain("import");
   });
+
+  it("app prompt mandates the new theme CSS variable contract (TGEN-01)", () => {
+    const prompt = buildPrompt("weather");
+    expect(prompt).toContain("var(--accentA)");
+    expect(prompt).toContain("var(--accentB)");
+    expect(prompt).toContain("var(--text)");
+    expect(prompt).toContain("var(--glass)");
+    expect(prompt).toContain("var(--bord)");
+    // Explicitly allows neutral shadows/overlays
+    expect(prompt).toContain("rgba(0,0,0");
+    // Old vars must NOT appear
+    expect(prompt).not.toContain("var(--color-surface)");
+    expect(prompt).not.toContain("var(--color-text)");
+    expect(prompt).not.toContain("var(--color-accent)");
+  });
+
+  it("repair prompt (app/widget branch) carries the new theme var contract (TGEN-01)", () => {
+    const repair = buildRepairPrompt("weather", VALID_COMPONENT, "some babel error");
+    expect(repair).toContain("var(--accentA)");
+    expect(repair).toContain("var(--text)");
+    expect(repair).not.toContain("var(--color-surface)");
+  });
 });
 
 describe("buildRepairPrompt", () => {
@@ -285,5 +307,65 @@ describe("produceComponent", () => {
     expect(result).toContain("async function handler");
     expect(result).not.toContain("javascript");
     expect(result).not.toContain("```");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// colorCheck wiring (Phase 18, TGEN-02) — post-compile saturated color gate
+// ---------------------------------------------------------------------------
+
+describe("produceComponent — colorCheck post-compile gate (TGEN-02)", () => {
+  // A minimal valid React component body with a saturated hex color.
+  // Chosen to compile cleanly so the colorCheck is the first error raised.
+  const SATURATED_COMPONENT = `
+function App() {
+  return React.createElement('div', { style: { color: '#ff0000' } }, 'Hello');
+}
+`;
+
+  // A minimal valid component with only rgba(0,0,0,0.3) — a neutral shadow.
+  const NEUTRAL_SHADOW_COMPONENT = `
+function App() {
+  return React.createElement('div', { style: { boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)' } }, 'Hello');
+}
+`;
+
+  it("saturated hex in produced code causes ProduceError after self-heal retries (TGEN-02)", async () => {
+    // The transport always returns the saturated component — every attempt
+    // re-triggers colorCheck → identical error → early-stop at attempt 2.
+    const transport = singleResponseTransport(SATURATED_COMPONENT);
+    await expect(
+      produceComponent("color-test", transport, withKey, "app"),
+    ).rejects.toBeInstanceOf(ProduceError);
+  });
+
+  it("handler kind skips colorCheck even when produced code contains a saturated hex (TGEN-02)", async () => {
+    // A handler that compiles but contains a saturated color literal.
+    // colorCheck must NOT run for kind="handler".
+    const HANDLER_WITH_COLOR = `
+async function handler(input) {
+  const color = '#ff0000';
+  return { data: { color } };
+}
+`;
+    const result = await produceComponent(
+      "color-handler",
+      singleResponseTransport(HANDLER_WITH_COLOR),
+      withKey,
+      "handler",
+    );
+    // Succeeds: handler path skips colorCheck.
+    expect(result.source).toContain("async function handler");
+  });
+
+  it("neutral rgba(0,0,0,0.3) shadow does NOT trigger colorCheck (TGEN-02)", async () => {
+    const result = await produceComponent(
+      "shadow-test",
+      singleResponseTransport(NEUTRAL_SHADOW_COMPONENT),
+      withKey,
+      "app",
+    );
+    // Succeeds: neutral shadow is allowed.
+    expect(result.transpiledJS).toContain("React.createElement");
   });
 });
