@@ -248,6 +248,12 @@ function DesktopShellInner() {
   // re-creating handlers (and so handleModify can look up the live window list).
   const windowManagerRef = useRef<WindowManagerValue>(windowManager);
   windowManagerRef.current = windowManager;
+  // Latest compiled-string map read inside handleModify (clone/tweak) WITHOUT
+  // adding transpiledMap to the callback deps — mirrors the windowManagerRef
+  // pattern so the callback identity stays stable and never closes over a stale
+  // map (CR-02 / WR-01).
+  const transpiledMapRef = useRef(transpiledMap);
+  transpiledMapRef.current = transpiledMap;
 
   // Tear down a window: evict its live component, route close through the
   // manager (which unmounts the single root), and drop its body/position.
@@ -478,6 +484,16 @@ function DesktopShellInner() {
         });
         const sourceComponent = components.get(instanceId) ?? null;
         storeComponent(cloneInstanceId, sourceComponent);
+        // CR-02 (isolation): carry the source's compiled string to the clone's
+        // instance id so the clone takes the SAME opaque-origin frame path
+        // (WindowFrame gates on frameMode==="iframe" && transpiledJS). Without
+        // this the clone falls through to the in-tree body and runs the component
+        // directly in the host tree — re-exposing the execution path this phase
+        // removes. Read through the ref so the callback identity stays stable.
+        const tjs = transpiledMapRef.current.get(instanceId);
+        if (tjs) {
+          setTranspiledMap((prev) => new Map(prev).set(cloneInstanceId, tjs));
+        }
         return;
       }
 
@@ -504,6 +520,14 @@ function DesktopShellInner() {
           routed.instruction,
         );
         storeComponent(instanceId, Component);
+        // WR-01 (iframe mode): mirror the open/describe paths — update this
+        // instance's compiled string so the frame re-bootstraps with the tweaked
+        // body. Without this the srcdoc useMemo (keyed on transpiledJS) never
+        // rebuilds and the tweak is invisible in production iframe mode.
+        const tjs = getTranspiledJS(tweakKey);
+        if (tjs) {
+          setTranspiledMap((prev) => new Map(prev).set(instanceId, tjs));
+        }
       } catch (err) {
         // A tweak that fails to resolve surfaces the neutral fallback (in place)
         // rather than vanishing the app or showing a mechanic.
@@ -751,7 +775,9 @@ function DesktopShellInner() {
               // default). The compiled app string seeds the frame body; the
               // theme vars bake into its first paint; the handler/data brokers
               // are PARENT-SIDE closures over services, so the key never crosses
-              // into the frame.
+              // into the frame. appType lets a delegated body build the per-action
+              // intent that matches the parent's cached handler (CR-01).
+              appType={entry.appType}
               transpiledJS={transpiledMap.get(entry.instanceId)}
               themeVars={currentThemeVars}
               onRunHandler={(intent, input) =>

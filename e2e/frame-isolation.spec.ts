@@ -90,4 +90,41 @@ test.describe("opaque-origin app body", () => {
       .evaluate((el) => (el as HTMLElement).style.height);
     expect(heightAfter).toBe(heightBefore);
   });
+
+  // CR-01 proof — a DELEGATED seed (Weather is in SEEDED_DELEGATED: a module of
+  // { initialState, view, actionSpec }, NOT a monolith) must render non-blank
+  // inside the frame. The frame body now runs a delegated-shell-equivalent that
+  // holds initialState in state and renders module.view(state); the Weather seed's
+  // initial "idle" view shows an "Enter a location" prompt + input WITHOUT any
+  // network call, so this asserts the initial view alone — no API key required.
+  test("renders a delegated seed (Weather) non-blank inside the frame", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Open launcher" }).click();
+    await page.getByRole("button", { name: "Weather", exact: true }).click();
+
+    const frame = page.frameLocator("iframe").first();
+
+    // The delegated view's initial (idle) render: the "Enter a location" prompt
+    // and the location input. Both come from view(initialState) with status
+    // "idle", which needs no successful fetch — so this proves the delegated
+    // module mounts and paints inside the frame (CR-01).
+    await expect(
+      frame.locator('input[placeholder="Enter a location"]'),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(frame.getByText("Enter a location").first()).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // Robustness backstop: the frame's #root has non-empty content (the delegated
+    // body rendered SOMETHING, not a silent blank).
+    const childCount = await page
+      .frames()[1]!
+      .evaluate(
+        () => document.getElementById("root")?.childElementCount ?? 0,
+      );
+    expect(childCount).toBeGreaterThan(0);
+  });
 });

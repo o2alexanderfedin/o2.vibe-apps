@@ -24,8 +24,18 @@ export function registerFrame(instanceId: string, el: HTMLIFrameElement): void {
   frameRefs.set(instanceId, el);
 }
 
-export function unregisterFrame(instanceId: string): void {
-  frameRefs.delete(instanceId);
+export function unregisterFrame(
+  instanceId: string,
+  el?: HTMLIFrameElement | null,
+): void {
+  // Delete by element identity when an element is supplied: under StrictMode the
+  // mount effect runs mount→unmount→mount, so the first mount's cleanup must NOT
+  // evict the entry the SECOND mount just (re)wrote. When no element is given
+  // (the legacy single-arg call / a key-only teardown) fall back to deleting by
+  // key, preserving the original semantics.
+  if (el == null || frameRefs.get(instanceId) === el) {
+    frameRefs.delete(instanceId);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -34,6 +44,10 @@ export function unregisterFrame(instanceId: string): void {
 
 export function broadcastTheme(vars: Record<string, string>): void {
   for (const [, el] of frameRefs) {
+    // Skip a detached frame: the registry can transiently retain an element
+    // whose effect cleanup has not yet run (StrictMode double-mount), and
+    // posting to a disconnected frame's contentWindow is wasted work.
+    if (!el.isConnected) continue;
     try {
       el.contentWindow?.postMessage({ type: "THEME_PUSH", payload: { vars } }, "*");
     } catch (err) {
@@ -153,6 +167,89 @@ body { overflow: hidden; margin: 0; }
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Delegated-shell runtime (mirrors the in-tree delegated module path). A
+  // behavior-free module supplies { initialState, view, actionSpec }; this
+  // permanent container owns the state SSOT, the single onClick delegate, the
+  // per-action intent (byte-identical to the in-tree buildActionIntent so the
+  // parent resolves the SAME cached handler), field capture, and the merge.
+  // ---------------------------------------------------------------------------
+  function buildActionIntent(appType, actionSpec, action) {
+    return (
+      appType + " action '" + action + "': " + actionSpec + " " +
+      "The handler input is { state, payload } where payload is the action string '" + action + "'. " +
+      "Return { data: { state } } with the SAME state shape and ALWAYS a valid state."
+    );
+  }
+
+  function makeDelegatedComponent(appType, module) {
+    var React = window.React;
+    var actionSpec = typeof module.actionSpec === "string" ? module.actionSpec : "";
+    return function DelegatedApp() {
+      var stateHook = React.useState(module.initialState);
+      var state = stateHook[0];
+      var setState = stateHook[1];
+      var busyHook = React.useState(null);
+      var busy = busyHook[0];
+      var setBusy = busyHook[1];
+      var stateRef = React.useRef(state);
+      stateRef.current = state;
+
+      var onClick = React.useCallback(
+        function(e) {
+          var target = e.target;
+          var el = target && target.closest ? target.closest("[data-action]") : null;
+          if (!el) return;
+          var action = el.getAttribute("data-action");
+          if (!action) return;
+          if (busy) return;
+
+          // Capture user-entered field values BEFORE running the action: the view
+          // marks its inputs with data-field="<stateKey>"; fold each one's current
+          // value into the state the handler sees.
+          var container = e.currentTarget;
+          var fields = {};
+          var nodes = container.querySelectorAll("[data-field]");
+          for (var i = 0; i < nodes.length; i++) {
+            var key = nodes[i].getAttribute("data-field");
+            if (!key) continue;
+            var value = nodes[i].value;
+            if (typeof value === "string") fields[key] = value;
+          }
+
+          setBusy(action);
+          var intent = buildActionIntent(appType, actionSpec, action);
+          var mergedState = Object.assign({}, stateRef.current, fields);
+          runHandler(intent, { state: mergedState, payload: action }).then(
+            function(res) {
+              var next = res && res.data ? res.data.state : null;
+              if (next && typeof next === "object") {
+                setState(function(prev) { return Object.assign({}, prev, next); });
+              }
+              setBusy(null);
+            },
+            function() {
+              // Never reveal the mechanic; leave state unchanged on any failure.
+              setBusy(null);
+            }
+          );
+        },
+        [busy]
+      );
+
+      return React.createElement(
+        "div",
+        {
+          className: "delegated-shell",
+          onClick: onClick,
+          "aria-busy": busy !== null ? "true" : undefined,
+          "data-busy": busy ? busy : undefined
+        },
+        module.view(state)
+      );
+    };
+  }
+
   // Set once VIBE_BOOTSTRAP has been processed, so the FRAME_READY re-announce
   // loop can stop. The parent's bootstrap listener can churn (its effect deps
   // include per-render handler closures), so a single load-time FRAME_READY can
@@ -163,6 +260,12 @@ body { overflow: hidden; margin: 0; }
   // Inbound message handler
   // ---------------------------------------------------------------------------
   window.addEventListener("message", function(event) {
+    // Only honor messages from the single embedder (the parent). The body has an
+    // opaque origin and no same-origin grant, so the parent is the only window
+    // that holds a handle to it — but gate explicitly so a forged message that
+    // wins the bootstrap race is dropped (defense-in-depth, symmetric with the
+    // parent's origin+source guard).
+    if (event.source !== window.parent) return;
     var data = event.data;
     if (!data || typeof data !== "object") return;
 
@@ -174,6 +277,7 @@ body { overflow: hidden; margin: 0; }
       var payload = data.payload || {};
       var code = payload.transpiledJS;
       var vars = payload.themeVars;
+      var appType = typeof payload.appType === "string" ? payload.appType : "";
       if (vars && typeof vars === "object") {
         Object.keys(vars).forEach(function(k) {
           document.documentElement.style.setProperty(k, vars[k]);
@@ -196,11 +300,23 @@ body { overflow: hidden; margin: 0; }
             code + "\\nreturn typeof App !== 'undefined' ? App : undefined;"
           )(mod2, mod2.exports, window.React, useWidget, runHandler, requireShim);
         }
-        if (typeof App === "function") {
-          window.ReactDOM.createRoot(document.getElementById("root")).render(
-            window.React.createElement(App)
-          );
+        // Delegated module shape: a behavior-free module exporting
+        // { initialState, view, actionSpec }. The view marks interactive elements
+        // with data-action and fields with data-field but carries NO handlers; the
+        // container delegate reads the clicked action, folds in the current field
+        // values, runs the action through runHandler (parent-brokered), and merges
+        // the returned state. Mirrors the in-tree delegated runtime so the SAME
+        // module renders identically here.
+        if (typeof App !== "function" && typeof mod.exports.view === "function") {
+          App = makeDelegatedComponent(appType, mod.exports);
         }
+        if (typeof App !== "function") {
+          postToParent({ type: "FRAME_ERROR", payload: { message: "App did not render" } });
+          return;
+        }
+        window.ReactDOM.createRoot(document.getElementById("root")).render(
+          window.React.createElement(App)
+        );
       } catch (err) {
         postToParent({ type: "FRAME_ERROR", payload: { message: String(err) } });
       }

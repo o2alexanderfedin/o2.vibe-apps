@@ -28,7 +28,10 @@ import "./SandboxFrame.css";
 
 export interface FrameUtilities {
   registerFrame: (instanceId: string, el: HTMLIFrameElement) => void;
-  unregisterFrame: (instanceId: string) => void;
+  unregisterFrame: (
+    instanceId: string,
+    el?: HTMLIFrameElement | null,
+  ) => void;
   clearPendingForFrame: (frameId: string) => void;
   sendToFrame: (
     frameWindow: Window | null,
@@ -57,6 +60,9 @@ const defaultUtils: FrameUtilities = {
 export interface SandboxFrameProps {
   instanceId: string;
   title: string;
+  /** The app type slug — threaded into the frame body so a delegated module's
+   *  per-action intent matches the parent's cached/seeded handler exactly. */
+  appType?: string;
   transpiledJS: string;
   themeVars: Record<string, string>;
   onClose: () => void;
@@ -80,6 +86,7 @@ export interface SandboxFrameProps {
 export function SandboxFrame({
   instanceId,
   title,
+  appType,
   transpiledJS,
   themeVars,
   onClose,
@@ -110,7 +117,9 @@ export function SandboxFrame({
     if (!el) return;
     utils.registerFrame(instanceId, el);
     return () => {
-      utils.unregisterFrame(instanceId);
+      // Pass the SPECIFIC element so a StrictMode double-mount's first cleanup
+      // does not evict the entry the second mount re-registered (WR-04).
+      utils.unregisterFrame(instanceId, el);
       utils.clearPendingForFrame(instanceId);
     };
     // utils members are stable references when _utils is a constant object
@@ -137,6 +146,8 @@ export function SandboxFrame({
   // component's whole lifetime while still using the latest values.
   const transpiledJSRef = useRef(transpiledJS);
   transpiledJSRef.current = transpiledJS;
+  const appTypeRef = useRef(appType);
+  appTypeRef.current = appType;
   const themeVarsRef = useRef(themeVars);
   themeVarsRef.current = themeVars;
   const onRunHandlerRef = useRef(onRunHandler);
@@ -178,6 +189,7 @@ export function SandboxFrame({
             payload: {
               transpiledJS: transpiledJSRef.current,
               themeVars: themeVarsRef.current,
+              appType: appTypeRef.current,
             },
           },
           "*",
@@ -212,13 +224,19 @@ export function SandboxFrame({
         if (typeof intent !== "string" || !corrId) return;
         try {
           const result = await (onRunHandlerRef.current?.(intent, input) ??
-            Promise.resolve({ data: undefined }));
+            Promise.resolve<{ data?: unknown; error?: string }>({
+              data: undefined,
+            }));
           sendToFrame(
             frameWindow,
             {
               type: "RUN_HANDLER_RESULT",
               correlationId: corrId,
-              payload: { data: result?.data },
+              // Forward the WHOLE result shape so the frame app can distinguish
+              // "no data" from a neutral failure (broker returns { error } WITHOUT
+              // throwing — produce throttled, broker absent, handler failure),
+              // matching the in-tree contract (WR-02).
+              payload: { data: result?.data, error: result?.error },
             },
             "*",
           );
@@ -243,13 +261,17 @@ export function SandboxFrame({
         if (typeof sourceId !== "string" || !corrId) return;
         try {
           const result = await (onFetchDataRef.current?.(sourceId, params) ??
-            Promise.resolve({ data: undefined }));
+            Promise.resolve<{ data?: unknown; error?: string }>({
+              data: undefined,
+            }));
           sendToFrame(
             frameWindow,
             {
               type: "FETCH_DATA_RESULT",
               correlationId: corrId,
-              payload: { data: result?.data },
+              // Forward the whole result shape (WR-02) — same rationale as
+              // RUN_HANDLER_RESULT above.
+              payload: { data: result?.data, error: result?.error },
             },
             "*",
           );

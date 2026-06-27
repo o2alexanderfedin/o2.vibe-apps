@@ -106,6 +106,9 @@ export interface WindowFrameProps {
    *  a drop-zone preview (Phase 19, plan 19-03). */
   onEdgeChange?: (side: "left" | "right" | null) => void;
   onModify?: (instruction: string) => void;
+  /** The app type slug — threaded into the frame body (frameMode==="iframe") so a
+   *  delegated module's per-action intent matches the parent's cached handler. */
+  appType?: string;
   /** When frameMode==="iframe", the compiled app string for the frame body. */
   transpiledJS?: string;
   /** Theme vars baked into the frame's first paint (frameMode==="iframe"). */
@@ -136,6 +139,7 @@ export function WindowFrame({
   onSnap,
   onEdgeChange,
   onModify,
+  appType,
   transpiledJS,
   themeVars,
   onRunHandler,
@@ -332,6 +336,7 @@ export function WindowFrame({
           <SandboxFrame
             instanceId={instanceId}
             title={title}
+            appType={appType}
             transpiledJS={transpiledJS}
             themeVars={themeVars ?? {}}
             onClose={onClose}
