@@ -1,5 +1,23 @@
 # Milestones
 
+## v2.0 Vibe OS (Shipped: 2026-06-26)
+
+**Phases completed:** 5 phases (14–18), 21 plans
+
+**Key accomplishments:**
+
+- **Theme Foundation (THEME-01..05):** Four named themes (Aurora / Aero / Aqua / Noir) expressed as CSS custom properties on `document.documentElement` — live switchable with no reload or remount, FOUC-safe via a synchronous `localStorage` read in `index.html` before React mounts, persisted in a new IDB `settings` store (DB v3, additive migration), and a backward-compat `:root` alias bridge keeps pre-v2.0 cached apps rendering correctly. `VibeThemeProvider` nested inside the existing `ThemeProvider` — purely additive; 552 prior tests unaffected.
+- **Window Manager (WIN-01..05):** Apps open as independently draggable glass windows with a macOS-style titlebar (traffic-light close/minimize + app icon + title), z-order/focus/minimize/restore/close lifecycle via `useWindowManager`, and real-time viewport-clamped drag via `setPointerCapture` + rAF imperative `transform` writes. Windows render in-tree as memoized `WindowBody` subtrees (not detached `createRoot` roots — that approach hung tests). `appBodyCount()` baseline invariant confirms no root leaks on close.
+- **Desktop Shell (WIN-06..08, PERF-01):** The flat storefront is replaced by the Vibe OS desktop — animated themed wallpaper (4 blob layers with `vibeFloat` keyframe), a bottom dock showing running-indicator dots per open app plus a magnifier launcher icon (hover-scale), and a top menu bar (OS wordmark + active-app name + live clock). `@media (prefers-reduced-motion: reduce)` disables blob animation; minimized windows are `display:none` (no compositor layer). Theme re-skin acceptance: aurora→noir switches both `--wall` and `--text` on `documentElement` matching the VIBE_THEMES contract — viewed and confirmed by screenshots.
+- **Search / Launcher Panel (CREATE-01..03):** A dock-launched `SearchLauncherPanel` replaced the flat storefront grid — text input + action button + pre-installed app chips + resolve→produce→window flow. `slugFromText` canonicalizes user descriptions to stable cache keys; `handleDescribe` in `DesktopShell` routes through `registryKey("app", slug, text)` → `useWindowManager.open()`. Cache-hit test proves 1 transport call across 2 same-text describes. `MinimalLauncher` deleted (0 references in `src/`). Focus-not-stolen: panel focuses close button, not input.
+- **Theme-Aware Generation (TGEN-01..03, HYGIENE-06):** All five produce-prompt branches (`buildPrompt`, `buildLengthPrompt`, `buildRepairPrompt`) mandate the CSS-var contract (`var(--accentA/--accentB/--text/--glass/--glass2/--bord/--hi)`). `colorCheck` post-transpile detects saturated/branded hardcoded colors (incl. 4-digit `#rgba` shorthand, allowing grayscale + neutral-alpha shadows) and feeds violations into the existing self-heal loop (≤3 retries; literal embedded in error to avoid early-stop collapse). `sanitizeDisplayName` wired in `useWindowManager.open()` — "AI Weather" → "Weather". CI hygiene gate explicitly covers all new v2.0 surfaces.
+
+**Test growth:** 552 (v1.1) → **727** green. tsc 0; build clean (no source maps); hygiene + CSP gates green throughout. Zero new npm dependencies — all windowing, drag, and theming hand-rolled on React 19 + idb.
+
+**Archive:** [v2.0-ROADMAP.md](./milestones/v2.0-ROADMAP.md) · [v2.0-REQUIREMENTS.md](./milestones/v2.0-REQUIREMENTS.md) · [v2.0-MILESTONE-AUDIT.md](./milestones/v2.0-MILESTONE-AUDIT.md)
+
+---
+
 ## v1.1 Real & Robust (Shipped: 2026-06-26)
 
 **Phases completed:** 5 phases (9–13), 13 plans

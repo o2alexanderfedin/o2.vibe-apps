@@ -2,6 +2,58 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v2.0 — Vibe OS   (Shipped: 2026-06-26 | Phases: 5 | Plans: 21)
+
+**Verdict:** PASSED — 21/21 requirements satisfied, **727 tests** green (552→727), tsc 0, build clean (no source maps), hygiene + CSP green, tagged `v2.0`. Phases 14–18 each on a feature branch, `--no-ff` merged to develop. Zero new npm dependencies.
+
+### What Was Built
+
+- **Phase 14 — Theme Foundation.** `VibeThemeProvider` nested inside the existing `ThemeProvider` (additive — 552 prior tests unaffected). Four named themes (Aurora / Aero / Aqua / Noir) as CSS custom property sets applied to `document.documentElement`. FOUC-safe via synchronous `localStorage` read in `index.html` before React mounts; IDB `settings` store (DB v3, additive migration) for persistence. `:root` alias bridge keeps pre-v2.0 cached apps rendering. FOUC script + CSP hash updated atomically. ThemeSelector 4-pill switcher in AppBar (temporary home). Switch-path RTL test asserts `--text` on `documentElement`. (THEME-01..05.)
+- **Phase 15 — Window Manager.** `useDrag` (setPointerCapture + rAF imperative `transform` + `clamp()` in `pointermove` handler, state only on `pointerup`). `useWindowManager` (WindowEntry state, bounded zTop z-order, open/focus/minimize/restore/close). `WindowFrame` glass chrome + traffic-light titlebar. Key architectural deviation: apps render in-tree as memoized `WindowBody` subtrees rather than detached `createRoot` roots (the detached approach caused test-environment hangs — self-updating fixture spun outside `act()` scope). `Marketplace` owns its own `WindowManagerProvider`; `App.tsx` mounts one at desktop level. `appBodyCount()` baseline invariant confirms no root leaks. (WIN-01..05.)
+- **Phase 16 — Desktop Shell.** `DesktopShell` replaces flat storefront. Animated themed wallpaper (4 blob layers with `vibeFloat` keyframe). `Dock` with running-indicator dots + hover-scale + magnifier launcher icon. `MenuBar` with OS wordmark + active-app name + live clock (ThemeSelector relocated here from AppBar). `@media (prefers-reduced-motion: reduce)` disables blob animation; `display:none` for minimized windows (no compositor layer). Theme re-skin acceptance: aurora→noir changes both `--wall` and `--text` and matches VIBE_THEMES contract exactly. Viewed Aurora/Noir desktop screenshots confirmed. (WIN-06..08, PERF-01.)
+- **Phase 17 — Search / Launcher Panel.** `SearchLauncherPanel` (text input + action button + pre-installed chips + app grid) replaces `MinimalLauncher`. `slugFromText` canonicalizes descriptions to stable cache keys. `handleDescribe` in `DesktopShell` routes through `registryKey("app", slug, text)` → `useWindowManager.open()`. Cache-hit test: 1 transport call across 2 same-text describes. Focus-not-stolen: panel focuses close button, not input. MinimalLauncher deleted (0 references in `src/`). Viewed panel with input + chips + grid screenshots. (CREATE-01..03.)
+- **Phase 18 — Theme-Aware Generation.** All five produce-prompt branches mandate the CSS-var contract (`var(--accentA/--accentB/--text/--glass/--glass2/--bord/--hi)`). `colorCheck` post-transpile (44/44 tests): flags saturated/branded colors, allows grayscale + neutral-alpha shadows, embeds the literal in the error to avoid identical-error early-stop. `sanitizeDisplayName` in `useWindowManager.open()`: "AI Weather" → "Weather". Hygiene gate explicitly covers all new v2.0 surfaces. Phase executed as a single atomic commit (no per-plan SUMMARY.md files — 18-VERIFICATION.md is the exit artifact). Code review: 9/10 findings fixed; IN-02 fixture `:root` shim accepted (test-quality only). (TGEN-01..03, HYGIENE-06.)
+
+### What Worked
+
+- **In-tree window rendering (the Phase 15 deviation) was the right call.** Detached `createRoot` roots ran outside `act()` scope in tests — a self-updating fixture spun unthrottled and produced mid-render unmount races. In-tree memoized `WindowBody` eliminated both the test-environment problem and the root-leak class entirely. The deviation was surfaced and fixed within Phase 15 before exit; the `appBodyCount()` invariant locks it in.
+- **Screenshot-per-phase visual UAT discipline held.** All three UI phases (15, 16, 17) were verified by viewed screenshots before exit — not just DOM/a11y assertions. Phase 16's Aurora→Noir desktop comparison confirmed the themed-wallpaper + glass-chrome re-skin was visually correct, not just technically passing.
+- **`colorCheck` + `sanitizeDisplayName` as pure functions (not hooked into the model path) made testing easy.** 44 tests run entirely offline — no fixtures, no captured outputs. The pure-function pattern also made the self-heal loop integration clean: `colorCheck` returns a compiler-style error string, which the existing retry machinery treats identically to a Babel compile error.
+- **Zero new npm dependencies held cleanly.** Research pre-work (framer-motion bundle size + react-draggable React 19 breakage) made the hand-roll decision crisp. `useDrag` + `VibeThemeProvider` + all desktop components stay within the zero-infra constraint.
+- **Additive-only DB migrations (v2→v3 settings store)** continued the v1.x pattern without incident — the upgrade path test passes in CI.
+
+### What Was Inefficient / What to Improve
+
+- **REQUIREMENTS.md traceability table not updated at phase exit.** 17 of 21 requirements stayed "Pending" in the traceability table even though all 5 VERIFICATION.md files reported `status: passed`. The audit at close was what surfaced the staleness. Fix: update checkboxes and traceability Status column as part of each phase's exit commit (not at milestone close).
+- **Phase 18 produced no per-plan SUMMARY.md files.** The executor ran Phase 18 as a single atomic commit — the 18-VERIFICATION.md is the exit artifact, but there's no per-plan trail. Acceptable for the shipped state; a future executor run should commit plan SUMMARYs atomically with each plan.
+- **Phase 15 SUMMARY.md files have no `requirements-completed` frontmatter field** (unlike Phases 14, 16, 17). Minor inconsistency — should be standardized across all phases in a future template update.
+- **SearchLauncherPanel CSS gap (visual-only).** Phase 17 added 6 new interior classes but never extended `index.css` for them. Functional tests (ARIA/role/label queries) all passed; only the visual treatment was missing. Caught by the integration checker post-close; fixed in the audit-debt commit (`8f0e601`). Lesson: CSS class coverage should be a phase exit criterion (verify new classes have at least a stub rule in `index.css`).
+- **3 stale forward-reference comments (Dock.tsx, ThemeSelector.tsx, index.css)** referenced phases that had already shipped. Found by the audit. Fixed in the audit-debt commit. Lesson: search for `Phase NN` comment patterns on phase exit to catch forward-ref comments.
+
+### Patterns Established
+
+- **CSS custom property theming on `document.documentElement`** — the only pattern that reaches both in-tree React subtrees and independently-mounted app nodes without React context threading.
+- **FOUC guard: synchronous `localStorage` read in `index.html` script before React mounts** + IDB settings store as authoritative persistence + CSP hash same-commit invariant.
+- **In-tree memoized `WindowBody` for app rendering** — avoids detached-root test-environment issues; `WindowManagerProvider` owned by `Marketplace` (testable standalone) AND `App.tsx` (desktop-level consumers).
+- **Pure post-compile checker (`colorCheck`) feeding existing self-heal loop** — the function returns a compiler-style error string; no new retry machinery needed; the loop's identical-error early-stop avoided by embedding the offending literal in the message.
+- **`slugFromText` canonical form for user-described apps** — stable cache key from free-form text; feeds `registryKey("app", slug, text)` symmetrically for reads and writes.
+- **Final-plan-of-phase pattern (Phase 17-04)**: deletion + zero-source-change full-suite acceptance gate (test + tsc + build + hygiene + targeted `-t` confirmations with non-zero-count guard).
+
+### Key Lessons
+
+1. **Test-environment context matters for React root strategy.** `createRoot` into a detached container is invisible to `act()` — any self-updating component inside it will spin forever in tests. In-tree rendering is both safer and simpler.
+2. **CSS class coverage is a phase-exit criterion.** If new JSX classes aren't in `index.css`, they'll pass all ARIA/role tests and look broken visually. Add a grep-or-style check to the phase exit checklist.
+3. **Forward-reference comments accumulate technical debt.** `Phase N will replace X` comments outlive their use immediately after Phase N ships. Search and neutralize them on phase exit.
+4. **The pure-function pattern for cross-cutting checks is the right default.** `colorCheck` and `sanitizeDisplayName` as pure functions are trivially testable, composable, and require no fixtures — hook them at the call site (not in the model path or the test harness).
+
+### Cost Observations
+
+- **Model mix:** Orchestration/planning in Sonnet/Opus; execution subagents in Sonnet. The *product's* runtime model is Claude Haiku (`claude-haiku-4-5-20251001`).
+- **Sessions:** multi-session (Jun 26–27); 5 phases across 2 active development days.
+- **Notable:** all 21 VERIFICATION.md gates ran offline — no live API key used during execution; visual phases verified by screenshots in the dev environment (hot reload, key available). The only live path left unverified is the full produce→theme-switch visual loop (requires user's key post-ship).
+
+---
+
 ## Milestone: v1.1 — Real & Robust   (Shipped: 2026-06-26 | Phases: 5 | Plans: 13)
 
 **Verdict:** PASSED — 12/12 requirements satisfied, **552 tests** green (378→552), tsc 0, build clean (no source maps), hygiene + CSP green, tagged `v1.1`. Phases 9–13 each on a feature branch, `--no-ff` merged to develop.
@@ -89,17 +141,24 @@ The milestone shipped as a **vertical MVP** — eight end-to-end, user-visible s
 
 | Milestone | Sessions | Phases | Plans | Key Change |
 |-----------|----------|--------|-------|------------|
-| v1.0 | multi (Jun 24–25) | 8 | 4 (+5 streamlined) | First milestone — established vertical-MVP slicing, hygiene-first CI gate, static-loop de-risking before model nondeterminism, real-fixture model testing, and IoC/DI everywhere. Streamlined MVP flow (no per-phase VERIFICATION.md) later required an audit-time backfill. |
+| v1.0 | multi (Jun 24–25) | 8 | 4 (+5 streamlined) | First milestone — vertical-MVP slicing, hygiene-first CI gate, static-loop de-risking, real-fixture model testing, IoC/DI everywhere. Streamlined MVP flow (no per-phase VERIFICATION.md) required audit-time backfill. |
+| v1.1 | multi (Jun 26) | 5 | 13 | Introduced VERIFICATION.md per phase; subagent quota hit (Phase 13 inline); live browser smoke caught 2 integration bugs unit tests missed. |
+| v2.0 | multi (Jun 26–27) | 5 | 21 | Screenshot-per-phase visual UAT; in-tree memoized WindowBody (key architectural deviation); pure-function post-compile checks; zero new npm deps; REQUIREMENTS.md traceability staleness (17/21) remains a recurring gap to fix. |
 
 ### Cumulative Quality
 
-| Milestone | Tests | Coverage | Verdict | Zero-Dep / Notable Additions |
-|-----------|-------|----------|---------|------------------------------|
-| v1.0 | 378 | not formally measured | PASSED | idb, classic-Babel transpile, real-Haiku fixtures, delegated thin-shell + on-demand cached handlers (post-milestone) |
+| Milestone | Tests | Verdict | Notable Tech Additions |
+|-----------|-------|---------|------------------------|
+| v1.0 | 378 | PASSED | idb, classic-Babel transpile, real-Haiku fixtures, delegated thin-shell, on-demand cached handlers |
+| v1.1 | 552 | PASSED | zod/mini validate-at-merge, host-brokered dataBroker, TTL cache, typed WidgetRecord/HandlerRecord, widget composition wiring |
+| v2.0 | 727 | PASSED | VibeThemeProvider, useDrag, useWindowManager, WindowFrame, DesktopShell, Dock, MenuBar, SearchLauncherPanel, colorCheck, sanitizeDisplayName — zero new npm deps |
 
-*(Test count: 333 at the `v0.1.0` release tag → 368 at milestone audit close → 378 after the post-milestone G1 cacheKey fix.)*
+*(v1.0: 333 at v0.1.0 tag → 378 post-G1 fix. v1.1: 378→552. v2.0: 552→727.)*
 
 ### Top Lessons (Verified Across Milestones)
 
-1. *(Awaiting a second milestone to cross-validate.)* From v1.0: small/precise on-demand units beat monolithic generation for a cheap model — decomposition both raises reliability and makes each unit deterministically testable.
-2. *(Awaiting a second milestone to cross-validate.)* From v1.0: enforce cross-cutting constraints (devtools hygiene, single egress) as first-phase CI gates so they stay cheap invariants rather than expensive retrofits.
+1. **Enforce cross-cutting constraints as first-phase CI gates.** (v1.0 + confirmed v1.1 + v2.0) The lexicon gate, CSP, sourcemaps-off, and egress chokepoint set up in Phase 1 stayed green across 18 phases. Retrofitting them is far more expensive.
+2. **Small, precise on-demand units beat monolithic generation for a cheap model.** (v1.0 + confirmed v1.1) Decomposing into a markup-only shell plus tiny per-action handlers raises reliability and makes each unit deterministically testable.
+3. **Verify generated and composed UI visually — DOM/a11y tests miss it.** (v1.0 + v2.0) Screenshots of actual rendered output catch CSS collapse and visual styling gaps that all role/label assertions pass through. Phase 16/17 screenshots caught the themed re-skin; Phase 17 CSS gap was missed (caught by integration checker post-close).
+4. **In-tree rendering beats detached `createRoot` for app subtrees in a test environment.** (v2.0) Detached roots run outside `act()` scope — self-updating fixtures spin forever. In-tree memoized subtrees are simpler and safer, and eliminate the root-leak class entirely.
+5. **Pure functions for cross-cutting checks are the right default.** (v2.0) `colorCheck` and `sanitizeDisplayName` as pure functions are trivially testable with no fixtures, composable, and hook cleanly at the call site.

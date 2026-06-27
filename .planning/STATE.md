@@ -2,26 +2,26 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Vibe OS
-status: executing
-stopped_at: "Completed Phase 14 Plan 05 (ThemeSelector 4-pill switcher + AppBar mount + switch-path test). Commits 6b53bf5 (component+styles+test) and bfce87b (AppBar mount); switch-path test clicks Noir and asserts documentElement --text becomes #f5eeff (THEME-02 live re-skin); ThemeSelector.test.tsx (3) + src/ui (59) + hygiene (2) green; tsc clean. Phase 14 — all 5 plans complete."
-last_updated: "2026-06-27T04:02:22.283Z"
-last_activity: 2026-06-27 -- Phase 18 planning complete
+status: complete
+stopped_at: "v2.0 Vibe OS SHIPPED. All 5 phases (14–18) complete and merged to develop. 21/21 requirements satisfied. 727 tests green. Tagged v2.0. Archive: .planning/milestones/v2.0-ROADMAP.md, v2.0-REQUIREMENTS.md, v2.0-MILESTONE-AUDIT.md."
+last_updated: "2026-06-26T00:00:00.000Z"
+last_activity: 2026-06-26 -- v2.0 milestone archived and tagged
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 34
-  completed_plans: 30
-  percent: 88
+  completed_plans: 34
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-26)
+See: .planning/PROJECT.md (updated 2026-06-26 after v2.0)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v2.0 Vibe OS — Phase 14: Theme Foundation COMPLETE (all 5 plans). ThemeSelector switcher live in AppBar; named-theme capability visible and interactive. Ready for Phase 15 (Window Manager).
+**Current focus:** v2.0 COMPLETE — milestone archived and tagged `v2.0`. Next: `/gsd-new-milestone` to plan v3.0.
 
 ## Current Position
 

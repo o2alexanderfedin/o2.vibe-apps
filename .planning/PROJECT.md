@@ -14,25 +14,13 @@ There is no application server. The user supplies their own Anthropic API key (s
 
 This still holds after v1.0. The v1.1 delegated thin-shell refined *how* the loop runs (behavior is attached on first action rather than produced whole up front), but it did not shift what the loop must deliver: an interactive app that betrays no on-demand mechanic.
 
-## Shipped: v1.1 Real & Robust (2026-06-26)
+## Shipped: v2.0 Vibe OS (2026-06-26)
 
-Network-data path, reliability hardening, richer storefront, and activated widget composition — all merged, tagged `v1.1`, 552 tests green. See MILESTONES.md.
+Themeable multi-window desktop — 5 phases (14–18), 21/21 requirements satisfied, 727 tests green, tagged `v2.0`. The flat storefront is now a draggable-glass-window OS with 4 switchable themes, a dock + menu bar, a search/launcher panel, and theme-aware app generation. See MILESTONES.md.
 
-## Current Milestone: v2.0 Vibe OS
+## Prior: v1.1 Real & Robust (2026-06-26)
 
-**Goal:** Transform the flat storefront into a themeable, **multi-window "Vibe OS" desktop** — apps open as draggable glass **windows** sharing one chrome, several at once, managed by a dock and menu bar; a visible create surface lets users describe an app and open it; and a switchable, IndexedDB-persisted **theme system** re-skins the entire OS — host chrome and every open app — at a click.
-
-**Design reference:** `design/VibeOS.dc.html` (Claude Desktop artifact) — used for *structure and visual language* only. The exact wording/copy is a free variable we tune later; the layout, window chrome, dock, menu bar, theme variable contract, and interactions are the spec.
-
-**Target features:**
-- **Windowing system** — a multi-window manager: draggable windows with z-order/focus/minimize/close, a desktop surface, a bottom dock (running indicators, hover-scale), and a top menu bar (wordmark, active-app name, clock). Multiple apps mounted concurrently (N independent React roots, each its own delegated shell).
-- **Themeable shell** — a named-theme registry (Aurora / Aero / Aqua / Noir) expressed as sets of CSS custom properties; the active theme persisted in IndexedDB and switchable live; applied to host chrome **and** open apps. Built-in themes only this milestone (user-created themes deferred).
-- **Visible create surface** — the central panel where a user describes an app and opens it, wired to the **real** on-demand produce path (the loading affordance reflects genuine production), result → opens a window.
-- **Theme-aware generated apps** — produced apps/widgets reference the theme variable contract (`--accentA`, `--glass`, `--text`, …) instead of hardcoded colors, so they re-skin for free when the theme changes (the load-bearing, non-obvious part — the produce prompt must mandate the contract).
-
-**Premise evolution (deliberate):** the long-standing *"apps simply exist — no visible creation surface"* rule is replaced by a branded, visible create front-door. **The devtools-hygiene lexicon gate is unchanged and still holds**: the mechanic (AI / LLM / on-demand generation) is still never *named* in any surface — no banned token (`synthesi*`/`AI`/`llm`/`generate`/`fake`/`mock`) appears. Only the product's stance on *showing a creation affordance* changes.
-
-**Deferred out of v2.0** (in Active, not this milestone): HARD-01 `<iframe sandbox>` / SEC-01–03 (security still deferred); G2 unified `Intent` (internal refactor); user-created/custom themes (built-ins only first).
+Network-data path, reliability hardening, richer storefront, and activated widget composition — all merged, tagged `v1.1`, 552 tests green.
 
 ## Requirements
 
@@ -96,26 +84,57 @@ Network-data path, reliability hardening, richer storefront, and activated widge
 - ✓ [HYGIENE-03] CI lexicon gate (`hygiene.test.ts`) enforces the banned-token set across `src/**` + `index.html` — v1.0
 - ✓ [HYGIENE-04] Sourcemaps off + neutral naming for stores/keys/logs/CSS — v1.0
 - ✓ [HYGIENE-05] API key sent only to `api.anthropic.com`, never logged (proven by console-spy test) — v1.0
+- ✓ [HYGIENE-06] CI gate extended to all new v2.0 surfaces + model-supplied display string sanitization — v2.0
 
 **Security (v1 scope)**
 - ✓ [SEC-04] CSP meta tag pinning `connect-src` to self + `api.anthropic.com`, tested — v1.0
 
-> **Deferred (not in v1.0):**
-> - **SEC-01 / SEC-02 / SEC-03** (general sandbox / iframe isolation hardening) — deferred by explicit user instruction ("forget about safety for now"). Eligible for a later milestone.
-> - **HARD-01** (`<iframe sandbox>` isolation) and **POP-01** (popularity row) — deferred to v2.
+**Windowing system (v2.0)**
+- ✓ [WIN-01] Draggable glass window with macOS-style titlebar (traffic-light + icon + title) — v2.0
+- ✓ [WIN-02] Multiple concurrent independent windows; active-app name in menu bar — v2.0
+- ✓ [WIN-03] Window raise (z-order), drag clamped to viewport, cascade placement — v2.0
+- ✓ [WIN-04] Minimize to dock / restore — v2.0
+- ✓ [WIN-05] Close with full subtree teardown, no root leaks — v2.0
+- ✓ [WIN-06] Dock with running indicators + hover-scale + magnifier launcher icon — v2.0
+- ✓ [WIN-07] Menu bar: OS wordmark + active-app name + live clock — v2.0
+- ✓ [WIN-08] Desktop surface with themed animated wallpaper — v2.0
+
+**Themeable shell (v2.0)**
+- ✓ [THEME-01] Four built-in themes (Aurora / Aero / Aqua / Noir) selectable from menu bar — v2.0
+- ✓ [THEME-02] Theme switch re-skins host chrome AND all open app windows live — v2.0
+- ✓ [THEME-03] Active theme persists; FOUC-safe first paint — v2.0
+- ✓ [THEME-04] Themes as CSS custom properties on document root — v2.0
+- ✓ [THEME-05] Backward-compat alias bridge for pre-v2.0 cached apps — v2.0
+
+**Search / launcher panel (v2.0)**
+- ✓ [CREATE-01] Dock magnifier opens SearchLauncherPanel with text input + pre-installed apps — v2.0
+- ✓ [CREATE-02] Describe → find-or-produce → window on desktop (cache hit = instant) — v2.0
+- ✓ [CREATE-03] Pre-installed app selection opens window on desktop, dock running dot — v2.0
+
+**Theme-aware generation (v2.0)**
+- ✓ [TGEN-01] Produced apps reference theme CSS-var contract (no hardcoded colors) — v2.0
+- ✓ [TGEN-02] Post-compile colorCheck → self-heal loop on violations (≤3 retries) — v2.0
+- ✓ [TGEN-03] Model-supplied names sanitized before titlebar/dock/menu — v2.0
+
+**Performance (v2.0)**
+- ✓ [PERF-01] Minimized windows display:none; animated wallpaper degrades under prefers-reduced-motion — v2.0
+
+> **Deferred beyond v2.0:**
+> - **SEC-01 / SEC-02 / SEC-03** (general sandbox / iframe isolation hardening) — eligible for a later milestone.
+> - **HARD-01** (`<iframe sandbox>` isolation) — windowing layer designed for contained future adoption.
+> - **G2** unified `Intent` contract — internal refactor.
+> - Custom themes, window-layout persistence — v3.x candidates.
 
 ### Active
 
-<!-- Next-milestone candidates. Drawn from BLUEPRINT-DELTA.md gaps + v2-deferred items. All are hypotheses until shipped. -->
+<!-- Next-milestone candidates. All are hypotheses until shipped. -->
 
-- [ ] **[G1-followups] cacheKey correctness for activated widgets/tweaks** — the v1.0 key is `SHA-256(type)` only (the kind/prompt folding that closed G1 covers the shipped paths). If widgets activate as a first-class path, fold `kind` (and a normalized prompt hash for tweak variants) fully into the key so widgets can't collide on a shared type slug and tweak variants cache distinctly instead of always re-hitting the model.
-- [ ] **[G2] Unified `Intent` contract** — collapse the parallel `routeModification` / `Modification` path into the blueprint's single `Intent { operation, kind, contextBundle }` so one resolver drives open / mutate / clone / remove.
-- [ ] **[G3] Activate + type widgets and handlers** — the widget generation path is built but dormant (delegated apps never declare `@widget`); make widget composition a first-class user path and replace the `Record<string, unknown>` placeholder `WidgetRecord` / `HandlerRecord` schemas with real types.
-- [ ] **[G5] Persist `displayName` and `prompt`** (and `widgetDeps` / `createdAt`) — trimmed for MVP; needed for a richer storefront and faithful re-generation.
-- [ ] **[HARD-01] `<iframe sandbox="allow-scripts">` isolation** — move generated code out of the `new Function` scope (containment-by-convention) into an opaque-origin frame brokered by `postMessage`, so the API key never enters the frame. The v2 security end-state.
-- [ ] **[POP-01] Popularity row** — surface most-opened apps on the storefront (needs the `useCount` field already persisted for LRU).
-- [ ] **Sanctioned network-data path** — a controlled, hygiene-safe egress so network-dependent apps (Weather / Currency) can fetch real data instead of degrading to a fallback in the sandboxed handler scope.
-- [ ] **Reducer-reliability hardening** — reduce state-machine quirks in produced reducers (e.g., stronger action-spec contracts, validation, or self-heal on bad transitions).
+- [ ] **[HARD-01] `<iframe sandbox="allow-scripts">` isolation** — move generated code out of the `new Function` scope into an opaque-origin frame brokered by `postMessage`, so the API key never enters the frame. The v3.x security end-state. Windowing layer designed for this as a contained future change.
+- [ ] **[G2] Unified `Intent` contract** — collapse the parallel `routeModification` / `Modification` path into a single `Intent { operation, kind, contextBundle }` resolver. Internal refactor; no user-facing value yet.
+- [ ] **User-created / custom themes** — theme editor + persisting custom themes in the IDB `settings` store; built-in four only in v2.0.
+- [ ] **Window-position / desktop-layout persistence** — restoring exact window geometry and the `installed[]` dock across reloads; active-theme persistence ships in v2.0, layout deferred.
+- [ ] **SearchLauncherPanel CSS polish** — 6 interior classes (`.launcher__search`, `.launcher__input`, `.launcher__open-btn`, `.launcher__working`, `.launcher__chips`, `.launcher__chip`) partially styled by audit-debt fix (commit `8f0e601`); a final theme-glass treatment pass remains.
+- [ ] **SEC-01/02/03** — general sandbox / iframe isolation hardening; deferred.
 
 ### Out of Scope
 
@@ -132,8 +151,8 @@ Network-data path, reliability hardening, richer storefront, and activated widge
 
 ## Context
 
-- **Current size & stack.** ~7k+ LOC of strict TypeScript (production code; ~12k including the test suite), **368 tests green**, `tsc` 0, build clean, released `v0.1.0`. Stack: **Vite 8**, **React 19.2 / react-dom 19.2**, **@babel/standalone classic-runtime** (pinned v7 default), **idb 8** over IndexedDB, **Claude Haiku** (`claude-haiku-4-5-20251001`) via direct browser `fetch`. Flat `MAX_TOKENS = 8192` (raised from 2048, which truncated real components).
-- **Module layout** (diverged from the blueprint tree, by design): `src/registry/` (db, cacheKey, registry, storagePressure), `src/intent/` (resolver, routeModification), `src/execution/` (producer, transpile, widgetParse, widgetPrewarm, instantiate, mount), `src/host/` (modelClient, resilience: token-bucket, backoff, produce gate, error backstop), `src/services/` (IoC seams: transport / registry / key / gate injected for tests), `src/data/` + `src/apps/` (app registry + seeds), `src/ui/` (AppShell, WidgetShell, ContextualPrompt, Marketplace, AppBar, KeyDialog, ThemeProvider).
+- **Current size & stack.** ~21k LOC of strict TypeScript (production + test suite; 727 tests green), `tsc` 0, build clean, tagged `v2.0`. Stack: **Vite 8**, **React 19.2 / react-dom 19.2**, **@babel/standalone classic-runtime** (pinned v7 default), **idb 8** over IndexedDB (DB v3 with `settings` store), **Claude Haiku** (`claude-haiku-4-5-20251001`) via direct browser `fetch`. **Zero new npm dependencies added in v2.0.**
+- **Module layout** (diverged from blueprint tree, by design): `src/registry/` (db, cacheKey, registry, storagePressure, settingsStore), `src/intent/` (resolver, routeModification), `src/execution/` (producer, transpile, widgetParse, widgetPrewarm, instantiate, mount, colorCheck, sanitizeDisplayName), `src/host/` (modelClient, resilience: token-bucket, backoff, produce gate, error backstop), `src/services/` (IoC seams: transport / registry / key / gate / settings injected for tests), `src/data/` + `src/apps/` (app registry + seeds + dataBroker), `src/ui/` (DesktopShell, WindowFrame, Dock, MenuBar, SearchLauncherPanel, VibeThemeProvider, ThemeSelector, AppShell, WidgetShell, ContextualPrompt, AppBar, KeyDialog, useDrag, useWindowManager, iconForApp).
 - **Pure browser application, no build step for generated code.** Generated JSX is compiled in-browser and instantiated with `new Function(...)` receiving only an explicit named scope (`React`, plus `useWidget` / `runHandler` / a `require` shim). `window` / `document` / `localStorage` are reachable as ambient globals — `new Function` is containment-by-convention, not a security boundary (HARD-01 is the fix).
 - **Local-first registry.** A single IndexedDB database holds three object stores — `apps`, `widgets`, `handlers` — keyed by opaque hashes, with an in-memory `Map` fallback behind an identical async interface when IndexedDB is unavailable.
 - **The illusion is enforced, not aspirational.** A CI lexicon gate (`src/hygiene.test.ts`) bans the mechanic-revealing lexicon across `src/**` + `index.html`; production ships with `build.sourcemap: false`; stores, keys, logs, and CSS use neutral naming; the gated logger is the only logging path.
@@ -163,7 +182,13 @@ Network-data path, reliability hardening, richer storefront, and activated widge
 | **Delegated thin-shell** as the default for unseeded apps (v1.1 pivot, post-v1.0) — behavior-free module + per-action handlers produced on demand and cached | Contradicts the monolithic `<400`-line model; makes handlers the primary behavior mechanism; re-press is an O(1) cache hit | ✓ Good — built, merged, validated live; graceful fallback to monolith keeps legacy/seed paths non-breaking |
 | **Flat `MAX_TOKENS = 8192`** (not the blueprint's per-kind 1500/1000/800 budgets) | 2048 truncated real components → transpile failures; a single generous cap is simpler and more reliable | ✓ Good — arguably better than the per-kind scheme; flag only for doc reconciliation |
 | **IoC / DI everywhere** — inject the LLM transport, registry, key store, and produce gate so tests substitute the model | Makes the open→render flow testable with real captured Haiku fixtures and no live network | ✓ Good — DI invariant verified (single injected egress chokepoint; 368 tests run offline) |
-| **registryKey folds `kind` + `prompt`** (the G1 close for shipped paths) | Stable, distinct keys per app/kind/prompt within the shipped surface | ⚠ Revisit — fully extends only once widgets activate (Active G1-followups / G3); the bare `SHA-256(type)` collision risk remains latent until then |
+| **registryKey folds `kind` + `prompt`** (the G1 close for shipped paths) | Stable, distinct keys per app/kind/prompt within the shipped surface | ⚠ Revisit — fully extends only once widgets activate; the bare `SHA-256(type)` collision risk remains latent until then |
+| **Theme vars on `document.documentElement`** (not React context) | CSS inheritance reaches all app subtrees regardless of mount strategy; FOUC-safe via `localStorage` sync-read in `index.html` | ✓ Good — Phase 14 confirmed; re-skin acceptance test proves all subtrees update |
+| **Windows render in-tree (memoized `WindowBody`) not separate `createRoot` roots** | Detached roots ran outside `act()` scope in tests → self-updating fixture hung; in-tree eliminates the root-leak class | ✓ Good — Phase 15 architectural deviation; WIN-02 intent (concurrent, independent) fully met; appBodyCount invariant green |
+| **Zero new npm dependencies for v2.0** | react-draggable has React 19 `findDOMNode` breakage; framer-motion is 674KB–4.8MB | ✓ Good — hand-rolled `useDrag` (setPointerCapture + rAF) + VibeThemeProvider + all desktop components within the constraint |
+| **`colorCheck` allows grayscale hex + neutral-alpha shadows** | Prevents false positives on legitimate shadow/border conventions in generated UIs | ✓ Good — 44/44 colorCheck tests include the shadow-not-flagged case; CR-02 closed the 4-digit `#rgba` evasion path |
+| **`sanitizeDisplayName` wired in `useWindowManager.open()`** (not in the producer) | Sanitization happens at chrome-render time, not at produce time — catches model-supplied names from any path | ✓ Good — "AI Weather" → "Weather" behavioral test green; titlebar/dock/menu can't render a banned token |
+| **FOUC script duplicates VIBE_THEMES verbatim** (not shared import) | Script must run before any module load; sync by convention (copied values) + same-commit CSP hash invariant | ✓ Good — FOUC gate green across all phase exits; csp.test.ts recomputes hash from live file |
 
 ## Evolution
 
@@ -183,4 +208,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-26 — v2.0 Vibe OS milestone started (v1.1 Real & Robust shipped)*
+*Last updated: 2026-06-26 after v2.0 Vibe OS milestone — 727 tests green, `v2.0` tagged*
