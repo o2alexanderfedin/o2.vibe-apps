@@ -240,7 +240,15 @@ Plans:
   2. When the model returns generated code that contains a hardcoded hex color literal, the post-compile static check detects it and feeds the violation as a compiler-style error back into the existing self-heal loop (≤3 retries, no new round-trips beyond the shipped budget) — within those retries the app emerges using only CSS variables.
   3. An app named "AI Weather" or "Generated Notes" by the model has its display name sanitized before reaching the titlebar, dock label, or menu bar — no banned token (`AI`, `llm`, `generate`, `fake`, `mock`, or the `synthesi*` family) is visible in any devtools-accessible surface.
   4. The CI lexicon gate (`hygiene.test.ts`) is extended to cover all new v2.0 source files (DesktopShell, WindowFrame, Dock, MenuBar, CreatePanel, VibeThemeProvider, settings, createPanelUtils) and all existing tests remain green with `tsc` clean and the build emitting no source maps.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1** *(independent — run in parallel)*
+- [ ] 18-01-PLAN.md — colorCheck.ts: pure saturated-color detector (TDD) for the post-compile self-heal hook (TGEN-02)
+- [ ] 18-02-PLAN.md — sanitizeDisplayName.ts: banned-token stripper for model-supplied display names (TDD) (TGEN-03)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 18-03-PLAN.md — Wire TGEN-01 (new theme var contract in all five prompt kinds) + TGEN-02 (colorCheck into produceComponent) + update producer tests
+- [ ] 18-04-PLAN.md — Wire TGEN-03 (sanitizeDisplayName into useWindowManager.open()) + HYGIENE-06 (extend Pitfall-11 list + sanitize proof test)
 **Research pitfalls defended**: Pitfall 10 (generated apps hardcode colors — prompt contract + post-compile hex/rgb regex → self-heal), Pitfall 11 (model-generated names sanitized; CI gate extended to all new surfaces)
 
 ---
@@ -269,7 +277,7 @@ v1.0 → v1.1 → v2.0 phases execute in numeric order: 1 → … → 13 → 14 
 | 15. Window Manager | v2.0 | 4/4 | Complete   | 2026-06-26 |
 | 16. Desktop Shell | v2.0 | 0/4 | Planned | - |
 | 17. Search / Launcher Panel | v2.0 | 4/4 | Complete | 2026-06-26 |
-| 18. Theme-Aware Generation | v2.0 | 0/TBD | Not started | - |
+| 18. Theme-Aware Generation | v2.0 | 0/4 | Planned | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
 **v1.1 Real & Robust shipped 2026-06-26 — 5 phases, 12/12 requirements satisfied, 552 tests green.**
