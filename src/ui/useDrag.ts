@@ -55,7 +55,10 @@ export function useDrag({ elementRef, initialX, initialY, onCommit }: UseDragOpt
       // initialX/initialY from options represent the starting logical position
       startPos.current = { x: initialX, y: initialY };
 
-      const desktop = document.querySelector(".desktop");
+      // Scope the lookup to THIS frame's own ancestor rather than the first
+      // .desktop in the whole document — a generic drag hook should not couple
+      // to a global DOM class outside its own ref tree.
+      const desktop = elementRef.current?.closest(".desktop");
       desktop?.classList.add("desktop--dragging");
 
       const onMove = (moveEvent: PointerEvent) => {
@@ -81,7 +84,7 @@ export function useDrag({ elementRef, initialX, initialY, onCommit }: UseDragOpt
         cancelAnimationFrame(rafId.current);
         (endEvent.currentTarget as HTMLElement).releasePointerCapture(endEvent.pointerId);
 
-        const desktop2 = document.querySelector(".desktop");
+        const desktop2 = elementRef.current?.closest(".desktop");
         desktop2?.classList.remove("desktop--dragging");
 
         target.removeEventListener("pointermove", onMove);
