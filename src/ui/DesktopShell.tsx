@@ -612,12 +612,11 @@ function DesktopShellInner() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleClose]);
 
-  // The active window feeding the menu-bar name: the highest-z, non-minimized
-  // window is the front-most one (same z-ordering the manager's zTop tracks).
-  const activeWindow =
-    [...windowManager.windows]
-      .filter((w) => !w.minimized)
-      .sort((a, b) => b.z - a.z)[0] ?? null;
+  // The active window feeding the menu-bar name comes from the manager's
+  // activeWindow() — the SINGLE source of truth for "front-most" that the
+  // keyboard-shortcut target also uses, so the name and the shortcut target can
+  // never disagree (WR-05).
+  const activeWindow = windowManager.activeWindow();
 
   return (
     <div

@@ -98,7 +98,13 @@ export interface WindowManagerValue {
    * stale-windows-array round-trip through instanceId → id.
    */
   isOpenByInstance: (instanceId: string) => boolean;
-  /** Returns the active (topmost non-minimized) window id, or null if none. */
+  /** Returns the active (topmost non-minimized) window ENTRY, or null if none.
+   *  The SINGLE source of truth for "which window is front-most" — both the
+   *  keyboard-shortcut target and the menu-bar active name derive from it so
+   *  they can never disagree (WR-05). */
+  activeWindow: () => WindowEntry | null;
+  /** Returns the active (topmost non-minimized) window id, or null if none.
+   *  Convenience wrapper over activeWindow() (same selection logic, WR-05). */
   activeId: () => string | null;
 }
 
@@ -372,15 +378,21 @@ export function WindowManagerProvider({
     return openInstanceIdsRef.current.has(instanceId);
   }, []);
 
-  const activeId = useCallback((): string | null => {
+  const activeWindow = useCallback((): WindowEntry | null => {
     // The active window is the highest-z, non-minimized one (the same z-ordering
     // zTop tracks). Read the live ref mirror so an event-handler caller resolves
-    // the current front-most window without a stale-closure round-trip.
+    // the current front-most window without a stale-closure round-trip. This is
+    // the SINGLE definition both activeId() and DesktopShell's menu-bar name
+    // derive from (WR-05).
     const top = [...windowsRef.current]
       .filter(w => !w.minimized)
       .sort((a, b) => b.z - a.z)[0];
-    return top?.id ?? null;
+    return top ?? null;
   }, []);
+
+  const activeId = useCallback((): string | null => {
+    return activeWindow()?.id ?? null;
+  }, [activeWindow]);
 
   const value: WindowManagerValue = {
     windows,
@@ -397,6 +409,7 @@ export function WindowManagerProvider({
     close,
     isOpen,
     isOpenByInstance,
+    activeWindow,
     activeId,
   };
 
