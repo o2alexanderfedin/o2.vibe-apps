@@ -126,6 +126,30 @@ export function SandboxFrame({
     missedPongsRef.current = 0;
   }, []);
 
+  // Latest-value refs so the single message listener (attached ONCE below) reads
+  // current props without re-subscribing. The parent passes fresh inline handler
+  // closures (onRunHandler/onFetchData/onModify) on every render, and transpiledJS
+  // /themeVars can update post-mount; if the listener effect depended on them it
+  // would tear down and re-add on every parent render, leaving NO listener
+  // attached at the instant the frame's one-shot FRAME_READY arrives — so the
+  // VIBE_BOOTSTRAP handshake would silently never complete and the app body would
+  // render blank. Reading through refs keeps the subscription stable for the
+  // component's whole lifetime while still using the latest values.
+  const transpiledJSRef = useRef(transpiledJS);
+  transpiledJSRef.current = transpiledJS;
+  const themeVarsRef = useRef(themeVars);
+  themeVarsRef.current = themeVars;
+  const onRunHandlerRef = useRef(onRunHandler);
+  onRunHandlerRef.current = onRunHandler;
+  const onFetchDataRef = useRef(onFetchData);
+  onFetchDataRef.current = onFetchData;
+  const onModifyRef = useRef(onModify);
+  onModifyRef.current = onModify;
+  // utils is rebuilt each render from defaultUtils + _utils; capture its members
+  // in a ref too so the stable listener calls the current sendToFrame.
+  const sendToFrameRef = useRef(utils.sendToFrame);
+  sendToFrameRef.current = utils.sendToFrame;
+
   useEffect(() => {
     const onMessage = async (event: MessageEvent) => {
       const frameWindow = iframeRef.current?.contentWindow ?? null;
@@ -144,11 +168,18 @@ export function SandboxFrame({
           : undefined;
 
       const type = env.type as RpcMethod;
+      const sendToFrame = sendToFrameRef.current;
 
       if (type === "FRAME_READY") {
-        utils.sendToFrame(
+        sendToFrame(
           frameWindow,
-          { type: "VIBE_BOOTSTRAP", payload: { transpiledJS, themeVars } },
+          {
+            type: "VIBE_BOOTSTRAP",
+            payload: {
+              transpiledJS: transpiledJSRef.current,
+              themeVars: themeVarsRef.current,
+            },
+          },
           "*",
         );
         return;
@@ -180,9 +211,9 @@ export function SandboxFrame({
         const corrId = env.correlationId;
         if (typeof intent !== "string" || !corrId) return;
         try {
-          const result = await (onRunHandler?.(intent, input) ??
+          const result = await (onRunHandlerRef.current?.(intent, input) ??
             Promise.resolve({ data: undefined }));
-          utils.sendToFrame(
+          sendToFrame(
             frameWindow,
             {
               type: "RUN_HANDLER_RESULT",
@@ -192,7 +223,7 @@ export function SandboxFrame({
             "*",
           );
         } catch {
-          utils.sendToFrame(
+          sendToFrame(
             frameWindow,
             {
               type: "RUN_HANDLER_RESULT",
@@ -211,9 +242,9 @@ export function SandboxFrame({
         const corrId = env.correlationId;
         if (typeof sourceId !== "string" || !corrId) return;
         try {
-          const result = await (onFetchData?.(sourceId, params) ??
+          const result = await (onFetchDataRef.current?.(sourceId, params) ??
             Promise.resolve({ data: undefined }));
-          utils.sendToFrame(
+          sendToFrame(
             frameWindow,
             {
               type: "FETCH_DATA_RESULT",
@@ -223,7 +254,7 @@ export function SandboxFrame({
             "*",
           );
         } catch {
-          utils.sendToFrame(
+          sendToFrame(
             frameWindow,
             {
               type: "FETCH_DATA_RESULT",
@@ -238,22 +269,25 @@ export function SandboxFrame({
 
       if (type === "MODIFY_REQUEST") {
         const instruction = payload?.["instruction"];
-        if (typeof instruction === "string") onModify?.(instruction);
+        if (typeof instruction === "string") onModifyRef.current?.(instruction);
         return;
       }
     };
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
+    // Stable subscription for the component's lifetime: all per-render values are
+    // read through refs, so the listener is attached ONCE and never races the
+    // frame's FRAME_READY handshake. Keyed on instanceId only (a new frame).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instanceId, transpiledJS, themeVars, onRunHandler, onFetchData, onModify]);
+  }, [instanceId]);
 
   // ---------------------------------------------------------------------------
   // Ping/pong liveness (SANDBOX-06)
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const interval = setInterval(() => {
-      utils.sendToFrame(
+      sendToFrameRef.current(
         iframeRef.current?.contentWindow ?? null,
         { type: "FRAME_PING" },
         "*",

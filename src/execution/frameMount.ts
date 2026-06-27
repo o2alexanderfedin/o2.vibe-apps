@@ -53,16 +53,27 @@ export function broadcastTheme(vars: Record<string, string>): void {
  *                      postMessage after FRAME_READY; kept as a parameter so
  *                      callers have a stable 3-param signature for future use.
  * @param themeVars     CSS variable map applied to :root on load and on THEME_PUSH.
- * @param parentOrigin  The parent window origin, baked into the bootstrap so the
- *                      frame can target postMessage replies.
+ * @param parentOrigin  Ignored — the frame has an opaque origin and only ever
+ *                      messages its single embedder (the parent), so replies
+ *                      target "*"; kept as a parameter for signature stability.
+ *
+ * CSP NOTE: a `srcdoc` frame INHERITS the embedding document's policy, and the
+ * host policy authorizes inline scripts by sha256 hash (never 'unsafe-inline').
+ * The inline bootstrap below must therefore be byte-stable across renders so its
+ * single hash can be pinned in the host CSP — so NOTHING per-render is
+ * interpolated INTO the <script> body. Per-render data (theme vars, app code)
+ * arrives via the <style> block (not a script) and the VIBE_BOOTSTRAP message.
  */
 export function buildSrcdoc(
   transpiledJS: string,
   themeVars: Record<string, string>,
   parentOrigin: string,
 ): string {
-  // Suppress unused-variable warning while keeping the param for signature stability.
+  // Suppress unused-variable warnings while keeping the params for signature
+  // stability. parentOrigin is intentionally NOT baked into the script body
+  // (see CSP NOTE) — the frame posts to "*" to its sole embedder.
   void transpiledJS;
+  void parentOrigin;
 
   // Build :root CSS variable declarations
   const rootVars = Object.entries(themeVars)
@@ -93,8 +104,6 @@ body { overflow: hidden; margin: 0; }
 <script>
 (function() {
   "use strict";
-
-  var PARENT_ORIGIN = ${JSON.stringify(parentOrigin)};
 
   // ---------------------------------------------------------------------------
   // CJS require shim
@@ -127,7 +136,9 @@ body { overflow: hidden; margin: 0; }
   var pendingCalls = {};
 
   function postToParent(msg) {
-    window.parent.postMessage(msg, PARENT_ORIGIN === "null" ? "*" : PARENT_ORIGIN);
+    // The frame has an opaque origin and only ever talks to its single embedder;
+    // "*" is safe here and keeps the bootstrap script byte-stable (CSP hash).
+    window.parent.postMessage(msg, "*");
   }
 
   function useWidget() {
@@ -142,6 +153,12 @@ body { overflow: hidden; margin: 0; }
     });
   }
 
+  // Set once VIBE_BOOTSTRAP has been processed, so the FRAME_READY re-announce
+  // loop can stop. The parent's bootstrap listener can churn (its effect deps
+  // include per-render handler closures), so a single load-time FRAME_READY can
+  // race a listener swap and be dropped — we re-announce until acknowledged.
+  var bootstrapped = false;
+
   // ---------------------------------------------------------------------------
   // Inbound message handler
   // ---------------------------------------------------------------------------
@@ -152,6 +169,8 @@ body { overflow: hidden; margin: 0; }
     var type = data.type;
 
     if (type === "VIBE_BOOTSTRAP") {
+      if (bootstrapped) return;
+      bootstrapped = true;
       var payload = data.payload || {};
       var code = payload.transpiledJS;
       var vars = payload.themeVars;
@@ -165,7 +184,18 @@ body { overflow: hidden; margin: 0; }
         new Function("module", "exports", "React", "useWidget", "runHandler", "require", code)(
           mod, mod.exports, window.React, useWidget, runHandler, requireShim
         );
-        var App = mod.exports.default || mod.exports.App || mod.exports;
+        // Resolve the component the same way the in-tree path does: prefer an
+        // explicit export, then fall back to a bare top-level App function
+        // declaration (the seed shape) by re-running with an explicit return.
+        // Babel wraps the body so a bare declaration is local to that scope.
+        var App = mod.exports.default || mod.exports.App;
+        if (typeof App !== "function") {
+          var mod2 = { exports: {} };
+          App = new Function(
+            "module", "exports", "React", "useWidget", "runHandler", "require",
+            code + "\\nreturn typeof App !== 'undefined' ? App : undefined;"
+          )(mod2, mod2.exports, window.React, useWidget, runHandler, requireShim);
+        }
         if (typeof App === "function") {
           window.ReactDOM.createRoot(document.getElementById("root")).render(
             window.React.createElement(App)
@@ -234,11 +264,28 @@ body { overflow: hidden; margin: 0; }
   };
 
   // ---------------------------------------------------------------------------
-  // FRAME_READY on load
+  // FRAME_READY announce — re-post until the parent acknowledges with
+  // VIBE_BOOTSTRAP. The parent's message listener can be momentarily detached
+  // during a re-render (its effect re-subscribes when per-render handler props
+  // change), so a single one-shot announce can be lost. Re-announcing on a short
+  // interval makes the handshake self-healing and order-independent; it stops as
+  // soon as bootstrapped flips true (and after a bounded number of attempts so a
+  // truly dead parent does not spin forever).
   // ---------------------------------------------------------------------------
-  window.addEventListener("load", function() {
+  function announce() {
+    if (bootstrapped) return;
     postToParent({ type: "FRAME_READY" });
-  });
+  }
+  announce();
+  var announceAttempts = 0;
+  var announceTimer = setInterval(function() {
+    announceAttempts += 1;
+    if (bootstrapped || announceAttempts > 50) {
+      clearInterval(announceTimer);
+      return;
+    }
+    announce();
+  }, 100);
 
 })();
 </script>

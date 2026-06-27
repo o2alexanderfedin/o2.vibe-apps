@@ -54,9 +54,18 @@ describe("buildSrcdoc", () => {
     expect(doc).not.toMatch(/sk-ant/);
   });
 
-  it("bakes the parentOrigin into the script", () => {
-    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
-    expect(doc).toContain("https://host.test");
+  it("does NOT bake the parentOrigin into the script (byte-stable bootstrap for CSP hashing)", () => {
+    // A srcdoc frame inherits the host CSP, which authorizes the inline bootstrap
+    // by a single pinned sha256 hash. That requires the bootstrap script body to
+    // be identical across renders, so per-render data (including parentOrigin)
+    // MUST NOT be interpolated into the <script>. The frame has an opaque origin
+    // and only ever messages its sole embedder, so it posts to "*" instead.
+    const a = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.a");
+    const b = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.b");
+    expect(a).not.toContain("https://host.a");
+    expect(b).not.toContain("https://host.b");
+    // The full documents are byte-identical when only parentOrigin differs.
+    expect(a).toBe(b);
   });
 
   it("contains the REACT_EMBED.react substring (React CJS code is embedded)", () => {

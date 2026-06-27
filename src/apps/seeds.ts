@@ -56,10 +56,10 @@ function App() {
   const [draft, setDraft] = React.useState("");
 
   React.useEffect(() => {
-    const saved = localStorage.getItem("marketplace.notes.items");
-    if (saved) {
-      try { setItems(JSON.parse(saved) as string[]); } catch {}
-    }
+    try {
+      const saved = localStorage.getItem("marketplace.notes.items");
+      if (saved) setItems(JSON.parse(saved) as string[]);
+    } catch {}
   }, []);
 
   const persist = (next: string[]) => {
