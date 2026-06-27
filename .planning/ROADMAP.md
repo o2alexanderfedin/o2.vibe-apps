@@ -57,7 +57,7 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
 
 ### v3.0 Trusted Desktop (Phases 19–22)
 
-- [ ] **Phase 19: Window Chrome & Menu Relocation** - Relocate the `⋮` contextual menu into the window titlebar (right-aligned), add maximize/snap/keyboard shortcuts; hard prerequisite for all iframe work.
+- [x] **Phase 19: Window Chrome & Menu Relocation** - Relocate the `⋮` contextual menu into the window titlebar (right-aligned), add maximize/snap/keyboard shortcuts; hard prerequisite for all iframe work. (completed 2026-06-27)
 - [ ] **Phase 20: Opaque-Origin Frame Isolation** - Convert each app body to `<iframe sandbox="allow-scripts">` brokered by `postMessage`; the API key never enters the frame; 727 RTL tests remain green via in-tree fallback.
 - [ ] **Phase 21: Desktop Persistence** - Restore window geometry, z-order, open-app set, and minimized state across reloads using additive keys in the existing IDB `settings` store; no DB version bump.
 - [ ] **Phase 22: Theme Editor & Custom Themes** - Create, name, edit, and save custom themes over the 12-var contract; custom themes appear in the menu-bar switcher and survive reload FOUC-free.
@@ -107,16 +107,16 @@ Carried forward from v1.0–v2.0 and extended for v3.0 — these are acceptance 
 **Plans**: 4 plans
 Plans:
 **Wave 1**
-- [ ] 19-01-menu-relocation-PLAN.md — Relocate the ⋮ contextual menu into the WindowFrame titlebar; strip AppShell to a content-only wrapper (CHROME-01)
+- [x] 19-01-menu-relocation-PLAN.md — Relocate the ⋮ contextual menu into the WindowFrame titlebar; strip AppShell to a content-only wrapper (CHROME-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 19-02-maximize-work-area-PLAN.md — Maximize = zoom-to-work-area via double-click + the green traffic-light; restore prior geometry (CHROME-02)
+- [x] 19-02-maximize-work-area-PLAN.md — Maximize = zoom-to-work-area via double-click + the green traffic-light; restore prior geometry (CHROME-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 19-03-snap-half-PLAN.md — Snap to left/right half via edge-drag drop-zone preview + Ctrl+Left/Right (CHROME-03)
+- [x] 19-03-snap-half-PLAN.md — Snap to left/right half via edge-drag drop-zone preview + Ctrl+Left/Right (CHROME-03)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 19-04-keyboard-shortcuts-PLAN.md — Cmd/Ctrl+W close + Cmd/Ctrl+M minimize with preventDefault; phase-19 gate (CHROME-04)
+- [x] 19-04-keyboard-shortcuts-PLAN.md — Cmd/Ctrl+W close + Cmd/Ctrl+M minimize with preventDefault; phase-19 gate (CHROME-04)
 **UI hint**: yes
 
 ---
@@ -230,7 +230,7 @@ v1.0 → v1.1 → v2.0 → v3.0 phases execute in numeric order: 1 → … → 1
 | 16. Desktop Shell | v2.0 | 4/4 | Complete | 2026-06-27 |
 | 17. Search / Launcher Panel | v2.0 | 4/4 | Complete | 2026-06-26 |
 | 18. Theme-Aware Generation | v2.0 | 4/4 | Complete | 2026-06-26 |
-| 19. Window Chrome & Menu Relocation | v3.0 | 0/TBD | Not started | - |
+| 19. Window Chrome & Menu Relocation | v3.0 | 4/4 | Complete   | 2026-06-27 |
 | 20. Opaque-Origin Frame Isolation | v3.0 | 0/TBD | Not started | - |
 | 21. Desktop Persistence | v3.0 | 0/TBD | Not started | - |
 | 22. Theme Editor & Custom Themes | v3.0 | 0/TBD | Not started | - |
