@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:ui": "vitest --ui",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "embed:react": "node scripts/embed-react-cjs.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.26",

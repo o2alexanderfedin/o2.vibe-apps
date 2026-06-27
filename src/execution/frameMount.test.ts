@@ -1,0 +1,138 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  buildSrcdoc,
+  registerFrame,
+  unregisterFrame,
+  broadcastTheme,
+} from "./frameMount";
+import { REACT_EMBED } from "../../embed/reactEmbed";
+
+// ---------------------------------------------------------------------------
+// Theme vars fixture (all 12 required variables)
+// ---------------------------------------------------------------------------
+const THEME_VARS = {
+  "--text": "#fff",
+  "--wall": "#000",
+  "--b1": "#111",
+  "--b2": "#222",
+  "--b3": "#333",
+  "--b4": "#444",
+  "--glass": "rgba(0,0,0,0.3)",
+  "--glass2": "rgba(0,0,0,0.5)",
+  "--bord": "#555",
+  "--hi": "#666",
+  "--accentA": "#777",
+  "--accentB": "#888",
+};
+
+// ---------------------------------------------------------------------------
+// buildSrcdoc — structure
+// ---------------------------------------------------------------------------
+
+describe("buildSrcdoc", () => {
+  it("has exactly 3 parameters", () => {
+    expect(buildSrcdoc.length).toBe(3);
+  });
+
+  it("contains the in-frame CSP meta tag with connect-src 'none'", () => {
+    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
+    expect(doc).toContain("connect-src 'none'");
+    expect(doc).toContain('<meta http-equiv="Content-Security-Policy"');
+  });
+
+  it("contains the :root CSS style block with theme variables", () => {
+    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
+    expect(doc).toContain("--text");
+    expect(doc).toContain("--glass2");
+    // Verify the values are present
+    expect(doc).toContain("#fff");
+    expect(doc).toContain("rgba(0,0,0,0.5)");
+  });
+
+  it("does NOT contain any API key pattern", () => {
+    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
+    expect(doc).not.toMatch(/sk-ant/);
+  });
+
+  it("bakes the parentOrigin into the script", () => {
+    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
+    expect(doc).toContain("https://host.test");
+  });
+
+  it("contains the REACT_EMBED.react substring (React CJS code is embedded)", () => {
+    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
+    // The react embed contains "react.production" in its license header
+    const reactSnippet = REACT_EMBED.react.slice(0, 60);
+    // The snippet is JSON-encoded in the doc
+    expect(doc).toContain(JSON.stringify(reactSnippet).slice(1, -1));
+  });
+
+  it("contains a <style> block", () => {
+    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
+    expect(doc).toContain("<style>");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// registerFrame / unregisterFrame / broadcastTheme
+// ---------------------------------------------------------------------------
+
+describe("frame registry and broadcastTheme", () => {
+  function makeFrameEl() {
+    const el = document.createElement("iframe") as HTMLIFrameElement;
+    const postMessage = vi.fn();
+    const contentWindow = { postMessage } as unknown as Window;
+    Object.defineProperty(el, "contentWindow", {
+      get: () => contentWindow,
+      configurable: true,
+    });
+    return { el, postMessage };
+  }
+
+  // Clean up between tests
+  beforeEach(() => {
+    unregisterFrame("a");
+    unregisterFrame("b");
+    unregisterFrame("c");
+  });
+
+  it("broadcastTheme calls postMessage once on a single registered frame", () => {
+    const { el, postMessage } = makeFrameEl();
+    registerFrame("a", el);
+    broadcastTheme(THEME_VARS);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: "THEME_PUSH", payload: { vars: THEME_VARS } },
+      "*",
+    );
+    unregisterFrame("a");
+  });
+
+  it("broadcastTheme posts to ALL registered frames", () => {
+    const { el: elA, postMessage: pmA } = makeFrameEl();
+    const { el: elB, postMessage: pmB } = makeFrameEl();
+    registerFrame("a", elA);
+    registerFrame("b", elB);
+    broadcastTheme(THEME_VARS);
+    expect(pmA).toHaveBeenCalledTimes(1);
+    expect(pmB).toHaveBeenCalledTimes(1);
+    unregisterFrame("a");
+    unregisterFrame("b");
+  });
+
+  it("after unregisterFrame, broadcastTheme only posts to remaining frames", () => {
+    const { el: elA, postMessage: pmA } = makeFrameEl();
+    const { el: elB, postMessage: pmB } = makeFrameEl();
+    registerFrame("a", elA);
+    registerFrame("b", elB);
+    unregisterFrame("a");
+    broadcastTheme(THEME_VARS);
+    expect(pmA).not.toHaveBeenCalled();
+    expect(pmB).toHaveBeenCalledTimes(1);
+    unregisterFrame("b");
+  });
+
+  it("unregisterFrame with a never-registered key is a no-op", () => {
+    expect(() => unregisterFrame("never-registered")).not.toThrow();
+  });
+});
