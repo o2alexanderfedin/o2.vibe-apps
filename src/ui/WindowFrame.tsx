@@ -226,6 +226,15 @@ export function WindowFrame({
           // path is to disable drag while maximized). Early-return before
           // onFocus()/handlePointerDown so neither a drag nor a focus-raise fires.
           if (maximized) return;
+          // Pressing a titlebar control (close / min / max / ⋮) must NOT begin a
+          // drag: useDrag calls preventDefault() + setPointerCapture() on
+          // pointerdown, which in a real browser eats the button's click (jsdom
+          // no-ops both, so RTL never saw it). Raise the window but skip the drag
+          // so the control's click fires normally.
+          if ((e.target as HTMLElement).closest("button")) {
+            onFocus();
+            return;
+          }
           draggingRef.current = true;
           lastEdgeRef.current = null;
           onFocus();

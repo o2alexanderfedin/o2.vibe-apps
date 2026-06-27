@@ -219,6 +219,35 @@ describe("WindowFrame", () => {
     expect(onMoveSpy).not.toHaveBeenCalled();
   });
 
+  it("pressing a titlebar button does not start a window drag (so its click is not eaten)", () => {
+    // Regression: useDrag calls preventDefault() + setPointerCapture() on
+    // pointerdown. If the titlebar's drag handler runs when the press lands on a
+    // control (⋮ / close / min / max), a real browser suppresses that button's
+    // click — invisible to jsdom (which no-ops both). Pressing a button must
+    // raise the window (onFocus) but must NOT begin a drag (no onMove commit).
+    const onFocusSpy = vi.fn();
+    const onMoveSpy = vi.fn();
+    const { container } = render(
+      createElement(
+        WindowFrame,
+        makeProps({ onFocus: onFocusSpy, onMove: onMoveSpy }),
+      ),
+    );
+    const titlebar = container.querySelector(".titlebar-handle") as HTMLElement;
+    const optBtn = within(titlebar).getByRole("button", {
+      name: "App options",
+    });
+
+    // A press-drag-release that originates on the ⋮ button.
+    fireEvent.pointerDown(optBtn, { pointerId: 1, clientX: 100, clientY: 8 });
+    fireEvent.pointerMove(optBtn, { pointerId: 1, clientX: 220, clientY: 8 });
+    fireEvent.pointerUp(optBtn, { pointerId: 1, clientX: 220, clientY: 8 });
+
+    // The window is raised, but no drag is committed from a button press.
+    expect(onFocusSpy).toHaveBeenCalled();
+    expect(onMoveSpy).not.toHaveBeenCalled();
+  });
+
   it("pointerdown on titlebar calls onFocus and does not steal input focus from a body input", () => {
     const onFocusSpy = vi.fn();
     const props = makeProps({
