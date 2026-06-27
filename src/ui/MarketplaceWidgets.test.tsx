@@ -18,7 +18,7 @@
 // Test doubles are named "canned"/"stub"/"testTransport" (never banned tokens).
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Marketplace } from "./Marketplace";
 import { ServicesProvider } from "../services/ServicesProvider";
@@ -27,6 +27,7 @@ import {
   type TestServicesOverrides,
 } from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
+import { unmountAll } from "../execution/mount";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
 import { rawWidgetFixture } from "../test/fixtures/load";
 
@@ -113,6 +114,11 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  // Apps now mount into the WindowFrame's manager-owned root (a separate
+  // createRoot), which RTL's cleanup() does not own. Explicitly tear those
+  // roots down so a window's mount-effect timers/state loops cannot leak across
+  // tests (the windowed open flow, Phase 15).
+  unmountAll();
   _clearCachesForTesting();
 });
 
@@ -213,7 +219,16 @@ describe("Marketplace — composed app: all declared widgets render on first pai
     const { user } = renderMarketplace({ transport: countingTransport });
 
     await openApp(user, "Calculator");
-    await screen.findByText("Line Chart");
+    const firstRegion = await screen.findByRole("region", { name: "Calculator" });
+    await within(firstRegion).findByText("Line Chart");
+
+    // Close the first window before re-opening (the open flow is windowed now —
+    // each open mounts its own WindowFrame; closing the first keeps the assertion
+    // about a clean SECOND open and avoids two concurrent copies of the same app).
+    fireEvent.click(within(firstRegion).getByRole("button", { name: "Close Calculator" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "Calculator" })).not.toBeInTheDocument(),
+    );
 
     // Force the registry path on the second open by clearing in-memory caches.
     _clearCachesForTesting();

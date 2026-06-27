@@ -9,11 +9,7 @@ import {
   afterEach,
 } from "vitest";
 import { WindowFrame, type WindowFrameProps } from "./WindowFrame";
-import {
-  mountedCount,
-  isMounted,
-  unmountAll,
-} from "../execution/mount";
+import { unmountAll } from "../execution/mount";
 
 // jsdom does not implement pointer capture APIs — install stubs so the drag
 // hook's handlePointerDown (which captures the pointer) does not throw.
@@ -85,8 +81,7 @@ describe("WindowFrame", () => {
     expect(container.textContent).toContain("Notes");
   });
 
-  it("mounts the AppShell-wrapped app into the body via mountApp (single root)", () => {
-    const baseline = mountedCount();
+  it("renders the AppShell-wrapped app inside the body (single in-tree subtree)", () => {
     const props = makeProps({
       instanceId: "inst-mount-1",
       Component: SimpleComponent as ComponentType,
@@ -94,31 +89,27 @@ describe("WindowFrame", () => {
 
     const { container } = render(createElement(WindowFrame, props));
 
-    expect(mountedCount()).toBe(baseline + 1);
-    expect(isMounted("inst-mount-1")).toBe(true);
-
-    // The AppShell wraps the Component inside the same managed root, so its
-    // ⋮ "App options" button is present within the body.
+    // The AppShell wraps the Component inside the body, so its ⋮ "App options"
+    // button and the app's own content are present within the body subtree.
     const body = container.querySelector(
       ".window-chrome__body",
     ) as HTMLElement;
     expect(body).not.toBeNull();
-    const optionsBtn = within(body).getByLabelText("App options");
-    expect(optionsBtn).not.toBeNull();
+    expect(within(body).getByLabelText("App options")).not.toBeNull();
+    expect(within(body).getByTestId("app-body")).not.toBeNull();
   });
 
-  it("close path tears down the single root (zero leak)", () => {
-    const baseline = mountedCount();
+  it("unmounting the frame tears down the app subtree (zero leak)", () => {
     const props = makeProps({ instanceId: "inst-leak-1" });
 
     const { unmount } = render(createElement(WindowFrame, props));
-    expect(mountedCount()).toBe(baseline + 1);
-    expect(isMounted("inst-leak-1")).toBe(true);
+    expect(document.querySelector("[data-testid='app-body']")).not.toBeNull();
 
     unmount();
 
-    expect(mountedCount()).toBe(baseline);
-    expect(isMounted("inst-leak-1")).toBe(false);
+    // The whole frame subtree (including the app body) leaves the document.
+    expect(document.querySelector("[data-testid='app-body']")).toBeNull();
+    expect(document.querySelector(".window-chrome")).toBeNull();
   });
 
   it("clicking the close traffic-light calls onClose", () => {
@@ -187,22 +178,22 @@ describe("WindowFrame", () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it("mid-mount guard backstop: mount skipped when body container detached", () => {
-    const baseline = mountedCount();
-    const props = makeProps({ instanceId: "inst-detached-1" });
+  it("renders a neutral placeholder (no AppShell region) while the app is unresolved", () => {
+    const props = makeProps({
+      instanceId: "inst-placeholder-1",
+      Component: null,
+    });
 
-    // Simulate the body element never being part of the live document by
-    // stubbing document.contains to report the container as detached. The
-    // mount effect's document.contains(el) backstop must then skip mountApp.
-    const containsSpy = vi
-      .spyOn(document, "contains")
-      .mockReturnValue(false);
+    const { container } = render(createElement(WindowFrame, props));
 
-    render(createElement(WindowFrame, props));
-
-    expect(mountedCount()).toBe(baseline);
-    expect(isMounted("inst-detached-1")).toBe(false);
-
-    containsSpy.mockRestore();
+    const body = container.querySelector(
+      ".window-chrome__body",
+    ) as HTMLElement;
+    expect(body).not.toBeNull();
+    // The in-flight body shows the neutral placeholder, not the app region.
+    expect(
+      body.querySelector(".window-chrome__placeholder"),
+    ).not.toBeNull();
+    expect(body.querySelector(".app-shell")).toBeNull();
   });
 });

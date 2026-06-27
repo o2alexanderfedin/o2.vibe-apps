@@ -36,7 +36,7 @@ import {
   type TestServicesOverrides,
 } from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
-import { mountedCount, unmountAll } from "../execution/mount";
+import { unmountAll } from "../execution/mount";
 import type { Services } from "../services/services";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
 
@@ -117,10 +117,18 @@ function frameByTitle(title: string): HTMLElement {
   return frame;
 }
 
-let baseline = 0;
+/**
+ * Count mounted app bodies — each open window renders exactly one AppShell
+ * (role="region") inside its body once the app resolves. Apps render in the
+ * host React tree (not a detached root), so a leaked window leaves a stray
+ * `.app-shell`; this count is the zero-leak invariant the close path must keep.
+ */
+function appBodyCount(): number {
+  return document.querySelectorAll(".window-chrome__body .app-shell").length;
+}
+
 beforeEach(() => {
   _clearCachesForTesting();
-  baseline = mountedCount();
 });
 
 afterEach(() => {
@@ -130,7 +138,7 @@ afterEach(() => {
 });
 
 describe("Marketplace windowed open flow (WIN, injected deps)", () => {
-  it("opens an app as a window on the desktop (one managed root)", async () => {
+  it("opens an app as a window on the desktop (one app body)", async () => {
     const { user } = renderMarketplace();
 
     await openApp(user, "Notes"); // seeded — no transport needed
@@ -139,15 +147,15 @@ describe("Marketplace windowed open flow (WIN, injected deps)", () => {
     await waitFor(() => {
       expect(frameByTitle("Notes")).toBeInTheDocument();
     });
-    // The seeded Notes UI mounts inside the window body (one extra root).
+    // The seeded Notes UI mounts inside exactly one window body.
     await waitFor(() => {
-      expect(mountedCount()).toBe(baseline + 1);
+      expect(appBodyCount()).toBe(1);
     });
     const region = await screen.findByRole("region", { name: "Notes" });
     expect(within(region).getByPlaceholderText("Add a note…")).toBeInTheDocument();
   });
 
-  it("opens multiple concurrent independent windows (independent roots)", async () => {
+  it("opens multiple concurrent independent windows (independent app bodies)", async () => {
     const { user } = renderMarketplace({
       transport: cannedTransport(EXPORT_DEFAULT_TSX),
     });
@@ -158,12 +166,12 @@ describe("Marketplace windowed open flow (WIN, injected deps)", () => {
     await openApp(user, "Calculator"); // unseeded → canned transport
     await waitFor(() => expect(frameByTitle("Calculator")).toBeInTheDocument());
 
-    // Two distinct frames, two independent managed roots.
+    // Two distinct frames, two independent app bodies.
     expect(frames()).toHaveLength(2);
-    await waitFor(() => expect(mountedCount()).toBe(baseline + 2));
+    await waitFor(() => expect(appBodyCount()).toBe(2));
   });
 
-  it("close routes through the manager and leaks no root", async () => {
+  it("close routes through the manager and leaks no app body", async () => {
     const { user } = renderMarketplace({
       transport: cannedTransport(EXPORT_DEFAULT_TSX),
     });
@@ -175,7 +183,7 @@ describe("Marketplace windowed open flow (WIN, injected deps)", () => {
     await openApp(user, "Timer");
     await waitFor(() => expect(frameByTitle("Timer")).toBeInTheDocument());
 
-    await waitFor(() => expect(mountedCount()).toBe(baseline + 3));
+    await waitFor(() => expect(appBodyCount()).toBe(3));
 
     // Click each window's red close traffic-light (aria-label "Close").
     for (const title of ["Notes", "Calculator", "Timer"]) {
@@ -185,11 +193,11 @@ describe("Marketplace windowed open flow (WIN, injected deps)", () => {
     }
 
     await waitFor(() => expect(frames()).toHaveLength(0));
-    // Every managed root is torn down — back to the baseline.
-    await waitFor(() => expect(mountedCount()).toBe(baseline));
+    // Every window's app body is torn down — none leaked.
+    await waitFor(() => expect(appBodyCount()).toBe(0));
   });
 
-  it("a mid-produce close leaks no root (manager.isOpen guard)", async () => {
+  it("a mid-produce close leaks no app body (manager.isOpen guard)", async () => {
     // A deferred transport keeps produce in flight until we resolve it by hand.
     let resolveProduce!: (r: MessagesResponse) => void;
     const deferredTransport: TransportFn = () =>
@@ -209,14 +217,15 @@ describe("Marketplace windowed open flow (WIN, injected deps)", () => {
     fireEvent.click(within(frame).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(frames()).toHaveLength(0));
 
-    // Now let produce finish — the isOpen guard must drop the result, no root.
+    // Now let produce finish — the isOpen guard must drop the result so no
+    // window reappears and no app body is mounted for the closed window.
     resolveProduce({
       content: [{ type: "text", text: EXPORT_DEFAULT_TSX }],
       stop_reason: "end_turn",
     });
 
-    // Allow any microtasks to flush, then assert zero orphan roots.
-    await waitFor(() => expect(mountedCount()).toBe(baseline));
+    // Allow any microtasks to flush, then assert no orphan frame/app body.
+    await waitFor(() => expect(appBodyCount()).toBe(0));
     expect(frames()).toHaveLength(0);
   });
 
@@ -311,30 +320,30 @@ describe("Marketplace windowed open flow (WIN, injected deps)", () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it("minimize then restore preserves the app's mounted root (never unmounts)", async () => {
+  it("minimize then restore preserves the app's mounted body (never unmounts)", async () => {
     const { user } = renderMarketplace();
 
     await openApp(user, "Notes");
     await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
-    await waitFor(() => expect(mountedCount()).toBe(baseline + 1));
+    await waitFor(() => expect(appBodyCount()).toBe(1));
 
     const frame = frameByTitle("Notes");
     const minBtn = within(frame).getByRole("button", { name: "Minimize" });
 
     fireEvent.click(minBtn);
 
-    // The frame gains the minimized class; its root is never torn down.
+    // The frame gains the minimized class; its body subtree is never torn down
+    // (minimize hides via CSS, it does NOT unmount the app).
     await waitFor(() => {
       expect(frameByTitle("Notes").className).toContain(
         "window-chrome--minimized",
       );
     });
-    expect(mountedCount()).toBe(baseline + 1);
-
-    // Restoring (re-rendering without the minimized class) keeps the same root.
-    // The minimized state is toggled by the manager — re-open the app's window
-    // chrome by clicking it; the mounted root count must be unchanged throughout.
-    expect(mountedCount()).toBe(baseline + 1);
+    expect(appBodyCount()).toBe(1);
+    // The app's own state-bearing subtree is still mounted in the document.
+    expect(
+      within(frameByTitle("Notes")).getByPlaceholderText("Add a note…"),
+    ).toBeInTheDocument();
   });
 
   it("the contextual `⋮` MOD still works inside a window (remove closes it)", async () => {
@@ -350,8 +359,8 @@ describe("Marketplace windowed open flow (WIN, injected deps)", () => {
     await user.type(within(dialog).getByRole("textbox"), "remove");
     await user.click(within(dialog).getByRole("button", { name: "Apply" }));
 
-    // The window closes and its root is torn down.
+    // The window closes and its app body is torn down.
     await waitFor(() => expect(frames()).toHaveLength(0));
-    await waitFor(() => expect(mountedCount()).toBe(baseline));
+    await waitFor(() => expect(appBodyCount()).toBe(0));
   });
 });
