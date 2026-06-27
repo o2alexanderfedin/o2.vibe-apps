@@ -204,9 +204,11 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     await openApp(user, "Notes"); // seeded
     await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
 
-    const region = await screen.findByRole("region", { name: "Notes" });
-    await user.click(within(region).getByRole("button", { name: "App options" }));
-    const dialog = within(region).getByRole("dialog");
+    // Phase 19: the ⋮ button is in the WindowFrame titlebar, not in the app region.
+    const frame = frameByTitle("Notes");
+    const titlebar = frame.querySelector(".window-chrome__titlebar") as HTMLElement;
+    await user.click(within(titlebar).getByRole("button", { name: "App options" }));
+    const dialog = within(frame).getByRole("dialog");
     await user.type(within(dialog).getByRole("textbox"), "remove");
     await user.click(within(dialog).getByRole("button", { name: "Apply" }));
 

@@ -81,7 +81,7 @@ describe("WindowFrame", () => {
     expect(container.textContent).toContain("Notes");
   });
 
-  it("renders the AppShell-wrapped app inside the body (single in-tree subtree)", () => {
+  it("renders the AppShell-wrapped app inside the body; ⋮ is in the titlebar (not body)", () => {
     const props = makeProps({
       instanceId: "inst-mount-1",
       Component: SimpleComponent as ComponentType,
@@ -89,13 +89,21 @@ describe("WindowFrame", () => {
 
     const { container } = render(createElement(WindowFrame, props));
 
-    // The AppShell wraps the Component inside the body, so its ⋮ "App options"
-    // button and the app's own content are present within the body subtree.
+    // The ⋮ "App options" button is in the titlebar (Phase 19: moved out of body).
+    const titlebar = container.querySelector(
+      ".window-chrome__titlebar",
+    ) as HTMLElement;
+    expect(titlebar).not.toBeNull();
+    expect(within(titlebar).getByRole("button", { name: "App options" })).not.toBeNull();
+
+    // The body does NOT contain the ⋮ button — it is chrome-free.
     const body = container.querySelector(
       ".window-chrome__body",
     ) as HTMLElement;
     expect(body).not.toBeNull();
-    expect(within(body).getByLabelText("App options")).not.toBeNull();
+    expect(body.querySelector('[aria-label="App options"]')).toBeNull();
+
+    // The app content is still inside the body.
     expect(within(body).getByTestId("app-body")).not.toBeNull();
   });
 
