@@ -91,7 +91,14 @@ export interface WindowFrameProps {
   onFocus: () => void;
   /** Toggle maximize ↔ restore (green traffic-light + double-click titlebar). */
   onMaximize: () => void;
+  /** Commit a FREE (non-snapped) drag position. Fires only when the drag did NOT
+   *  end within the snap threshold of an edge (otherwise onSnap fires instead). */
   onMove: (x: number, y: number) => void;
+  /** Commit a SNAP. Fires when the drag ends within the snap threshold of an
+   *  edge, carrying the SAME side the during-drag preview reported (onEdgeChange)
+   *  — so preview and commit can never disagree (WR-02). When absent, the frame
+   *  falls back to onMove with the clamped position. */
+  onSnap?: (side: "left" | "right") => void;
   /** During a drag, report whether the pointer is within the snap threshold of
    *  the left/right edge (or null when not near an edge) so the desktop can show
    *  a drop-zone preview (Phase 19, plan 19-03). */
@@ -117,6 +124,7 @@ export function WindowFrame({
   onFocus,
   onMaximize,
   onMove,
+  onSnap,
   onEdgeChange,
   onModify,
 }: WindowFrameProps) {
@@ -159,11 +167,27 @@ export function WindowFrame({
   // an icon rather than the raw key string (WR-04).
   const TitleIcon = iconForAppType(icon);
 
+  // Commit handler: if the drag ended within the snap threshold of an edge (the
+  // SAME signal the during-drag preview used — lastEdgeRef, set by reportEdge),
+  // commit a SNAP to that side; otherwise commit the free clamped position. This
+  // guarantees the preview and the commit agree even for frames wider than the
+  // nominal width, where a recomputed x+width check would disagree (WR-02). The
+  // useDrag onCommit runs on pointerup BEFORE this frame's own onPointerUp resets
+  // lastEdgeRef, so the side is still valid here.
+  const commitDrag = (cx: number, cy: number): void => {
+    const side = lastEdgeRef.current;
+    if (side !== null && onSnap) {
+      onSnap(side);
+      return;
+    }
+    onMove(cx, cy);
+  };
+
   const { handlePointerDown } = useDrag({
     elementRef: frameRef,
     initialX: x,
     initialY: y,
-    onCommit: onMove,
+    onCommit: commitDrag,
   });
 
   return (

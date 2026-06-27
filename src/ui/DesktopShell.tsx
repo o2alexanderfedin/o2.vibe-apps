@@ -39,7 +39,6 @@ import { MenuBar } from "./MenuBar";
 import { Dock } from "./Dock";
 import { SearchLauncherPanel } from "./SearchLauncherPanel";
 import { slugFromText } from "./launcherUtils";
-import { SNAP_THRESHOLD } from "./snapConstants";
 
 // Work-area geometry (Phase 19, plan 19-02, CHROME-02). Maximize = zoom-to-work-
 // area, NOT the OS Fullscreen API: a maximized window fills the viewport MINUS
@@ -53,11 +52,9 @@ const DOCK_RESERVE = 88;
 // Snap-to-half (Phase 19, plan 19-03, CHROME-03). The SNAP_THRESHOLD that drives
 // both the during-drag drop-zone preview (WindowFrame) and the on-release commit
 // is the SHARED constant (IN-04), so preview and commit can never desynchronize.
-
-// Nominal frame width used for the right-edge snap check (mirrors the window
-// manager's DEFAULT_W). A drag whose committed x + this width reaches the right
-// edge snaps right, the symmetric counterpart to x ≤ SNAP_THRESHOLD on the left.
-const DEFAULT_FRAME_W = 400;
+// The commit decision itself is driven off the frame's reported edge side (the
+// SAME signal as the preview) via WindowFrame's onSnap callback (WR-02), not a
+// recomputed x + nominal-width — which was unreliable for wide frames.
 
 // The work-area rect a maximized window fills. Read from the live viewport so a
 // resize-then-maximize uses the current size. The rect starts below the menu bar
@@ -631,29 +628,26 @@ function DesktopShellInner() {
               // During a drag, report edge proximity so the drop-zone preview
               // shows the half the window would snap to (cleared on commit).
               onEdgeChange={(side) => setSnapPreview(side)}
-              onMove={(nx, ny) => {
-                // At commit, snap to a half if the dragged position reached an
-                // edge (within SNAP_THRESHOLD), else commit a FREE position.
-                // Either way the during-drag preview clears.
+              // The drag ended within the snap threshold of an edge — snap to the
+              // SAME side the preview reported (WR-02). The during-drag preview
+              // clears. Always raise-to-front via the snap* call.
+              onSnap={(side) => {
                 setSnapPreview(null);
-                if (nx <= SNAP_THRESHOLD) {
-                  windowManager.snapLeft(entry.id);
-                } else if (
-                  nx + DEFAULT_FRAME_W >=
-                  window.innerWidth - SNAP_THRESHOLD
-                ) {
-                  windowManager.snapRight(entry.id);
-                } else {
-                  // Free position. If the window was snapped, clear the snap so
-                  // it can actually move (CR-01) — otherwise the snap-half rect
-                  // would keep winning in render and the drag would spring back.
-                  if (entry.snapSide !== null) {
-                    windowManager.unsnap(entry.id);
-                  }
-                  // Write the dragged position back to the entry as the
-                  // authoritative geometry (WR-01).
-                  windowManager.setGeometry(entry.id, nx, ny);
+                if (side === "left") windowManager.snapLeft(entry.id);
+                else windowManager.snapRight(entry.id);
+              }}
+              onMove={(nx, ny) => {
+                // Free (non-edge) commit. The during-drag preview clears.
+                setSnapPreview(null);
+                // If the window was snapped, clear the snap so it can actually
+                // move (CR-01) — otherwise the snap-half rect would keep winning
+                // in render and the drag would spring back.
+                if (entry.snapSide !== null) {
+                  windowManager.unsnap(entry.id);
                 }
+                // Write the dragged position back to the entry as the
+                // authoritative geometry (WR-01).
+                windowManager.setGeometry(entry.id, nx, ny);
               }}
               onModify={(instruction) =>
                 void handleModify(entry.instanceId, instruction)
