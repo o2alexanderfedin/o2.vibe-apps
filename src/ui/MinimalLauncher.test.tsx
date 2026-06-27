@@ -68,4 +68,31 @@ describe("MinimalLauncher", () => {
     fireEvent.click(dialog);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("marks the dialog modal (aria-modal=true) like KeyDialog", () => {
+    const { getByRole } = render(
+      <MinimalLauncher onOpen={vi.fn()} onClose={vi.fn()} />,
+    );
+    const dialog = getByRole("dialog", { name: "Open an app" });
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+  });
+
+  it("pressing Escape calls onClose", () => {
+    const onClose = vi.fn();
+    const { container } = render(
+      <MinimalLauncher onOpen={vi.fn()} onClose={onClose} />,
+    );
+    const overlay = container.querySelector(".launcher-overlay")!;
+    fireEvent.keyDown(overlay, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("focuses a control inside the dialog on mount (focus lands in the modal)", () => {
+    const { getByRole } = render(
+      <MinimalLauncher onOpen={vi.fn()} onClose={vi.fn()} />,
+    );
+    const dialog = getByRole("dialog", { name: "Open an app" });
+    // Active element is the close control, which lives inside the dialog panel.
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
 });
