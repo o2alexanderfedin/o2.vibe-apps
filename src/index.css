@@ -697,6 +697,12 @@ body {
 .window-chrome {
   pointer-events: auto;
   position: absolute;
+  /* Box origin pinned to the desktop's top-left (0,0). Position is supplied
+     purely by transform: translate() (set by React via inline style and,
+     during a drag, imperatively by useDrag). The desktop is position:fixed
+     inset:0, so these translate values are absolute viewport coordinates. */
+  top: 0;
+  left: 0;
   min-width: 320px;
   min-height: 240px;
   background: var(--glass, var(--color-background-secondary));

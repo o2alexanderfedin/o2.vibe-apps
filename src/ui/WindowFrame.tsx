@@ -108,7 +108,12 @@ export function WindowFrame({
     <div
       ref={frameRef}
       className={"window-chrome" + (minimized ? " window-chrome--minimized" : "")}
-      style={{ left: x, top: y, zIndex: z }}
+      // Position is driven ENTIRELY by transform (box origin stays at the
+      // desktop's top-left 0,0 via the CSS top/left). useDrag writes the same
+      // transform imperatively during a drag; on commit, onMove updates the
+      // positions map and this React-owned transform replaces the imperative
+      // one cleanly — no double-applied left/top + transform offset.
+      style={{ transform: `translate(${x}px, ${y}px)`, zIndex: z }}
     >
       <div
         className="window-chrome__titlebar titlebar-handle"

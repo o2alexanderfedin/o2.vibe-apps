@@ -130,6 +130,67 @@ describe("useDrag", () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
+  it("writes the ABSOLUTE position into the transform (box origin is 0,0 — no doubling)", () => {
+    // CR-01 regression guard. Position is driven entirely by transform with the
+    // box origin pinned at (0,0), so the value useDrag writes during a drag is
+    // the absolute landing coordinate — start + delta, applied exactly once.
+    // (Previously the frame also carried left/top from props, so this absolute
+    // translate layered ON TOP of left/top and rendered at roughly double.)
+    const onCommit = vi.fn();
+    vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
+
+    const { container } = render(<Harness initialX={50} initialY={60} onCommit={onCommit} />);
+    const handle = within(container).getByTestId("handle");
+    const windowEl = within(container).getByTestId("window");
+
+    act(() => {
+      firePointerEvent(handle, "pointerdown", { clientX: 100, clientY: 100 });
+    });
+
+    // A move that nets ZERO delta lands back at the start position (50, 60) —
+    // NOT (100, 120). The written transform is the absolute landing coordinate,
+    // not start + (start + delta).
+    act(() => {
+      firePointerEvent(handle, "pointermove", { clientX: 100, clientY: 100 });
+    });
+    expect(windowEl.style.transform).toBe("translate(50px,60px)");
+
+    // Move +40/+30 → absolute (90, 90), applied once.
+    act(() => {
+      firePointerEvent(handle, "pointermove", { clientX: 140, clientY: 130 });
+    });
+    expect(windowEl.style.transform).toBe("translate(90px,90px)");
+  });
+
+  it("commits the same value it writes imperatively (no flicker on pointerup)", () => {
+    // The imperative transform written during the last move must equal the
+    // value handed to onCommit, so the React-owned re-render replaces the
+    // imperative transform with an identical value — no visible jump.
+    const committed: [number, number][] = [];
+    const onCommit = vi.fn((x: number, y: number) => {
+      committed.push([x, y]);
+    });
+    vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
+    vi.spyOn(Element.prototype, "releasePointerCapture").mockImplementation(() => undefined);
+
+    const { container } = render(<Harness initialX={50} initialY={60} onCommit={onCommit} />);
+    const handle = within(container).getByTestId("handle");
+    const windowEl = within(container).getByTestId("window");
+
+    act(() => {
+      firePointerEvent(handle, "pointerdown", { clientX: 100, clientY: 100 });
+    });
+    act(() => {
+      firePointerEvent(handle, "pointermove", { clientX: 170, clientY: 150 });
+    });
+    act(() => {
+      firePointerEvent(handle, "pointerup", { clientX: 170, clientY: 150 });
+    });
+
+    const [x, y] = committed[0] as [number, number];
+    expect(windowEl.style.transform).toBe(`translate(${x}px,${y}px)`);
+  });
+
   it("commits final position to state exactly once on pointerup", () => {
     const committed: [number, number][] = [];
     const onCommit = vi.fn((x: number, y: number) => {

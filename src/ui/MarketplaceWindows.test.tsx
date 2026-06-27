@@ -118,6 +118,19 @@ function frameByTitle(title: string): HTMLElement {
 }
 
 /**
+ * Parse the {x, y} out of a frame's `transform: translate(Xpx, Ypx)`. The frame
+ * is positioned purely via transform (box origin pinned at 0,0), so this is the
+ * single rendered-position source — there is no left/top to add on top of it.
+ */
+function frameTranslate(frame: HTMLElement): { x: number; y: number } {
+  const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)/.exec(
+    frame.style.transform,
+  );
+  if (!m) throw new Error(`frame has no translate(): "${frame.style.transform}"`);
+  return { x: parseFloat(m[1]!), y: parseFloat(m[2]!) };
+}
+
+/**
  * Count mounted app bodies — each open window renders exactly one AppShell
  * (role="region") inside its body once the app resolves. Apps render in the
  * host React tree (not a detached root), so a leaked window leaves a stray
@@ -243,12 +256,10 @@ describe("Marketplace windowed open flow (WIN, injected deps)", () => {
     const second = frameByTitle("Calculator");
 
     // The second window is cascade-offset down-and-right from the first.
-    expect(parseFloat(second.style.left)).toBeGreaterThan(
-      parseFloat(first.style.left),
-    );
-    expect(parseFloat(second.style.top)).toBeGreaterThan(
-      parseFloat(first.style.top),
-    );
+    const firstPos = frameTranslate(first);
+    const secondPos = frameTranslate(second);
+    expect(secondPos.x).toBeGreaterThan(firstPos.x);
+    expect(secondPos.y).toBeGreaterThan(firstPos.y);
 
     // The second (most recently opened) window is on top initially.
     expect(parseInt(second.style.zIndex, 10)).toBeGreaterThan(
@@ -279,22 +290,39 @@ describe("Marketplace windowed open flow (WIN, injected deps)", () => {
     const handle = frame.querySelector(".titlebar-handle") as HTMLElement;
     expect(handle).not.toBeNull();
 
+    // Record the pre-drag rendered position (cascade-placed, transform-driven).
+    const startPos = frameTranslate(frame);
+
+    // pointerdown with NO move must NOT shift the rendered position. This is the
+    // CR-01 regression guard: previously the frame had left/top from props AND
+    // useDrag wrote an absolute translate() on top, so a bare grab jumped the
+    // element to roughly double its coordinates. With position driven purely by
+    // transform (box origin at 0,0), the imperative translate equals the
+    // committed value — a grab with no move is a visual no-op.
     fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 100 });
+    const afterGrab = frameTranslate(frame);
+    expect(afterGrab.x).toBeCloseTo(startPos.x, 5);
+    expect(afterGrab.y).toBeCloseTo(startPos.y, 5);
+
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: 160, clientY: 140 });
     fireEvent.pointerUp(handle, { pointerId: 1, clientX: 160, clientY: 140 });
 
     // Pointer capture was requested on pointerdown.
     expect(captureSpy).toHaveBeenCalled();
 
-    // The committed position stays within the viewport bounds.
+    // The committed RENDERED position (the single transform-driven source —
+    // there is no left/top to add on top) stays within the viewport bounds, and
+    // reflects the +60/+40 drag delta applied exactly ONCE (not doubled).
     await waitFor(() => {
       const f = frameByTitle("Notes");
-      const left = parseFloat(f.style.left);
-      const top = parseFloat(f.style.top);
-      expect(left).toBeGreaterThanOrEqual(0);
-      expect(top).toBeGreaterThanOrEqual(0);
-      expect(left).toBeLessThanOrEqual(window.innerWidth);
-      expect(top).toBeLessThanOrEqual(window.innerHeight);
+      const pos = frameTranslate(f);
+      expect(pos.x).toBeGreaterThanOrEqual(0);
+      expect(pos.y).toBeGreaterThanOrEqual(0);
+      expect(pos.x).toBeLessThanOrEqual(window.innerWidth);
+      expect(pos.y).toBeLessThanOrEqual(window.innerHeight);
+      // Applied once: final == start + delta, not start + 2*delta.
+      expect(pos.x).toBeCloseTo(startPos.x + 60, 5);
+      expect(pos.y).toBeCloseTo(startPos.y + 40, 5);
     });
 
     captureSpy.mockRestore();
