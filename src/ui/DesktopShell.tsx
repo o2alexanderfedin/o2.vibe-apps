@@ -518,11 +518,33 @@ function DesktopShellInner() {
     if (typeof window === "undefined") return;
 
     function handleKeyDown(e: KeyboardEvent): void {
+      // CR-02: never hijack keys the user is typing into an app's OWN editable
+      // field. Generated apps render real inputs in-tree, and Ctrl+Arrow (word-
+      // by-word caret), Cmd/Ctrl+W, and Cmd/Ctrl+M are standard editing chords
+      // there — bail early when the event originates from an editable target
+      // (mirrors the document.activeElement / tag checks in KeyDialog and
+      // SearchLauncherPanel).
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+
       const wm = windowManagerRef.current;
       const mod = e.metaKey || e.ctrlKey;
+      // WR-04: normalize case (Caps Lock / Shift produce "W"/"M") so the close/
+      // minimize chord still matches; the resulting key is compared lowercase.
+      const key = e.key.toLowerCase();
 
       // Close / minimize the active window (Cmd on macOS, Ctrl elsewhere).
-      if (mod && (e.key === "w" || e.key === "m")) {
+      // WR-04: exclude Shift — Cmd+Shift+W is the browser's "close all tabs"
+      // chord and must NOT match OUR close shortcut, so the browser tab is never
+      // closed (CHROME-04).
+      if (mod && !e.shiftKey && (key === "w" || key === "m")) {
         const activeId = wm.activeId();
         // No active Vibe OS window → leave the native shortcut alone so the user
         // can still close the browser tab (T-19-10).
@@ -531,7 +553,7 @@ function DesktopShellInner() {
         if (!active) return;
 
         e.preventDefault();
-        if (e.key === "w") handleClose(active.id, active.instanceId);
+        if (key === "w") handleClose(active.id, active.instanceId);
         else wm.minimize(active.id);
         return;
       }
