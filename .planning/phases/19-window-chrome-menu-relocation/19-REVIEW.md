@@ -1,13 +1,14 @@
 ---
 phase: 19-window-chrome-menu-relocation
-reviewed: 2026-06-27T00:00:00Z
+reviewed: 2026-06-27T14:35:00Z
 depth: standard
-files_reviewed: 12
+files_reviewed: 13
 files_reviewed_list:
   - src/ui/WindowFrame.tsx
   - src/ui/AppShell.tsx
   - src/ui/useWindowManager.tsx
   - src/ui/DesktopShell.tsx
+  - src/ui/snapConstants.ts
   - src/index.css
   - src/ui/WindowFrame.test.tsx
   - src/ui/AppShell.test.tsx
@@ -17,157 +18,106 @@ files_reviewed_list:
   - src/ui/MarketplaceModify.test.tsx
   - src/ui/MarketplaceWindows.test.tsx
 findings:
-  critical: 2
-  warning: 5
-  info: 4
-  total: 11
-status: issues_found
+  critical: 0
+  warning: 0
+  info: 3
+  total: 3
+status: clean
 ---
 
-# Phase 19: Code Review Report
+# Phase 19: Code Review Report (Re-Review)
 
-**Reviewed:** 2026-06-27T00:00:00Z
+**Reviewed:** 2026-06-27T14:35:00Z
 **Depth:** standard
-**Files Reviewed:** 12
-**Status:** issues_found
+**Files Reviewed:** 13
+**Status:** clean
 
 ## Summary
 
-Phase 19 relocated the `⋮` contextual menu into the `WindowFrame` titlebar (AppShell is now content-only), added zoom-to-work-area maximize, snap-to-half via drag-to-edge and Ctrl+Arrow, and Cmd/Ctrl+W close + Cmd/Ctrl+M minimize. The menu relocation (CHROME-01) is clean and well-tested. Maximize toggle works and is covered end to end.
+This is a re-review verifying that the fixer resolved the prior 2 Critical + 5 Warning
+findings and that the significant refactor (eliminating the DesktopShell `positions`
+map so the `WindowEntry` x/y is the single authoritative geometry) introduced no
+regressions to drag, focus/z-ordering, or restore.
 
-The hard hygiene rules pass: the "synthesize/synthesized/synthesis" token does NOT appear in any Phase-19 source file (it appears only in `src/hygiene.test.ts`'s own regex and as the W3C `SpeechSynthesis*` global-name list inside the bundled `@babel/standalone` in `dist/` — neither is authored copy nor reveals the mechanic). The "iframe/sandbox/isolation" tokens appear only in source comments and the legitimate CSS `isolation: isolate` property — none in UI-visible copy. No new npm runtime dependency was added (`lucide-react` and `iconForAppType` are pre-existing). No `eval`/`innerHTML`/global pollution introduced.
+**Verdict: every prior finding is resolved, no regressions found, zero new Critical or
+Warning issues.** All 80 tests across the 13 in-scope files pass; `tsc --noEmit` is clean.
+Only 3 low-severity Info-level quality observations remain (dead struct fields, a JS/CSS
+duplicated-constant sync hazard, and an odd-width preview/commit rounding mismatch) — none
+affects correctness.
 
-However, the snap-to-half feature has two correctness defects that break the core "an app renders and works" loop: (1) a snapped window is permanently stuck — there is no path to clear `snapSide`, so the window can never be un-snapped, dragged free, or even maximized cleanly; and (2) the global keydown shortcuts hijack `Ctrl+ArrowLeft/Right` (and Cmd/Ctrl+W/M) while the user is typing inside an app's own input, with no editable-target guard. Both are user-facing regressions that the current tests do not catch because they only exercise the happy path (snap once, never recover; fire keys with no app input focused).
+### Prior-finding verification
 
-## Critical Issues
+| ID | Prior issue | Status | Evidence |
+|----|-------------|--------|----------|
+| CR-01 | Snapped window stuck (could not be freed) | **RESOLVED** | `maximize()` clears `snapSide` (useWindowManager.tsx:262); `unsnap()` added and READS restoreRect (329-347); DesktopShell `onMove` unsnaps a snapped window before committing free geometry (702-704). Covered by `useWindowManager.test.tsx` "maximize clears snapSide" + "unsnap clears snapSide…restores prior geometry", and `DesktopShell.test.tsx` "dragging a SNAPPED window…un-snaps" + "snap → maximize → un-maximize". |
+| CR-02 | keydown hijacks app text inputs | **RESOLVED** | Editable-target guard at the TOP of `handleKeyDown` (DesktopShell.tsx:563-571) covers BOTH the close/minimize chord and the Ctrl+Arrow snap branch. Covered by "Ctrl+ArrowLeft inside an app's own input does NOT snap" + "Cmd+W inside an app's own input does NOT close". |
+| WR-01 | Dead/stale restoreRect | **RESOLVED** | `setGeometry()` keeps entry x/y authoritative on free-drag commit (234-246); `maximize`/`snapLeft`/`snapRight` capture EFFECTIVE x/y into restoreRect; `unmaximize`/`unsnap` READ restoreRect to write x/y back. Covered by "unmaximize restores the captured prior geometry from restoreRect". |
+| WR-02 | Snap preview/commit coordinate mismatch | **RESOLVED** | Commit is now driven off the SAME reported edge side (`lastEdgeRef`, set by `reportEdge`) via the new `onSnap(side)` callback instead of a recomputed x+nominal-width; `DEFAULT_FRAME_W` removed. Covered by "a frame wider than 400px dragged to the right edge snaps right (preview == commit)". |
+| WR-03 | Stale geometry on resize | **RESOLVED** | Viewport mirrored into state via a resize listener (DesktopShell.tsx:521-527); `workArea`/`snapHalf` take the mirrored size. Covered by "a maximized window's rect tracks a browser resize". |
+| WR-04 | Cmd+Shift+W bypass / case sensitivity | **RESOLVED** | Chord excludes Shift (`!e.shiftKey`) and normalizes case (`e.key.toLowerCase()`) at DesktopShell.tsx:577,583. Covered by "Cmd+W with Caps Lock…STILL closes" + "Cmd+Shift+W does NOT close". |
+| WR-05 | Duplicated active-window logic | **RESOLVED** | Single `activeWindow()` source of truth (useWindowManager.tsx:381-391); `activeId()` and the menu-bar name both derive from it. Covered by "activeWindow returns the same entry activeId resolves to". |
 
-### CR-01: A snapped window can never be un-snapped, dragged free, or cleanly maximized (stuck state)
+### `positions`-map elimination — regression scrutiny (no regressions found)
 
-**File:** `src/ui/useWindowManager.tsx:218-284`, `src/ui/DesktopShell.tsx:606-657`
-**Issue:** Once `snapSide` is set there is no code path anywhere that clears it back to `null` (confirmed: `grep` for any `snapSide: null` / unsnap path finds only the `open()` default). The asymmetry is the root cause — `snapLeft`/`snapRight` clear `maximized`, but `maximize` does NOT clear `snapSide`, and nothing clears `snapSide` on drag, double-click, or restore. Concrete failure modes:
+- **Drag persists correctly.** Free-drag commit routes `onMove → setGeometry`, writing the
+  dragged x/y onto the entry. `MarketplaceWindows.test.tsx` "drags via the titlebar…clamps
+  within the viewport" still asserts the +60/+40 delta lands exactly once (no double-apply).
+- **Snapped-drag un-snap sequencing is correct.** `onMove` issues `unsnap()` then
+  `setGeometry()` as two functional `setWindows(prev => …)` updaters. React chains them in
+  order, so by the time `setGeometry`'s updater runs, `prev` already has `snapSide === null`
+  (cleared by `unsnap`), so its `!w.maximized && w.snapSide === null` guard passes and the
+  dragged position wins. Verified by the passing "dragging a SNAPPED window…lands there" test.
+- **Focus/z-ordering intact.** `focus`/`restore`/`maximize`/`snap*` all mint z outside the
+  updater (Strict-Mode-safe) and raise correctly; DesktopShell tests assert z-order after
+  dock-click and minimize→restore.
+- **Restore geometry correct.** `unmaximize`/`unsnap` read restoreRect.x/y; "double-click
+  titlebar maximizes…restores" asserts the frame returns to its pre-maximize cascade x/y.
+- **commitDrag ↔ onPointerUp ordering holds.** `useDrag`'s native `pointerup` listener
+  (attached on the titlebar element) fires before React's delegated synthetic `onPointerUp`
+  (root-level in React 19), so `commitDrag` reads `lastEdgeRef` while it is still valid; the
+  frame's own `onPointerUp` resets it afterward. The snap-on-release tests pass, confirming.
+- **No dangling references** to the removed map: `grep` finds `positions`/`DEFAULT_FRAME_W`
+  only in explanatory comments, never live code.
 
-1. **Drag a snapped window → it springs back.** While snapped, `maximized` is false, so the drag gate `if (maximized) return` (WindowFrame.tsx:204) does NOT fire — the drag proceeds and `onMove` commits a `positions` override (DesktopShell.tsx:653). But in render, `area = entry.snapSide ? snapHalf(...)` still wins over the override (DesktopShell.tsx:606-612), so the frame snaps right back to the half. The dragged position is silently discarded; the window appears frozen.
-2. **Double-click a snapped window → maximize leaves a dangling snap marker.** `onMaximize` sees `entry.maximized === false` and calls `windowManager.maximize()` (DesktopShell.tsx:632-636), which sets `maximized: true` WITHOUT clearing `snapSide`. The frame now carries both `window-chrome--maximized` AND `window-chrome--snap-left`, and on the next un-maximize it falls back into the still-snapped half rather than the pre-snap geometry.
-3. **No restore-from-snap at all.** There is no UI affordance (no `unsnap`, no clearing on focus/drag) to return a snapped window to a free-floating window.
+### Project hard-rule compliance
 
-**Fix:** Add an `unsnap`/clear path and clear `snapSide` on the transitions that should free the window. At minimum:
-```ts
-// useWindowManager.tsx — clear snapSide when maximizing (mutual exclusivity both ways)
-const maximize = useCallback((id: string) => {
-  const z = ++zTop;
-  setWindows(prev => prev.map(w =>
-    w.id !== id ? w : {
-      ...w,
-      maximized: true,
-      snapSide: null, // ADD: maximize clears snap, mirroring snap clearing maximize
-      restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H },
-      z,
-    },
-  ));
-}, []);
-```
-```ts
-// DesktopShell.tsx onMove — when a drag commits to a free position, clear the snap
-} else {
-  windowManager.unsnap(entry.id); // ADD an unsnap() that sets snapSide:null
-  setPositions(prev => new Map(prev).set(entry.instanceId, { x: nx, y: ny }));
-}
-```
-Add a matching `unsnap` to `WindowManagerValue` and clear `snapSide` (the same way `unmaximize` clears `maximized`). Add a test that snaps a window then drags it to a free position and asserts it lands there (and loses `window-chrome--snap-*`).
-
-### CR-02: Global keydown shortcuts hijack text-editing keys inside an app's own inputs (no editable-target guard)
-
-**File:** `src/ui/DesktopShell.tsx:528-559`
-**Issue:** The single global `keydown` listener acts whenever ANY Vibe OS window is active (`activeId() !== null`), with NO check for the event target. Because a window is "active" the entire time any app is open, the handler hijacks keys the user presses while typing inside the app's own `<input>`/`<textarea>` (generated apps render real inputs in-tree — e.g. the seeded Notes "Add a note…" field):
-
-- `Ctrl+ArrowLeft` / `Ctrl+ArrowRight` are the standard word-by-word caret-move / selection shortcuts on Windows/Linux. Here they `preventDefault()` and snap the window instead of moving the caret (DesktopShell.tsx:547-558). Typing in any app input loses word navigation/selection.
-- `Cmd/Ctrl+W` closes the whole window and `Cmd/Ctrl+M` minimizes it (DesktopShell.tsx:533-544) even when focus is in an app input. While Cmd+W intentionally overrides the browser tab-close, doing it while the user is mid-edit in an app field destroys their work with no confirmation.
-
-This directly degrades the product's core promise that "an app renders and works." The existing tests do not catch it because they fire the keys at `window` with no app input focused.
-
-**Fix:** Skip the window shortcuts when the event originates from an editable element (consistent with the codebase's existing `document.activeElement` checks in `KeyDialog.tsx`/`SearchLauncherPanel.tsx`):
-```ts
-function handleKeyDown(e: KeyboardEvent): void {
-  const t = e.target as HTMLElement | null;
-  // Don't hijack keys the user is typing into an app's own field.
-  if (
-    t &&
-    (t.tagName === "INPUT" ||
-      t.tagName === "TEXTAREA" ||
-      t.isContentEditable)
-  ) {
-    return;
-  }
-  const wm = windowManagerRef.current;
-  // ...rest unchanged
-}
-```
-Add a test that focuses an input inside an opened app, fires `Ctrl+ArrowLeft`, and asserts the window did NOT snap and `defaultPrevented` is false.
-
-## Warnings
-
-### WR-01: `restoreRect` is captured on every maximize/snap but never read — restore relies on a side effect
-
-**File:** `src/ui/useWindowManager.tsx:231,262,279`; `src/ui/DesktopShell.tsx:606-612`
-**Issue:** `maximize`/`snapLeft`/`snapRight` all write `restoreRect: { x: w.x, y: w.y, w: DEFAULT_W, h: DEFAULT_H }`, and the JSDoc says it exists "so unmaximize can return the window exactly where it was." But `grep` confirms `restoreRect` is never read in DesktopShell or WindowFrame — restore actually works only because the render path falls back to `override?.x ?? entry.x` when `area` is null. Worse, the captured value is stale/wrong for a window that was dragged before maximizing: `w.x`/`w.y` hold the original cascade position, NOT the dragged position (drag positions live only in DesktopShell's `positions` map, never written back to the manager). So `restoreRect` is simultaneously dead AND incorrect — a latent trap for any future code that trusts it.
-**Fix:** Either (a) delete `restoreRect` and the `w`/`h` it stores until a feature actually consumes it, or (b) make `unmaximize`/an unsnap read `restoreRect` and write `x`/`y` back so restore is authoritative — and capture the *effective* current geometry (including any drag override) when entering the maximized/snapped state, not the stale `w.x/w.y`.
-
-### WR-02: Snap preview (during drag) and snap commit use different coordinate bases — preview can lie for wide frames
-
-**File:** `src/ui/WindowFrame.tsx:141-150`; `src/ui/DesktopShell.tsx:645-651`
-**Issue:** The during-drag preview (`reportEdge`) tests the raw pointer `clientX` against the viewport edges (WindowFrame.tsx:144-145), while the commit tests the frame's clamped top-left `nx` plus a hardcoded `DEFAULT_FRAME_W = 400` (DesktopShell.tsx:647-649). For a frame wider than 400px (the min-width is 320 but content can grow the frame), dragging it hard against the right edge clamps `nx = innerWidth - actualWidth`, so `nx + 400 < innerWidth - 20` and the commit does NOT snap — even though the preview overlay was showing because the pointer was within 20px of the edge. Result: the user sees the right drop-zone, releases, and the window does not snap. Left-snap is roughly consistent (clamp drives `nx` to 0), but right-snap is unreliable for any non-default-width frame.
-**Fix:** Drive the commit decision off the same signal as the preview (the last `onEdgeChange` side reported during the drag) instead of recomputing from `nx + DEFAULT_FRAME_W`. Pass the reported side through to `onMove`/a dedicated `onSnap` callback so preview and commit are guaranteed to agree.
-
-### WR-03: `window.innerWidth` read in a render-time map callback without resize handling — stale geometry on resize
-
-**File:** `src/ui/DesktopShell.tsx:66-95` (`workArea`/`snapHalf`), `:648-649` (`onMove`)
-**Issue:** `workArea()` and `snapHalf()` read `window.innerWidth/innerHeight` directly during render, and `onMove` reads `window.innerWidth` at commit time. There is no `resize` listener and no state dependency on viewport size, so a maximized or snapped window keeps its old rect after the browser is resized until some unrelated state change forces a re-render. The maximize/snap rect will be wrong (too wide/tall or too small) until the next render. Given the manager already re-renders on focus/z changes this is intermittent, which makes it a harder-to-spot correctness gap rather than a hard crash.
-**Fix:** Mirror viewport size into state via a `resize` listener (the file already has the matchMedia effect pattern to copy) and recompute `area` from that state, so a resize re-renders pinned windows with a fresh rect.
-
-### WR-04: `Cmd+Shift+W` / uppercase `e.key` bypasses the close/minimize guard
-
-**File:** `src/ui/DesktopShell.tsx:533,548-549`
-**Issue:** The handler matches `e.key === "w"` / `"m"` / `"ArrowLeft"` / `"ArrowRight"` with exact lowercase comparisons. When Shift is held or Caps Lock is on, `e.key` for the W/M keys becomes `"W"`/`"M"`, so `Cmd+Shift+W` (a common "close all tabs" chord on macOS) falls through the handler without `preventDefault()` and closes ALL browser tabs instead of the active window — the opposite of the intended "the browser tab is NEVER closed" guarantee (CHROME-04). The snap arrows are unaffected by Shift case but `Shift+Ctrl+ArrowLeft` (extend-selection-by-word) will still snap.
-**Fix:** Normalize case and/or explicitly exclude Shift where the chord should not match:
-```ts
-const key = e.key.toLowerCase();
-if (mod && !e.shiftKey && (key === "w" || key === "m")) { ... }
-```
-
-### WR-05: `useWindowManager.activeId()` / DesktopShell `activeWindow` duplicate the "highest-z non-minimized" logic
-
-**File:** `src/ui/useWindowManager.tsx:318-326`; `src/ui/DesktopShell.tsx:567-570`
-**Issue:** The exact same "filter non-minimized, sort by z desc, take first" selection is implemented twice — once in the manager's `activeId()` (returning an id) and again inline in DesktopShell to compute `activeWindow` (returning the entry, feeding the menu-bar name). They can drift (e.g. a future tweak to tie-breaking in one place but not the other), and the menu-bar name vs. the keyboard-shortcut target could then disagree about which window is "active."
-**Fix:** Add an `activeWindow()` (or have DesktopShell derive `activeWindow` from `windowManager.activeId()`), so there is a single source of truth for "which window is front-most."
+- **"synthesize/synthesized/synthesis" banned token:** not present in any file (the only
+  near-match is `synthetic` in a DesktopShell comment — a different word, not on the banned
+  list).
+- **"iframe/sandbox/isolation" in UI-visible copy:** the tokens appear ONLY in source/JSX
+  comments and the legitimate CSS property `isolation: isolate` — never in rendered text,
+  `aria-label`s, `title`s, or string literals shown to the user. No UI-visible violation.
+- **No new npm runtime dependency:** confirmed — only existing imports (`lucide-react`,
+  internal modules); no `package.json` change implied.
 
 ## Info
 
-### IN-01: `WindowBody` destructures and threads `onClose` but never uses it (dead parameter)
+### IN-01: `restoreRect.w` / `restoreRect.h` are written but never read (dead struct fields)
 
-**File:** `src/ui/WindowFrame.tsx:27,42,284-289`
-**Issue:** `WindowBodyProps.onClose` is declared, passed from `WindowFrame` (`onClose={onClose}`), and destructured in `WindowBody`, but the function body never calls it (close is handled by the titlebar traffic-light). It is also excluded from the memo comparator, so it is purely dead weight that misleads readers into thinking the body can close itself.
-**Fix:** Remove `onClose` from `WindowBodyProps`, the destructure, and the JSX prop.
+**File:** `src/ui/useWindowManager.tsx:264, 305, 322`
+**Issue:** Every `maximize`/`snapLeft`/`snapRight` writes `restoreRect: { x, y, w: DEFAULT_W, h: DEFAULT_H }`, but `unmaximize`/`unsnap` only read `rect.x`/`rect.y` (window size is CSS-min-driven, not tracked in geometry). The `w`/`h` fields are always the same two constants and are never consumed (`grep restoreRect` finds no `.w`/`.h` read), so they carry no information and can mislead a future maintainer into thinking size is restored.
+**Fix:** Either drop `w`/`h` from the `restoreRect` type and the three writers, or — if you intend to restore the actual pre-pin size later — capture the live `getBoundingClientRect()` dimensions instead of the placeholder constants. Minimal change:
+```ts
+// useWindowManager.tsx — narrow the type and writers
+restoreRect: { x: number; y: number } | null;
+// ...
+restoreRect: { x: w.x, y: w.y },
+```
 
-### IN-02: `.window-chrome--maximized` / `.window-chrome--snap-*` classes have no CSS rules
+### IN-02: Work-area constants duplicated across JS and CSS with no single source
 
-**File:** `src/index.css` (no matching rules); applied in `src/ui/WindowFrame.tsx:174-176`
-**Issue:** `grep` confirms there are zero CSS rules for `.window-chrome--maximized` or `.window-chrome--snap-left/right`. The maximize/snap visual comes entirely from the inline `width`/`height`/`transform` driven by the `w`/`h` props. The classes are effectively test-only hooks. This means there is no CSS fallback: if `w`/`h` are ever undefined for a pinned window (e.g. a future refactor that forgets to pass them), the window silently renders at its content size with no visual indication it is "maximized," and tests that assert the class would still pass.
-**Fix:** Either add minimal CSS that ties the visual to the class (defensive), or add a code comment at the className site noting these classes are intentionally style-free test/markup hooks so future maintainers don't assume styling lives in CSS.
+**File:** `src/ui/DesktopShell.tsx:49-50` and `src/index.css:889-892` (`.desktop-snap-preview top:40px; bottom:88px`), `.menu-bar { height: 40px }`
+**Issue:** `MENU_BAR_H = 40` / `DOCK_RESERVE = 88` in JS must stay manually in sync with `.menu-bar { height: 40px }` and the snap-preview's hardcoded `top: 40px; bottom: 88px` in CSS. A future change to the menu-bar height or dock reserve in CSS will silently desynchronize the maximized/snapped rect math (and the preview overlay) until someone notices windows overlap the chrome. The comment at DesktopShell.tsx:46-48 acknowledges the mirror but no mechanism enforces it.
+**Fix:** Promote these to CSS custom properties (e.g. `--menu-bar-h`, `--dock-reserve`) read by both the CSS rules and JS via `getComputedStyle(document.documentElement).getPropertyValue(...)`, or at minimum add a cross-link comment on BOTH sides and a test asserting the `.menu-bar` computed height equals `MENU_BAR_H`.
 
-### IN-03: Magic numbers `MENU_BAR_H` / `DOCK_RESERVE` duplicate CSS layout constants with no enforced link
+### IN-03: Snap preview uses `50vw` while the committed rect uses `Math.round(vw/2)` (odd-width mismatch)
 
-**File:** `src/ui/DesktopShell.tsx:49-50`, `:226` (test), `src/index.css:921` (`.menu-bar { height: 40px }`), `:983-991` (`.dock`)
-**Issue:** `MENU_BAR_H = 40` and `DOCK_RESERVE = 88` are hand-derived from the CSS (`.menu-bar height:40px`, dock bottom:16 + padding 9*2 + icon 52 ≈ 88). The DesktopShell test hardcodes `window.innerHeight - 40 - 88` too. If anyone changes the menu-bar height or dock padding in CSS, the work-area math silently drifts and maximized windows will overlap the dock/menu bar, with nothing failing until a human notices visually.
-**Fix:** Document the coupling more loudly at both sites (the CSS comment should reference the JS constant and vice-versa), or read the actual rendered chrome heights via `getBoundingClientRect()` so the work area tracks the real layout.
-
-### IN-04: `EDGE_THRESHOLD` (WindowFrame) and `SNAP_THRESHOLD` (DesktopShell) are duplicated magic numbers that must stay equal
-
-**File:** `src/ui/WindowFrame.tsx:139`; `src/ui/DesktopShell.tsx:56`
-**Issue:** Both are `20` and the comments explicitly say they "mirror" each other ("The snap threshold mirrors DesktopShell's SNAP_THRESHOLD"). They are defined independently in two files with no shared constant, so a change to one silently desynchronizes the preview-vs-commit threshold (compounding WR-02).
-**Fix:** Export a single shared `SNAP_THRESHOLD` constant and import it in both WindowFrame and DesktopShell.
+**File:** `src/index.css:893` (`.desktop-snap-preview { width: 50vw }`) vs `src/ui/DesktopShell.tsx:103` (`const halfW = Math.round(wa.w / 2)`)
+**Issue:** On an odd-width viewport the during-drag drop-zone preview (`50vw`, exactly half) and the committed snapped window (`Math.round(vw/2)`, rounded) can differ by up to 1px, and the right-half preview/window x-origins likewise differ slightly. Purely cosmetic (the user sees the preview and the landed window off by a subpixel-to-1px), not a correctness defect, but the two halves were specifically refactored to "agree".
+**Fix:** Derive the preview width from the same rounded value (render the preview width from `snapHalf(...)` in JS rather than a CSS `50vw`), or accept the ≤1px cosmetic delta. Low priority.
 
 ---
 
-_Reviewed: 2026-06-27T00:00:00Z_
+_Reviewed: 2026-06-27T14:35:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
