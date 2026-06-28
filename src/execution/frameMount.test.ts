@@ -80,6 +80,44 @@ describe("buildSrcdoc", () => {
     const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
     expect(doc).toContain("<style>");
   });
+
+  // SHIM-01 — the bootstrap script installs an in-memory localStorage/sessionStorage
+  // shim BEFORE any app code runs, so app code calling localStorage.getItem/setItem
+  // never throws inside an opaque-origin frame.
+  it("installs an in-memory localStorage shim (Object.defineProperty + getItem/setItem)", () => {
+    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
+    // The shim must install via Object.defineProperty so it overrides the native
+    // (which would throw SecurityError in an opaque-origin frame).
+    expect(doc).toContain('Object.defineProperty(window, "localStorage"');
+    expect(doc).toContain('Object.defineProperty(window, "sessionStorage"');
+    // The shim must expose the standard Storage interface methods.
+    expect(doc).toContain("getItem");
+    expect(doc).toContain("setItem");
+    expect(doc).toContain("removeItem");
+    expect(doc).toContain('"clear"');
+  });
+
+  it("shim script appears BEFORE the VIBE_BOOTSTRAP message handler (runs before app code)", () => {
+    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
+    const shimIdx = doc.indexOf('Object.defineProperty(window, "localStorage"');
+    const bootstrapIdx = doc.indexOf("VIBE_BOOTSTRAP");
+    expect(shimIdx).toBeGreaterThan(-1);
+    expect(bootstrapIdx).toBeGreaterThan(-1);
+    // Shim must be installed before the message handler that runs app code.
+    expect(shimIdx).toBeLessThan(bootstrapIdx);
+  });
+
+  it("shim does not contain postMessage or broker to parent (stays frame-local)", () => {
+    const doc = buildSrcdoc("const App=()=>null;", THEME_VARS, "https://host.test");
+    // Extract just the shim block (between localStorage defineProperty calls and
+    // the requireShim function). Check that the shim implementation itself has no
+    // postToParent / parent.postMessage calls.
+    const shimStart = doc.indexOf('Object.defineProperty(window, "localStorage"');
+    const shimEnd = doc.indexOf("function makeCjsModule");
+    const shimBlock = doc.slice(shimStart, shimEnd);
+    expect(shimBlock).not.toContain("postToParent");
+    expect(shimBlock).not.toContain("parent.postMessage");
+  });
 });
 
 // ---------------------------------------------------------------------------

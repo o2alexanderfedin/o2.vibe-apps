@@ -120,6 +120,55 @@ body { overflow: hidden; margin: 0; }
   "use strict";
 
   // ---------------------------------------------------------------------------
+  // In-memory storage shim — installed before any app code runs.
+  // An opaque-origin frame has no access to the real localStorage or
+  // sessionStorage (the browser would throw SecurityError). This shim provides
+  // a Storage-compatible in-memory object so app code that calls
+  // getItem/setItem/removeItem/clear/key/length never crashes.
+  //
+  // SECURITY: the shim is frame-local and starts EMPTY. It does NOT broker to
+  // the parent window, does NOT seed from parent data, and does NOT touch
+  // postMessage. The parent's real localStorage (including the API key) remains
+  // in a completely separate browsing context the frame cannot reach.
+  // ---------------------------------------------------------------------------
+  (function installStorageShim() {
+    function makeMemoryStorage() {
+      var store = Object.create(null);
+      return {
+        get length() {
+          return Object.keys(store).length;
+        },
+        getItem: function(k) {
+          var v = store[String(k)];
+          return v === undefined ? null : v;
+        },
+        setItem: function(k, v) {
+          store[String(k)] = String(v);
+        },
+        removeItem: function(k) {
+          delete store[String(k)];
+        },
+        "clear": function() {
+          var keys = Object.keys(store);
+          for (var i = 0; i < keys.length; i++) delete store[keys[i]];
+        },
+        key: function(n) {
+          var keys = Object.keys(store);
+          return n >= 0 && n < keys.length ? keys[n] : null;
+        }
+      };
+    }
+    var desc = { value: makeMemoryStorage(), configurable: true, writable: false, enumerable: false };
+    try {
+      Object.defineProperty(window, "localStorage", desc);
+    } catch (_) {}
+    var desc2 = { value: makeMemoryStorage(), configurable: true, writable: false, enumerable: false };
+    try {
+      Object.defineProperty(window, "sessionStorage", desc2);
+    } catch (_) {}
+  })();
+
+  // ---------------------------------------------------------------------------
   // CJS require shim
   // ---------------------------------------------------------------------------
   function makeCjsModule(body) {
