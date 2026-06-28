@@ -182,6 +182,33 @@ body { overflow: hidden; margin: 0; }
     );
   }
 
+  // Lenient-partial merge gate — parity with the in-tree deriveStateSchema rule.
+  // The expected primitive type of each KNOWN field is derived from initialState
+  // (the fixed source-of-truth shape), NOT the current/mutated state: a field can
+  // legitimately become null mid-session, so the canonical types come from
+  // initialState. A field is rejected ONLY when it is known (present in
+  // initialState) AND in initialState it is a string/number/boolean primitive AND
+  // the incoming value's typeof contradicts it. NUMBER is purely typeof-based so
+  // NaN/Infinity are accepted. Unknown extra keys, missing fields, and
+  // null/object/array fields are all allowed. If ANY known primitive field
+  // contradicts, the WHOLE update is skipped (state stays unchanged).
+  function knownPrimitiveType(v) {
+    var t = typeof v;
+    return t === "string" || t === "number" || t === "boolean" ? t : null;
+  }
+  function mergeIsSafe(initialState, next) {
+    for (var k in next) {
+      if (!Object.prototype.hasOwnProperty.call(next, k)) continue;
+      if (Object.prototype.hasOwnProperty.call(initialState, k)) {
+        var expected = knownPrimitiveType(initialState[k]);
+        if (expected !== null && typeof next[k] !== expected) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   function makeDelegatedComponent(appType, module) {
     var React = window.React;
     var actionSpec = typeof module.actionSpec === "string" ? module.actionSpec : "";
@@ -223,7 +250,12 @@ body { overflow: hidden; margin: 0; }
           runHandler(intent, { state: mergedState, payload: action }).then(
             function(res) {
               var next = res && res.data ? res.data.state : null;
-              if (next && typeof next === "object") {
+              // Gate the merge through the same lenient validation the in-tree
+              // DelegatedShell applies (stateSchema.safeParse): a mistyped known
+              // field skips the WHOLE update and keeps the prior good state, so a
+              // bad handler result degrades gracefully here exactly as it does
+              // in-tree (rather than merging a bad type and crashing the view).
+              if (next && typeof next === "object" && mergeIsSafe(module.initialState, next)) {
                 setState(function(prev) { return Object.assign({}, prev, next); });
               }
               setBusy(null);
