@@ -58,7 +58,7 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
 ### v3.0 Trusted Desktop (Phases 19–22)
 
 - [x] **Phase 19: Window Chrome & Menu Relocation** - Relocate the `⋮` contextual menu into the window titlebar (right-aligned), add maximize/snap/keyboard shortcuts; hard prerequisite for all iframe work. (completed 2026-06-27)
-- [ ] **Phase 20: Opaque-Origin Frame Isolation** - Convert each app body to `<iframe sandbox="allow-scripts">` brokered by `postMessage`; the API key never enters the frame; 761 RTL tests remain green via in-tree fallback. (5 plans planned 2026-06-27)
+- [x] **Phase 20: Opaque-Origin Frame Isolation** - Convert each app body to `<iframe sandbox="allow-scripts">` brokered by `postMessage`; the API key never enters the frame; 827 tests green via in-tree fallback + Playwright proves the real round-trip. (completed 2026-06-27)
 - [ ] **Phase 21: Desktop Persistence** - Restore window geometry, z-order, open-app set, and minimized state across reloads using additive keys in the existing IDB `settings` store; no DB version bump.
 - [ ] **Phase 22: Theme Editor & Custom Themes** - Create, name, edit, and save custom themes over the 12-var contract; custom themes appear in the menu-bar switcher and survive reload FOUC-free.
 
