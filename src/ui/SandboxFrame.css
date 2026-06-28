@@ -1,0 +1,5 @@
+.app-frame { width: 100%; }
+.app-frame__iframe { border: 0; width: 100%; display: block; }
+.app-frame__overlay { background: var(--glass); border: 1px solid var(--bord); color: var(--text); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.app-frame__overlay-body { margin: 0; }
+.app-frame__overlay-close { background: var(--b2); color: var(--text); border: 1px solid var(--bord); padding: 6px 12px; cursor: pointer; border-radius: 4px; }

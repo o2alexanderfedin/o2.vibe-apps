@@ -1,7 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, act, cleanup } from "@testing-library/react";
 import { useContext, type ReactNode } from "react";
-import { VibeThemeProvider, VibeThemeContext } from "./VibeThemeProvider";
+import {
+  VibeThemeProvider,
+  VibeThemeContext,
+  VIBE_THEMES,
+} from "./VibeThemeProvider";
+import * as frameMountModule from "../execution/frameMount";
 import { STORAGE_KEY_OS_THEME } from "../lib/storage";
 import { ServicesProvider } from "../services/ServicesProvider";
 import {
@@ -21,6 +26,7 @@ function Probe() {
       <span data-testid="theme">{ctx.theme}</span>
       <button data-testid="set-aero" onClick={() => ctx.setTheme("aero")} />
       <button data-testid="set-aqua" onClick={() => ctx.setTheme("aqua")} />
+      <button data-testid="set-noir" onClick={() => ctx.setTheme("noir")} />
     </div>
   );
 }
@@ -98,5 +104,21 @@ describe("VibeThemeProvider", () => {
     });
     expect(settingsStore.writeCount).toBe(1);
     expect(settingsStore.writes).toEqual(["aqua"]);
+  });
+
+  it("setTheme pushes the new theme's variables to every live frame exactly once", () => {
+    const broadcast = vi
+      .spyOn(frameMountModule, "broadcastTheme")
+      .mockImplementation(() => {});
+    try {
+      const { getByTestId } = renderWithServices(<Probe />);
+      act(() => {
+        getByTestId("set-noir").click();
+      });
+      expect(broadcast).toHaveBeenCalledTimes(1);
+      expect(broadcast).toHaveBeenCalledWith(VIBE_THEMES.noir);
+    } finally {
+      broadcast.mockRestore();
+    }
   });
 });

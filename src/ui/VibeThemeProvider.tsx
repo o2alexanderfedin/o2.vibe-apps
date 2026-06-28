@@ -19,6 +19,7 @@ import {
 } from "react";
 import { STORAGE_KEY_OS_THEME } from "../lib/storage";
 import { useServices } from "../services/ServicesProvider";
+import { broadcastTheme } from "../execution/frameMount";
 
 /** The four named themes the marketplace ships with. */
 export type VibeThemeName = "aurora" | "aero" | "aqua" | "noir";
@@ -158,6 +159,9 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
       // Fire-and-forget the durable mirror — never block the UI switch on the
       // async IDB write. localStorage already holds the authoritative value.
       void settingsStore.write(name);
+      // Push the new theme variables to every live frame so opaque-origin app
+      // bodies repaint with the switched theme (their :root can't see the host's).
+      broadcastTheme(VIBE_THEMES[name]);
     },
     [settingsStore],
   );

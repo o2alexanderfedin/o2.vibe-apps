@@ -14,7 +14,7 @@
 // All copy and class names are neutral (no banned hygiene tokens): the desktop
 // reveals nothing about how an app's body comes to exist.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { type ComponentType } from "react";
 import { KeyDialog } from "./KeyDialog";
 import { WindowFrame } from "./WindowFrame";
@@ -28,6 +28,7 @@ import {
   resolveComponent,
   evictLiveComponent,
   deriveDisplayName,
+  getTranspiledJS,
 } from "../execution/loader";
 import { ProduceAuthError } from "../execution/producer";
 import { ProduceThrottledError } from "../host/produceGate";
@@ -39,6 +40,8 @@ import { MenuBar } from "./MenuBar";
 import { Dock } from "./Dock";
 import { SearchLauncherPanel } from "./SearchLauncherPanel";
 import { slugFromText } from "./launcherUtils";
+import { runHandler } from "../execution/handler";
+import { VibeThemeContext, VIBE_THEMES } from "./VibeThemeProvider";
 
 // Work-area geometry (Phase 19, plan 19-02, CHROME-02). Maximize = zoom-to-work-
 // area, NOT the OS Fullscreen API: a maximized window fills the viewport MINUS
@@ -195,6 +198,13 @@ function DesktopShellInner() {
   const [components, setComponents] = useState<
     Map<string, ComponentType | null>
   >(new Map());
+  // Parallel to `components`: the compiled app STRING per window instance, used
+  // only when frameMode==="iframe" to seed the opaque-origin frame body
+  // (SANDBOX-05). In the in-tree default these strings are ignored — WindowFrame
+  // renders the resolved Component directly — so this map is inert in the suite.
+  const [transpiledMap, setTranspiledMap] = useState<Map<string, string>>(
+    new Map(),
+  );
   // Committed free-drag positions live on the manager entry itself (via
   // setGeometry), so x/y is the SINGLE authoritative source of truth (WR-01) —
   // there is no separate positions map to drift from it. useDrag's imperative
@@ -238,6 +248,12 @@ function DesktopShellInner() {
   // re-creating handlers (and so handleModify can look up the live window list).
   const windowManagerRef = useRef<WindowManagerValue>(windowManager);
   windowManagerRef.current = windowManager;
+  // Latest compiled-string map read inside handleModify (clone/tweak) WITHOUT
+  // adding transpiledMap to the callback deps — mirrors the windowManagerRef
+  // pattern so the callback identity stays stable and never closes over a stale
+  // map (CR-02 / WR-01).
+  const transpiledMapRef = useRef(transpiledMap);
+  transpiledMapRef.current = transpiledMap;
 
   // Tear down a window: evict its live component, route close through the
   // manager (which unmounts the single root), and drop its body/position.
@@ -246,6 +262,13 @@ function DesktopShellInner() {
       evictLiveComponent(instanceId);
       windowManagerRef.current.close(id);
       setComponents((prev) => {
+        const next = new Map(prev);
+        next.delete(instanceId);
+        return next;
+      });
+      // Drop the compiled-string entry too so a closed window leaks nothing in
+      // iframe mode (mirrors the components-map cleanup).
+      setTranspiledMap((prev) => {
         const next = new Map(prev);
         next.delete(instanceId);
         return next;
@@ -310,6 +333,12 @@ function DesktopShellInner() {
         }
 
         storeComponent(instanceId, Component);
+        // Capture the compiled app string alongside the Component so iframe mode
+        // can seed the frame body (SANDBOX-05). Inert in the in-tree default.
+        const tjs = getTranspiledJS(intent.cacheKey);
+        if (tjs) {
+          setTranspiledMap((prev) => new Map(prev).set(instanceId, tjs));
+        }
       } catch (err) {
         // Surface a neutral fallback so the failure is visible and debuggable;
         // diagnostics go to the gated logger, the user-facing copy stays
@@ -392,6 +421,12 @@ function DesktopShellInner() {
             return;
           }
           storeComponent(instanceId, Component);
+          // Capture the compiled app string for iframe mode (SANDBOX-05). The
+          // described path builds its own cacheKey; reuse it here. Inert in-tree.
+          const tjs = getTranspiledJS(cacheKey);
+          if (tjs) {
+            setTranspiledMap((prev) => new Map(prev).set(instanceId, tjs));
+          }
         } catch (err) {
           const needsAuth = err instanceof ProduceAuthError;
           const throttled = err instanceof ProduceThrottledError;
@@ -449,6 +484,16 @@ function DesktopShellInner() {
         });
         const sourceComponent = components.get(instanceId) ?? null;
         storeComponent(cloneInstanceId, sourceComponent);
+        // CR-02 (isolation): carry the source's compiled string to the clone's
+        // instance id so the clone takes the SAME opaque-origin frame path
+        // (WindowFrame gates on frameMode==="iframe" && transpiledJS). Without
+        // this the clone falls through to the in-tree body and runs the component
+        // directly in the host tree — re-exposing the execution path this phase
+        // removes. Read through the ref so the callback identity stays stable.
+        const tjs = transpiledMapRef.current.get(instanceId);
+        if (tjs) {
+          setTranspiledMap((prev) => new Map(prev).set(cloneInstanceId, tjs));
+        }
         return;
       }
 
@@ -475,6 +520,14 @@ function DesktopShellInner() {
           routed.instruction,
         );
         storeComponent(instanceId, Component);
+        // WR-01 (iframe mode): mirror the open/describe paths — update this
+        // instance's compiled string so the frame re-bootstraps with the tweaked
+        // body. Without this the srcdoc useMemo (keyed on transpiledJS) never
+        // rebuilds and the tweak is invisible in production iframe mode.
+        const tjs = getTranspiledJS(tweakKey);
+        if (tjs) {
+          setTranspiledMap((prev) => new Map(prev).set(instanceId, tjs));
+        }
       } catch (err) {
         // A tweak that fails to resolve surfaces the neutral fallback (in place)
         // rather than vanishing the app or showing a mechanic.
@@ -618,6 +671,15 @@ function DesktopShellInner() {
   // never disagree (WR-05).
   const activeWindow = windowManager.activeWindow();
 
+  // The current theme's CSS-variable map, baked into a frame's first paint so an
+  // opaque-origin app body (whose :root cannot inherit the host's variables)
+  // renders in-theme immediately (SANDBOX-05). Read defensively via the context
+  // directly (not the throwing useVibeTheme hook) so DesktopShell still renders
+  // outside a VibeThemeProvider; absent a provider it falls back to the default
+  // theme. Only consumed in iframe mode — inert under the in-tree default.
+  const themeCtx = useContext(VibeThemeContext);
+  const currentThemeVars = VIBE_THEMES[themeCtx?.theme ?? "aurora"];
+
   return (
     <div
       className={
@@ -708,6 +770,22 @@ function DesktopShellInner() {
               }}
               onModify={(instruction) =>
                 void handleModify(entry.instanceId, instruction)
+              }
+              // SANDBOX-05 (iframe mode only — ignored under the in-tree
+              // default). The compiled app string seeds the frame body; the
+              // theme vars bake into its first paint; the handler/data brokers
+              // are PARENT-SIDE closures over services, so the key never crosses
+              // into the frame. appType lets a delegated body build the per-action
+              // intent that matches the parent's cached handler (CR-01).
+              appType={entry.appType}
+              transpiledJS={transpiledMap.get(entry.instanceId)}
+              themeVars={currentThemeVars}
+              onRunHandler={(intent, input) =>
+                runHandler(intent, input, services)
+              }
+              onFetchData={(sourceId, params) =>
+                services.fetchDataBroker?.fetch(sourceId, params) ??
+                Promise.resolve({ error: "This data could not be loaded." })
               }
             />
           );

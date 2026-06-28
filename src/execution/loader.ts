@@ -387,3 +387,8 @@ export function _clearCachesForTesting(): void {
   liveComponents.clear();
   transpiledCache.clear();
 }
+
+/** Returns the cached compiled string for a given cache key, or undefined on a miss. */
+export function getTranspiledJS(cacheKey: string): string | undefined {
+  return transpiledCache.get(cacheKey)?.transpiledJS;
+}

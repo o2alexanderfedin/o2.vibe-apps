@@ -10,6 +10,12 @@ import {
 } from "vitest";
 import { WindowFrame, type WindowFrameProps } from "./WindowFrame";
 import { unmountAll } from "../execution/mount";
+import { ServicesProvider } from "../services/ServicesProvider";
+import {
+  createTestServices,
+  type TestServicesOverrides,
+} from "../services/testServices";
+import type { Services } from "../services/services";
 
 // jsdom does not implement pointer capture APIs — install stubs so the drag
 // hook's handlePointerDown (which captures the pointer) does not throw.
@@ -61,6 +67,22 @@ function makeProps(over: Partial<WindowFrameProps> = {}): WindowFrameProps {
   };
 }
 
+// WindowFrame now reads frameMode from useServices(), so every render must be
+// wrapped in a ServicesProvider. The default test bundle's frameMode is
+// "in-tree", which keeps the body on the direct WindowBody path (no real
+// browser frame) — exactly what the JSDOM/RTL suite needs.
+function renderFrame(
+  props: WindowFrameProps,
+  servicesOverrides: TestServicesOverrides = {},
+) {
+  const services: Services = createTestServices(servicesOverrides);
+  return render(
+    <ServicesProvider services={services}>
+      <WindowFrame {...props} />
+    </ServicesProvider>,
+  );
+}
+
 afterEach(() => {
   unmountAll();
   cleanup();
@@ -68,9 +90,7 @@ afterEach(() => {
 
 describe("WindowFrame", () => {
   it("renders glass chrome with traffic lights + title", () => {
-    const { container } = render(
-      createElement(WindowFrame, makeProps({ title: "Notes" })),
-    );
+    const { container } = renderFrame(makeProps({ title: "Notes" }));
 
     const chrome = container.querySelector(".window-chrome");
     expect(chrome).not.toBeNull();
@@ -89,7 +109,7 @@ describe("WindowFrame", () => {
       Component: SimpleComponent as ComponentType,
     });
 
-    const { container } = render(createElement(WindowFrame, props));
+    const { container } = renderFrame(props);
 
     // The ⋮ "App options" button is in the titlebar (Phase 19: moved out of body).
     const titlebar = container.querySelector(
@@ -112,7 +132,7 @@ describe("WindowFrame", () => {
   it("unmounting the frame tears down the app subtree (zero leak)", () => {
     const props = makeProps({ instanceId: "inst-leak-1" });
 
-    const { unmount } = render(createElement(WindowFrame, props));
+    const { unmount } = renderFrame(props);
     expect(document.querySelector("[data-testid='app-body']")).not.toBeNull();
 
     unmount();
@@ -124,9 +144,7 @@ describe("WindowFrame", () => {
 
   it("clicking the close traffic-light calls onClose", () => {
     const onCloseSpy = vi.fn();
-    const { container } = render(
-      createElement(WindowFrame, makeProps({ onClose: onCloseSpy })),
-    );
+    const { container } = renderFrame(makeProps({ onClose: onCloseSpy }));
 
     const closeBtn = container.querySelector(
       ".window-chrome__traffic-light--close",
@@ -140,9 +158,7 @@ describe("WindowFrame", () => {
   it("clicking the amber traffic-light calls onMinimize; minimized prop sets display:none class", () => {
     const onMinimizeSpy = vi.fn();
     const props = makeProps({ onMinimize: onMinimizeSpy });
-    const { container, rerender } = render(
-      createElement(WindowFrame, props),
-    );
+    const { container, rerender } = renderFrame(props);
 
     const minBtn = container.querySelector(
       ".window-chrome__traffic-light--min",
@@ -152,7 +168,11 @@ describe("WindowFrame", () => {
     fireEvent.click(minBtn);
     expect(onMinimizeSpy).toHaveBeenCalledTimes(1);
 
-    rerender(createElement(WindowFrame, { ...props, minimized: true }));
+    rerender(
+      <ServicesProvider services={createTestServices()}>
+        <WindowFrame {...props} minimized={true} />
+      </ServicesProvider>,
+    );
     const chrome = container.querySelector(
       ".window-chrome",
     ) as HTMLElement;
@@ -164,9 +184,7 @@ describe("WindowFrame", () => {
 
   it("clicking the green max traffic-light calls onMaximize once (and is enabled)", () => {
     const onMaximizeSpy = vi.fn();
-    const { container } = render(
-      createElement(WindowFrame, makeProps({ onMaximize: onMaximizeSpy })),
-    );
+    const { container } = renderFrame(makeProps({ onMaximize: onMaximizeSpy }));
 
     const maxBtn = container.querySelector(
       ".window-chrome__traffic-light--max",
@@ -181,9 +199,7 @@ describe("WindowFrame", () => {
 
   it("double-clicking the titlebar calls onMaximize once", () => {
     const onMaximizeSpy = vi.fn();
-    const { container } = render(
-      createElement(WindowFrame, makeProps({ onMaximize: onMaximizeSpy })),
-    );
+    const { container } = renderFrame(makeProps({ onMaximize: onMaximizeSpy }));
 
     const titlebar = container.querySelector(
       ".window-chrome__titlebar",
@@ -197,11 +213,8 @@ describe("WindowFrame", () => {
   it("does not start a drag (onFocus/onMove) on titlebar pointerdown while maximized", () => {
     const onFocusSpy = vi.fn();
     const onMoveSpy = vi.fn();
-    const { container } = render(
-      createElement(
-        WindowFrame,
-        makeProps({ maximized: true, onFocus: onFocusSpy, onMove: onMoveSpy }),
-      ),
+    const { container } = renderFrame(
+      makeProps({ maximized: true, onFocus: onFocusSpy, onMove: onMoveSpy }),
     );
 
     const handle = container.querySelector(
@@ -227,11 +240,8 @@ describe("WindowFrame", () => {
     // raise the window (onFocus) but must NOT begin a drag (no onMove commit).
     const onFocusSpy = vi.fn();
     const onMoveSpy = vi.fn();
-    const { container } = render(
-      createElement(
-        WindowFrame,
-        makeProps({ onFocus: onFocusSpy, onMove: onMoveSpy }),
-      ),
+    const { container } = renderFrame(
+      makeProps({ onFocus: onFocusSpy, onMove: onMoveSpy }),
     );
     const titlebar = container.querySelector(".titlebar-handle") as HTMLElement;
     const optBtn = within(titlebar).getByRole("button", {
@@ -256,7 +266,7 @@ describe("WindowFrame", () => {
       onFocus: onFocusSpy,
     });
 
-    const { container } = render(createElement(WindowFrame, props));
+    const { container } = renderFrame(props);
 
     const input = document.querySelector(
       "[data-testid='app-input']",
@@ -283,7 +293,7 @@ describe("WindowFrame", () => {
       Component: null,
     });
 
-    const { container } = render(createElement(WindowFrame, props));
+    const { container } = renderFrame(props);
 
     const body = container.querySelector(
       ".window-chrome__body",
@@ -298,9 +308,7 @@ describe("WindowFrame", () => {
 
   // Phase 16-01: title-group + hideClose tests
   it("titlebar has .window-chrome__title-group wrapping icon then title (icon first)", () => {
-    const { container } = render(
-      createElement(WindowFrame, makeProps({ title: "Notes", icon: "N" })),
-    );
+    const { container } = renderFrame(makeProps({ title: "Notes", icon: "N" }));
 
     const titlebar = container.querySelector(
       ".window-chrome__titlebar",
@@ -326,9 +334,7 @@ describe("WindowFrame", () => {
   });
 
   it(".window-chrome__title still carries the title text", () => {
-    const { container } = render(
-      createElement(WindowFrame, makeProps({ title: "Calculator" })),
-    );
+    const { container } = renderFrame(makeProps({ title: "Calculator" }));
 
     const titleEl = container.querySelector(
       ".window-chrome__title",
@@ -343,7 +349,7 @@ describe("WindowFrame", () => {
       Component: SimpleComponent as ComponentType,
     });
 
-    const { container } = render(createElement(WindowFrame, props));
+    const { container } = renderFrame(props);
 
     const body = container.querySelector(
       ".window-chrome__body",
@@ -364,5 +370,60 @@ describe("WindowFrame", () => {
       '[aria-label="Close"]',
     ) as HTMLButtonElement | null;
     expect(trafficClose).not.toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // SANDBOX-05: frameMode-gated body swap. The render mode is injected via
+  // services; the in-tree default keeps the direct WindowBody path, while the
+  // iframe mode routes the body through the opaque-origin frame component.
+  // -------------------------------------------------------------------------
+
+  it("in-tree mode (the test default) renders the direct body and NO frame", () => {
+    const props = makeProps({
+      title: "Notes",
+      transpiledJS: "const App = () => null;",
+      themeVars: { "--text": "#fff" },
+    });
+
+    const { container } = renderFrame(props /* default frameMode: in-tree */);
+
+    // The direct WindowBody path runs: the app content is in the body, and no
+    // opaque-origin frame is created.
+    const body = container.querySelector(".window-chrome__body") as HTMLElement;
+    expect(within(body).getByTestId("app-body")).not.toBeNull();
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector(".app-frame")).toBeNull();
+  });
+
+  it("iframe mode with a compiled app string renders an opaque-origin frame (allow-scripts)", () => {
+    const props = makeProps({
+      title: "Notes",
+      transpiledJS: "const App = () => null;",
+      themeVars: { "--text": "#fff" },
+    });
+
+    const { container } = renderFrame(props, { frameMode: "iframe" });
+
+    const frame = container.querySelector("iframe") as HTMLIFrameElement | null;
+    expect(frame).not.toBeNull();
+    expect(frame!.getAttribute("sandbox")).toBe("allow-scripts");
+    // The direct in-tree app body is NOT rendered in frame mode.
+    expect(container.querySelector("[data-testid='app-body']")).toBeNull();
+  });
+
+  it("iframe mode WITHOUT a compiled app string falls back to the placeholder, not a frame", () => {
+    const props = makeProps({
+      title: "Notes",
+      Component: null,
+      transpiledJS: undefined,
+    });
+
+    const { container } = renderFrame(props, { frameMode: "iframe" });
+
+    // No compiled string yet: the body short-circuits to WindowBody, and since
+    // Component is also null it shows the neutral placeholder — no frame.
+    const body = container.querySelector(".window-chrome__body") as HTMLElement;
+    expect(body.querySelector(".window-chrome__placeholder")).not.toBeNull();
+    expect(container.querySelector("iframe")).toBeNull();
   });
 });

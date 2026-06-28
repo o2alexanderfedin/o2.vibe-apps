@@ -58,7 +58,7 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
 ### v3.0 Trusted Desktop (Phases 19–22)
 
 - [x] **Phase 19: Window Chrome & Menu Relocation** - Relocate the `⋮` contextual menu into the window titlebar (right-aligned), add maximize/snap/keyboard shortcuts; hard prerequisite for all iframe work. (completed 2026-06-27)
-- [ ] **Phase 20: Opaque-Origin Frame Isolation** - Convert each app body to `<iframe sandbox="allow-scripts">` brokered by `postMessage`; the API key never enters the frame; 727 RTL tests remain green via in-tree fallback.
+- [ ] **Phase 20: Opaque-Origin Frame Isolation** - Convert each app body to `<iframe sandbox="allow-scripts">` brokered by `postMessage`; the API key never enters the frame; 761 RTL tests remain green via in-tree fallback. (5 plans planned 2026-06-27)
 - [ ] **Phase 21: Desktop Persistence** - Restore window geometry, z-order, open-app set, and minimized state across reloads using additive keys in the existing IDB `settings` store; no DB version bump.
 - [ ] **Phase 22: Theme Editor & Custom Themes** - Create, name, edit, and save custom themes over the 12-var contract; custom themes appear in the menu-bar switcher and survive reload FOUC-free.
 
@@ -123,7 +123,7 @@ Plans:
 
 ### Phase 20: Opaque-Origin Frame Isolation
 
-**Goal**: Each app body runs inside `<iframe sandbox="allow-scripts">` at an opaque origin — the API key is structurally unable to enter the frame, generated code cannot reach `localStorage`, and every app↔host interaction is brokered by typed `postMessage` RPC; all 727 existing tests remain green via the in-tree fallback, and a Playwright integration test proves the real round-trip.
+**Goal**: Each app body runs inside `<iframe sandbox="allow-scripts">` at an opaque origin — the API key is structurally unable to enter the frame, generated code cannot reach `localStorage`, and every app↔host interaction is brokered by typed `postMessage` RPC; all 761 existing tests remain green via the in-tree fallback, and a Playwright integration test proves the real round-trip.
 
 **Depends on**: Phase 19 (CHROME-01 gate confirmed; `⋮` is host-owned chrome before any app body becomes a frame)
 
@@ -134,7 +134,7 @@ Plans:
   2. From inside the frame, reading `localStorage` throws a `SecurityError` — a Playwright test asserts this. A CI test asserts the mounted iframe `sandbox` attribute never contains the string `"allow-same-origin"`.
   3. A CI test asserts that `iframeEl.getAttribute('srcdoc')` does not match the pattern `/sk-ant/` — the API key can never be baked into the srcdoc template. A forged `postMessage` from an unknown `source` (not the live frame's `contentWindow`) is dropped without error — a Playwright test confirms.
   4. Switching themes re-skins all open app frames live, in lockstep with the host chrome — a Playwright test drives a theme switch while two apps are open and asserts that both frames' `:root` CSS vars update.
-  5. All 727 prior RTL/JSDOM tests pass without a real browser (the `in-tree` fallback mode, injected via `ServicesProvider`, is active in the test environment).
+  5. All 761 prior RTL/JSDOM tests pass without a real browser (the `in-tree` fallback mode, injected via `ServicesProvider`, is active in the test environment).
   6. An app that stops responding triggers a visible overlay (not a blank window) with a force-close action — the rest of the desktop remains usable; a test confirms the overlay appears after the ping timeout.
 
 **Risks / Notes** (all seven critical pitfalls from SUMMARY.md):
@@ -148,7 +148,20 @@ Plans:
   - **Known limitation — infinite-loop frame cannot be `terminate()`d**: An iframe cannot be killed like a Worker. SANDBOX-06 mitigates with a ping/timeout/overlay/force-close; document explicitly that the loop continues in the orphaned frame until it is force-closed.
   - **New test category — Playwright**: This is the first phase requiring a real browser for integration tests. Playwright is permitted as a devDependency; the decision on test infrastructure (Playwright vs another browser-native approach) must be made at the start of Phase 20 planning.
 
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+**Wave 1** *(parallel — no file overlap)*
+- [ ] 20-01-frame-bridge-rpc-PLAN.md — Typed postMessage RPC core: envelope schema (zod/mini), Object.create(null) prototype-pollution defense, dual origin+source guard, hardcoded dispatch allowlist, correlation-id map (SANDBOX-03)
+- [ ] 20-02-frame-mount-srcdoc-PLAN.md — getTranspiledJS loader accessor + inlined React CJS embed + frameMount registry + type-enforced buildSrcdoc (in-frame CSP connect-src 'none', baked theme vars) + broadcastTheme (SANDBOX-01, SANDBOX-04)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 20-03-sandbox-frame-component-PLAN.md — SandboxFrame component: opaque-origin allow-scripts iframe, handshake (FRAME_READY→VIBE_BOOTSTRAP), auto-height, validated RPC round-trip, neutral error overlay, ping/force-close unresponsive overlay (SANDBOX-01, SANDBOX-03, SANDBOX-06)
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 20-04-services-flag-windowframe-swap-PLAN.md — frameMode Services flag (prod iframe / test in-tree), WindowFrame WindowBody↔SandboxFrame swap, parent-side RPC brokers (key/services never cross), VibeThemeProvider broadcastTheme, DesktopShell transpiledJS supply (SANDBOX-02, SANDBOX-04)
+
+**Wave 4** *(blocked on Wave 3 — phase gate)*
+- [ ] 20-05-playwright-ci-security-hygiene-PLAN.md — Playwright devDep + real frame round-trip spec, standing CI security guards (sandbox attr, no /sk-ant/, __proto__ no pollution), HYGIENE-07 lexicon gate extension with context-aware iframe/sandbox/isolation user-copy carve-out (SANDBOX-05, HYGIENE-07)
 **UI hint**: yes
 
 ---
@@ -231,7 +244,7 @@ v1.0 → v1.1 → v2.0 → v3.0 phases execute in numeric order: 1 → … → 1
 | 17. Search / Launcher Panel | v2.0 | 4/4 | Complete | 2026-06-26 |
 | 18. Theme-Aware Generation | v2.0 | 4/4 | Complete | 2026-06-26 |
 | 19. Window Chrome & Menu Relocation | v3.0 | 4/4 | Complete   | 2026-06-27 |
-| 20. Opaque-Origin Frame Isolation | v3.0 | 0/TBD | Not started | - |
+| 20. Opaque-Origin Frame Isolation | v3.0 | 0/5 | Planned | - |
 | 21. Desktop Persistence | v3.0 | 0/TBD | Not started | - |
 | 22. Theme Editor & Custom Themes | v3.0 | 0/TBD | Not started | - |
 

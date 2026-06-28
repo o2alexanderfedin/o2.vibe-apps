@@ -57,6 +57,13 @@ export interface Services {
    * localStorage stays the source of truth for first paint.
    */
   settingsStore: SettingsStore;
+  /**
+   * Render mode for app bodies (SANDBOX-05): "iframe" runs each app in an
+   * opaque-origin frame; "in-tree" renders it directly in the host subtree.
+   * Production uses "iframe"; tests default to "in-tree" so the existing
+   * JSDOM/RTL suite runs the direct path without a real browser.
+   */
+  frameMode: "iframe" | "in-tree";
 }
 
 /**
@@ -112,5 +119,7 @@ export function createServices(): Services {
     fetchDataBroker: createDataBroker({ clock: realClock }),
     // THEME-01: best-effort IDB mirror of the named-theme preference (DB v3).
     settingsStore: realSettingsStore,
+    // SANDBOX-05: production renders app bodies inside opaque-origin frames.
+    frameMode: "iframe",
   };
 }
