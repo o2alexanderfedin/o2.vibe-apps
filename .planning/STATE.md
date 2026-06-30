@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Polish & Hardening
-status: executing
+status: Awaiting next milestone
 stopped_at: Roadmap written; ready for Phase 23 planning.
-last_updated: "2026-06-30T17:43:47.257Z"
-last_activity: 2026-06-30 -- Phase 25 execution started
+last_updated: "2026-06-30T18:08:37.103Z"
+last_activity: 2026-06-30 — Milestone v3.1 completed and archived
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-30 after v3.0)
 
 ## Current Position
 
-Phase: 25 (Real-Browser Smoke Suite) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 25
-Last activity: 2026-06-30 -- Phase 25 execution started
+Phase: Milestone v3.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-30 — Milestone v3.1 completed and archived
 
 ### v3.1 Phase Map
 
@@ -146,4 +146,4 @@ Resume with: `/gsd-plan-phase 23` to plan Live Frame Re-Skin.
 
 ## Operator Next Steps
 
-- Run `/gsd-plan-phase 23` to plan Phase 23 (Live Frame Re-Skin, RESKIN-01)
+- Start the next milestone with /gsd-new-milestone
