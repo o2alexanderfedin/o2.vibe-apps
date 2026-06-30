@@ -80,6 +80,11 @@ export interface RecordingSettingsStore extends SettingsStore {
    * Returns 0 for a key that has never been written.
    */
   rawWriteCount(key: string): number;
+  /**
+   * All keys passed to deleteRaw, in call order (set, so duplicates collapse).
+   * Phase 22 (THEME-07): used to assert clean IDB teardown in custom-theme delete tests.
+   */
+  readonly rawDeletes: ReadonlySet<string>;
 }
 
 export function createRecordingSettingsStore(): RecordingSettingsStore {
@@ -125,6 +130,14 @@ export function createRecordingSettingsStore(): RecordingSettingsStore {
     },
     rawWriteCount(key: string): number {
       return rawWritesMap.get(key)?.length ?? 0;
+    },
+    // TDD stub — does not yet update rawCurrentMap or track deletes; replaced in GREEN phase.
+    deleteRaw(_key: string): Promise<void> {
+      return Promise.resolve();
+    },
+    get rawDeletes(): ReadonlySet<string> {
+      // TDD stub — always empty; replaced in GREEN phase.
+      return new Set();
     },
   };
 }

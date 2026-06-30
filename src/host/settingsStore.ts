@@ -28,6 +28,11 @@ export interface SettingsStore {
    * Mirrors writeRaw — the caller supplies the key, not a fixed constant.
    */
   readRaw(key: string): Promise<string | null>;
+  /**
+   * Delete the record stored under the given key (best-effort; never throws).
+   * Used by the custom-theme delete path to remove orphaned IDB entries.
+   */
+  deleteRaw(key: string): Promise<void>;
 }
 
 // Fixed neutral key under which the named-theme preference is stored inside the
@@ -102,5 +107,9 @@ export const realSettingsStore: SettingsStore = {
       db?.close();
     }
     return null;
+  },
+  // TDD stub — does not yet delete from IDB; replaced in GREEN phase.
+  async deleteRaw(_key: string): Promise<void> {
+    // no-op stub
   },
 };
