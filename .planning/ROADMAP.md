@@ -90,7 +90,9 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
   3. In-frame app state (scroll position, form input values, counter or timer state) survives a theme switch unchanged
   4. A JSDOM unit test asserts that `themeVars` is absent from the `SandboxFrame` srcdoc memo dependency array
   5. The full existing test suite (935 tests) plus the new unit test all pass; `tsc --noEmit` reports 0 errors
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 23-01-PLAN.md — Remove themeVars from srcdoc memo deps; add criterion-#4 spy test (TDD RED->GREEN)
 
 ---
 
@@ -153,7 +155,7 @@ v1.0 → v1.1 → v2.0 → v3.0 → v3.1 phases execute in numeric order: 1 → 
 | 20. Opaque-Origin Frame Isolation | v3.0 | 5/5 | Complete   | 2026-06-27 |
 | 21. Desktop Persistence | v3.0 | 4/4 | Complete   | 2026-06-30 |
 | 22. Theme Editor & Custom Themes | v3.0 | 5/5 | Complete   | 2026-06-30 |
-| 23. Live Frame Re-Skin | v3.1 | 0/TBD | Not started | - |
+| 23. Live Frame Re-Skin | v3.1 | 0/1 | Not started | - |
 | 24. Launcher CSS Polish | v3.1 | 0/TBD | Not started | - |
 | 25. Real-Browser Smoke Suite | v3.1 | 0/TBD | Not started | - |
 
