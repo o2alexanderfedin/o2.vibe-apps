@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Trusted Desktop
-status: executing
+status: Awaiting next milestone
 stopped_at: Roadmap written; ready for Phase 19 planning.
-last_updated: "2026-06-30T07:38:15.504Z"
-last_activity: 2026-06-30 -- Phase 22 execution started
+last_updated: "2026-06-30T09:24:20.322Z"
+last_activity: 2026-06-30 — Milestone v3.0 completed and archived
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 18
-  completed_plans: 8
-  percent: 44
+  completed_plans: 13
+  percent: 72
 ---
 
 # Project State
@@ -25,14 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-26 after v2.0)
 
 ## Current Position
 
-Phase: 22 (Theme Editor & Custom Themes) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 22
-Last activity: 2026-06-30 -- Phase 22 execution started
-
-> Note: Phase 20 was executed, verified (20-VERIFICATION.md status: passed), and merged,
-> but its per-plan SUMMARY.md files were never written. The work is real and complete;
-> only the summary bookkeeping is missing. Treat Phase 20 as done.
+Phase: Milestone v3.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-30 — Milestone v3.0 completed and archived
 
 ### v3.0 Phase Map
 
@@ -168,3 +164,7 @@ Items acknowledged and carried forward:
 Last session: 2026-06-26 — v3.0 roadmap created
 Stopped at: Roadmap written; ready for Phase 19 planning.
 Resume with: `/gsd-plan-phase 19` to plan Window Chrome & Menu Relocation.
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

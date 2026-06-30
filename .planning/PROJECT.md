@@ -14,25 +14,17 @@ There is no application server. The user supplies their own Anthropic API key (s
 
 This still holds after v1.0. The v1.1 delegated thin-shell refined *how* the loop runs (behavior is attached on first action rather than produced whole up front), but it did not shift what the loop must deliver: an interactive app that betrays no on-demand mechanic.
 
-## Shipped: v2.0 Vibe OS (2026-06-26)
+## Shipped: v3.0 Trusted Desktop (2026-06-30)
 
-Themeable multi-window desktop — 5 phases (14–18), 21/21 requirements satisfied, 727 tests green, tagged `v2.0`. The flat storefront is now a draggable-glass-window OS with 4 switchable themes, a dock + menu bar, a search/launcher panel, and theme-aware app generation. See MILESTONES.md.
+Trusted desktop — 4 phases (19–22), 19/19 requirements satisfied, 935 tests green, audit PASSED, tagged `v3.0`. Each app body now runs in an opaque-origin `<iframe sandbox="allow-scripts">` the API key never enters; the `⋮` contextual menu lives in the host-owned titlebar (with maximize/snap/keyboard shortcuts); the desktop (window geometry, z-order, minimized state, open-app set) restores across reloads via additive `settings`-store keys; and users can create, name, edit, and save custom themes over the 12-var contract that join the menu-bar switcher and survive reload FOUC-free. See MILESTONES.md.
 
-## Prior: v1.1 Real & Robust (2026-06-26)
+## Prior: v2.0 Vibe OS (2026-06-26)
 
-Network-data path, reliability hardening, richer storefront, and activated widget composition — all merged, tagged `v1.1`, 552 tests green.
+Themeable multi-window desktop — 5 phases (14–18), 21/21 requirements satisfied, 727 tests green, tagged `v2.0`. The flat storefront became a draggable-glass-window OS with 4 switchable themes, a dock + menu bar, a search/launcher panel, and theme-aware app generation.
 
-## Current Milestone: v3.0 Trusted Desktop
+## Next Milestone
 
-**Goal:** Make the Vibe OS desktop *safe to run untrusted generated code*, *durable across reloads*, and *personalizable* — without breaking the illusion that apps simply exist.
-
-**Target features (build order reflects dependencies):**
-- **Window UX & chrome** — relocate the `⋮` contextual menu out of the app body into the **window titlebar (right-aligned)**, drop the now-redundant in-body app-shell header, and add maximize/snap + keyboard affordances. This puts the contextual control in host-owned chrome — the hard prerequisite for iframe isolation.
-- **Security: `<iframe sandbox>` isolation (HARD-01)** — run each app body inside `<iframe sandbox="allow-scripts">` (opaque origin, no `allow-same-origin`); broker data / handler / modify calls via `postMessage`; the Anthropic key never enters the frame. Theme CSS vars re-injected per frame.
-- **Desktop persistence** — restore window geometry / z-order, the open-app set, and last theme across reloads.
-- **Theme editor / custom themes** — create, name, edit, and save user themes over the 12-var contract, persisted in the IDB `settings` store; the built-in four remain.
-
-**Key context:** The `⋮`→titlebar move is a *prerequisite* for the iframe work (contextual UI must be host-owned once the body is an opaque frame). Theme vars must be re-injected into each sandboxed frame (CSS custom properties don't cross the iframe boundary). Zero-new-dependency bias and the devtools-hygiene lexicon gate stay in force. Drove from a user design screenshot (the `⋮`-to-titlebar annotation).
+None planned yet. Run `/gsd-new-milestone` to scope v3.1/v4.0. Candidate backlog includes: in-place live iframe re-skin on theme switch (currently the frame reloads — see RETROSPECTIVE / v3.0 audit tech debt), and the real-browser manual smoke checks deferred from Phases 21–22.
 
 ## Requirements
 
@@ -131,6 +123,35 @@ Network-data path, reliability hardening, richer storefront, and activated widge
 **Performance (v2.0)**
 - ✓ [PERF-01] Minimized windows display:none; animated wallpaper degrades under prefers-reduced-motion — v2.0
 
+**Window chrome & relocation (v3.0)**
+- ✓ [CHROME-01] `⋮` contextual menu relocated into host-owned window titlebar (right-aligned) — v3.0
+- ✓ [CHROME-02] Maximize to work area (viewport minus menu bar minus dock) via green traffic-light + titlebar double-click — v3.0
+- ✓ [CHROME-03] Half-tiling: edge-drag drop-zone preview + `Ctrl+←/→` snap — v3.0
+- ✓ [CHROME-04] `Cmd/Ctrl+W` close / `Cmd/Ctrl+M` minimize, gated to active Vibe OS window — v3.0
+
+**Opaque-origin frame isolation (v3.0, HARD-01)**
+- ✓ [SANDBOX-01] App body runs in `<iframe sandbox="allow-scripts">` (opaque origin, never `allow-same-origin`) — v3.0
+- ✓ [SANDBOX-02] API key never enters the frame (3-param type-enforced `buildSrcdoc`) — v3.0
+- ✓ [SANDBOX-03] Typed `postMessage` RPC with origin+source validation, allowlist, proto-pollution defense — v3.0
+- ✓ [SANDBOX-04] Theme vars pushed per-frame; live re-skin via `THEME_PUSH` — v3.0
+- ✓ [SANDBOX-05] In-tree fallback keeps suite green; Playwright proves the real round-trip — v3.0
+- ✓ [SANDBOX-06] Unresponsive-frame ping/timeout → force-close overlay — v3.0
+
+**Desktop persistence (v3.0)**
+- ✓ [PERSIST-01] Debounced (~300ms) layout save; no write-storm — v3.0
+- ✓ [PERSIST-02] Restore window geometry, z-order, minimized state, open-app set on reload (fresh instanceIds) — v3.0
+- ✓ [PERSIST-03] Evicted, un-re-resolvable app → placeholder with retry; never spends quota — v3.0
+
+**Theme editor & custom themes (v3.0)**
+- ✓ [THEME-06] Theme editor over the 12-var contract with live `:root` preview + `CSS.supports` validation — v3.0
+- ✓ [THEME-07] Name/save/duplicate/delete custom themes; `"custom:<name>"` namespace; sanitized names — v3.0
+- ✓ [THEME-08] Custom themes in the menu-bar switcher; selecting re-skins host + frames (THEME_PUSH) — v3.0
+- ✓ [THEME-09] Custom themes survive reload FOUC-free (localStorage mirror + recomputed CSP hash) — v3.0
+- ✓ [THEME-10] Advisory (non-blocking) WCAG-AA contrast warning — v3.0
+
+**Hygiene (v3.0)**
+- ✓ [HYGIENE-07] Lexicon gate extended to all new v3.0 surfaces (frame bridge, srcdoc, ThemeEditor) — v3.0
+
 > **Deferred beyond v2.0:**
 > - **SEC-01 / SEC-02 / SEC-03** (general sandbox / iframe isolation hardening) — eligible for a later milestone.
 > - **HARD-01** (`<iframe sandbox>` isolation) — windowing layer designed for contained future adoption.
@@ -141,12 +162,10 @@ Network-data path, reliability hardening, richer storefront, and activated widge
 
 <!-- Next-milestone candidates. All are hypotheses until shipped. -->
 
-- [ ] **[HARD-01] `<iframe sandbox="allow-scripts">` isolation** — move generated code out of the `new Function` scope into an opaque-origin frame brokered by `postMessage`, so the API key never enters the frame. The v3.x security end-state. Windowing layer designed for this as a contained future change.
 - [ ] **[G2] Unified `Intent` contract** — collapse the parallel `routeModification` / `Modification` path into a single `Intent { operation, kind, contextBundle }` resolver. Internal refactor; no user-facing value yet.
-- [ ] **User-created / custom themes** — theme editor + persisting custom themes in the IDB `settings` store; built-in four only in v2.0.
-- [ ] **Window-position / desktop-layout persistence** — restoring exact window geometry and the `installed[]` dock across reloads; active-theme persistence ships in v2.0, layout deferred.
+- [ ] **In-place live iframe re-skin on theme switch** — today a theme switch reloads the opaque frame (srcdoc memoized on `themeVars`), so stateful apps lose in-frame state; make the latent `THEME_PUSH` the live path by removing `themeVars` from the srcdoc memo deps. (v3.0 audit tech debt.)
+- [ ] **Real-browser smoke pass for v3.0** — manual confirmation of the Phase 21/22 `human_needed` checks: reload restores the desktop FOUC-free, and a theme switch re-skins open frames live.
 - [ ] **SearchLauncherPanel CSS polish** — 6 interior classes (`.launcher__search`, `.launcher__input`, `.launcher__open-btn`, `.launcher__working`, `.launcher__chips`, `.launcher__chip`) partially styled by audit-debt fix (commit `8f0e601`); a final theme-glass treatment pass remains.
-- [ ] **SEC-01/02/03** — general sandbox / iframe isolation hardening; deferred.
 
 ### Out of Scope
 
@@ -220,4 +239,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-26 — started milestone v3.0 Trusted Desktop (iframe sandbox + persistence + theme editor + window-chrome UX); baseline 727 tests green, `v2.0` tagged*
+*Last updated: 2026-06-30 — shipped milestone v3.0 Trusted Desktop (opaque-origin iframe isolation + window chrome + desktop persistence + theme editor); 19/19 requirements, 935 tests green, audit PASSED, `v3.0` tagged*

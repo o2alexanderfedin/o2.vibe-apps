@@ -1,5 +1,26 @@
 # Milestones
 
+## v3.0 Trusted Desktop (Shipped: 2026-06-30)
+
+**Phases completed:** 4 phases, 18 plans, 10 tasks
+
+**Delivered:** A trusted desktop — each app body runs in an opaque-origin sandboxed iframe the API key never enters, the window chrome is host-owned, the desktop survives reloads, and users can author custom themes that persist FOUC-free.
+
+**Key accomplishments:**
+
+- **Phase 19 — Window Chrome & Menu Relocation (CHROME-01..04):** moved the per-app `⋮` contextual menu into the host-owned window titlebar; added maximize-to-work-area, half-tiling with edge-drag + `Ctrl+←/→`, and `Cmd/Ctrl+W`/`M` shortcuts — the hard prerequisite that made iframe isolation possible.
+- **Phase 20 — Opaque-Origin Frame Isolation (SANDBOX-01..06, HYGIENE-07):** each app body now runs in `<iframe sandbox="allow-scripts">` (opaque origin) brokered by typed `postMessage` RPC; the API key is structurally unreachable from the frame; an in-tree fallback keeps the suite green while Playwright proves the real round-trip.
+- **Phase 21 — Desktop Persistence (PERSIST-01..03):** window geometry, z-order, minimized state, and open-app set restore across reloads via an additive `"windowLayout"` key (no DB version bump); debounced save, serial cache-hit restore (produce-gate bypassed), evicted-app placeholder with retry (never spends quota).
+- **Phase 22 — Theme Editor & Custom Themes (THEME-06..10):** create/name/edit/save custom themes over the 12-var contract with live `:root` preview and `CSS.supports` validation; custom themes join the menu-bar switcher, push live to host + frames via `THEME_PUSH`, survive reload FOUC-free (localStorage mirror + recomputed CSP hash), and carry an advisory WCAG contrast warning.
+
+**Quality:** 935/935 tests green, `tsc --noEmit` 0 errors, production build with 0 source maps, hygiene + CSP + frameCsp gates green, `REGISTRY_DB_VERSION` unchanged at 3, zero new runtime dependencies. Milestone audit PASSED (19/19 requirements, integration PASS).
+
+**Known deferred items at close:** 3 — Phase 21 & 22 carry `human_needed` real-browser checks (reload paint, live iframe re-skin) that JSDOM cannot cover; plus 1 stale v1.1-era quick task. See `.planning/STATE.md` and `milestones/v3.0-MILESTONE-AUDIT.md`.
+
+**Tech debt:** theme switch currently reloads the opaque frame (srcdoc memoized on `themeVars`) rather than re-skinning in place via the latent `THEME_PUSH` path — backlogged for a future milestone.
+
+---
+
 ## v2.0 Vibe OS (Shipped: 2026-06-26)
 
 **Phases completed:** 5 phases (14–18), 21 plans
