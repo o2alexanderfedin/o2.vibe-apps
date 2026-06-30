@@ -68,7 +68,7 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
 
 ### v3.1 Polish & Hardening (Phases 23–25) — IN PROGRESS
 
-- [ ] **Phase 23: Live Frame Re-Skin** — RESKIN-01 — remove `themeVars` from the srcdoc memo deps so theme switches re-skin open opaque frames via `THEME_PUSH` without reloading the iframe; in-frame app state survives.
+- [x] **Phase 23: Live Frame Re-Skin** — RESKIN-01 — remove `themeVars` from the srcdoc memo deps so theme switches re-skin open opaque frames via `THEME_PUSH` without reloading the iframe; in-frame app state survives. (completed 2026-06-30)
 - [ ] **Phase 24: Launcher CSS Polish** — POLISH-01 — glass treatment pass on the 6 SearchLauncherPanel interior classes partially styled by the v3.0 audit-debt fix; visually consistent with the rest of the v3.0 chrome.
 - [ ] **Phase 25: Real-Browser Smoke Suite** — SMOKE-01, SMOKE-02, SMOKE-03 — Playwright tests that close the Phase 21/22 `human_needed` gaps: reload restores the desktop, custom theme is FOUC-free on first paint, and a theme switch re-skins open frames live in a real browser.
 
@@ -90,7 +90,9 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
   3. In-frame app state (scroll position, form input values, counter or timer state) survives a theme switch unchanged
   4. A JSDOM unit test asserts that `themeVars` is absent from the `SandboxFrame` srcdoc memo dependency array
   5. The full existing test suite (935 tests) plus the new unit test all pass; `tsc --noEmit` reports 0 errors
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] 23-01-PLAN.md — Remove themeVars from srcdoc memo deps; add criterion-#4 spy test (TDD RED->GREEN)
 
 ---
 
@@ -153,7 +155,7 @@ v1.0 → v1.1 → v2.0 → v3.0 → v3.1 phases execute in numeric order: 1 → 
 | 20. Opaque-Origin Frame Isolation | v3.0 | 5/5 | Complete   | 2026-06-27 |
 | 21. Desktop Persistence | v3.0 | 4/4 | Complete   | 2026-06-30 |
 | 22. Theme Editor & Custom Themes | v3.0 | 5/5 | Complete   | 2026-06-30 |
-| 23. Live Frame Re-Skin | v3.1 | 0/TBD | Not started | - |
+| 23. Live Frame Re-Skin | v3.1 | 1/1 | Complete   | 2026-06-30 |
 | 24. Launcher CSS Polish | v3.1 | 0/TBD | Not started | - |
 | 25. Real-Browser Smoke Suite | v3.1 | 0/TBD | Not started | - |
 

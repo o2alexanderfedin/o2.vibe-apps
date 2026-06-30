@@ -2,13 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Polish & Hardening
-status: roadmap
-last_updated: "2026-06-30T15:30:00.000Z"
-last_activity: 2026-06-30
+status: executing
+stopped_at: Roadmap written; ready for Phase 23 planning.
+last_updated: "2026-06-30T16:54:22.912Z"
+last_activity: 2026-06-30 -- Phase 23 execution started
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 1
   completed_plans: 0
   percent: 0
 ---
@@ -24,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-30 after v3.0)
 
 ## Current Position
 
-Phase: 23 (not started)
-Plan: —
-Status: Roadmap created; ready for Phase 23 planning
-Last activity: 2026-06-30 — v3.1 Polish & Hardening roadmap created (Phases 23–25); 5/5 requirements mapped
+Phase: 23 (Live Frame Re-Skin) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 23
+Last activity: 2026-06-30 -- Phase 23 execution started
 
 ### v3.1 Phase Map
 
@@ -52,6 +53,7 @@ All 5 v3.1 requirements mapped — 5/5 (100%):
 ### Prior milestones — all DONE (archived)
 
 **v3.0 Trusted Desktop** — Phases 19–22 COMPLETE (shipped 2026-06-30)
+
 - Phase 19 Window Chrome & Menu Relocation (CHROME-01..04) — merged
 - Phase 20 Opaque-Origin Frame Isolation (SANDBOX-01..06, HYGIENE-07) — merged
 - Phase 21 Desktop Persistence (PERSIST-01..03) — merged
