@@ -157,10 +157,9 @@ describe("ThemeSelector", () => {
       btn.click();
     });
 
-    // Called once with no arguments (open blank editor, opts omitted).
+    // Called once with undefined opts — opens the blank editor (no pre-fill).
     expect(onOpenThemeEditor).toHaveBeenCalledTimes(1);
-    // Called with zero args — opts parameter is omitted (undefined by default).
-    expect(onOpenThemeEditor.mock.calls[0]).toEqual([]);
+    expect(onOpenThemeEditor).toHaveBeenCalledWith(undefined);
   });
 
   it("each built-in pill has a Duplicate button; clicking Aurora's calls onOpenThemeEditor with Aurora's vars", () => {

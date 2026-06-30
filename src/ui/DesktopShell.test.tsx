@@ -18,6 +18,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, screen, within, fireEvent, waitFor } from "@testing-library/react";
+import { STORAGE_KEY_OS_THEME } from "../lib/storage";
+import { VIBE_THEMES } from "./VibeThemeProvider";
 import {
   cannedTransport,
   createRecordingSettingsStore,
@@ -1000,5 +1002,81 @@ describe("Desktop persistence — restore", () => {
     // Plan 21 stores the window layout under an existing IDB settings key;
     // it requires NO schema change. This assertion is the final gate.
     expect(REGISTRY_DB_VERSION).toBe(3);
+  });
+});
+
+// ====================================================================
+// Phase 22 integration tests (plan 22-04):
+//   THEME-08: custom theme vars are correctly resolved from VibeThemeContext
+//             (the DesktopShell:842 currentVars fix guards SandboxFrame)
+//   THEME-06: ThemeEditor mounts when onOpenThemeEditor is triggered
+// ====================================================================
+
+describe("Phase 22 — ThemeEditor wiring + currentVars SandboxFrame coupling", () => {
+  afterEach(() => {
+    cleanup();
+    unmountAll();
+    _clearCachesForTesting();
+    document.documentElement.style.cssText = "";
+    localStorage.clear();
+    vi.useRealTimers();
+  });
+
+  it("custom theme vars are applied to :root when a custom:* theme is the active selection (THEME-08 regression guard)", async () => {
+    // Pre-seed the settings store with a custom theme whose --text value is
+    // unique so the assertion is unambiguous.
+    const customVars = { ...VIBE_THEMES["aurora"], "--text": "#deadbe" };
+    const settingsStore = createRecordingSettingsStore();
+    await settingsStore.writeRaw(
+      "customThemeIndex",
+      JSON.stringify(["myCustom"]),
+    );
+    await settingsStore.writeRaw("custom:myCustom", JSON.stringify(customVars));
+
+    // Pre-select the custom theme via localStorage so VibeThemeProvider starts
+    // with it on mount — this exercises the currentVars path that DesktopShell
+    // reads for SandboxFrame.
+    localStorage.setItem(STORAGE_KEY_OS_THEME, "custom:myCustom");
+
+    renderDesktopShell({ settingsStore });
+
+    // Wait for VibeThemeProvider to load the custom theme index from IDB and
+    // apply the vars to :root. The --text value must match the custom theme,
+    // not the aurora default, confirming currentVars is correct.
+    await waitFor(() => {
+      expect(
+        document.documentElement.style.getPropertyValue("--text"),
+      ).toBe("#deadbe");
+    });
+  });
+
+  it("clicking 'New Theme' in the menu bar opens the ThemeEditor dialog (THEME-06)", async () => {
+    // Stub window.CSS.supports so ThemeEditor validation does not throw in jsdom.
+    Object.defineProperty(window, "CSS", {
+      value: { supports: vi.fn().mockReturnValue(true) },
+      writable: true,
+      configurable: true,
+    });
+
+    const { user } = renderDesktopShell();
+
+    // No dialog before clicking.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    // Click "New Theme" in the menu bar's theme switcher.
+    const banner = screen.getByRole("banner");
+    await user.click(within(banner).getByRole("button", { name: /new theme/i }));
+
+    // ThemeEditor dialog appears with the "new" state heading.
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+    expect(screen.getByText("New color theme")).toBeInTheDocument();
+
+    // Closing the dialog (Cancel button) removes it from the DOM.
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 });

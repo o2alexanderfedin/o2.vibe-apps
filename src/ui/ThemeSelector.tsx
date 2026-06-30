@@ -97,11 +97,12 @@ export function ThemeSelector({ onOpenThemeEditor }: ThemeSelectorProps) {
         </div>
       ))}
 
-      {/* New Theme entry point — opens the ThemeEditor with blank defaults. */}
+      {/* New Theme entry point — opens the ThemeEditor with blank defaults.
+          Passing undefined explicitly mirrors the optional-arg signature. */}
       <button
         type="button"
         className="theme-selector__new-theme"
-        onClick={() => onOpenThemeEditor()}
+        onClick={() => onOpenThemeEditor(undefined)}
       >
         New Theme
       </button>
