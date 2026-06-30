@@ -1132,7 +1132,7 @@ body {
   padding: 0 16px;
   border-radius: 14px;
   border: 1px solid var(--bord, rgba(255, 255, 255, 0.22));
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--glass2);
   color: var(--text);
   font: inherit;
   font-size: 15px;
@@ -1149,7 +1149,7 @@ body {
 
 .launcher__input:focus {
   border-color: var(--accentB, var(--color-accent-primary));
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 3px var(--hi);
 }
 
 .launcher__open-btn {
@@ -1157,7 +1157,7 @@ body {
   padding: 0 22px;
   border-radius: 14px;
   border: none;
-  color: #fff;
+  color: var(--text);
   font-weight: 600;
   font-size: 15px;
   white-space: nowrap;
@@ -1169,7 +1169,7 @@ body {
   );
   box-shadow:
     0 8px 22px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    inset 0 1px 0 var(--hi);
   transition:
     filter 0.15s ease,
     transform 0.1s ease;
@@ -1206,7 +1206,7 @@ body {
   padding: 8px 13px;
   border-radius: 12px;
   border: 1px solid var(--bord, rgba(255, 255, 255, 0.22));
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--glass2);
   color: var(--text);
   font: inherit;
   font-size: 13px;
@@ -1215,7 +1215,7 @@ body {
 }
 
 .launcher__chip:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.13);
+  background: var(--glass);
 }
 
 .launcher__chip:focus-visible {
