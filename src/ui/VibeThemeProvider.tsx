@@ -195,6 +195,36 @@ function applyVarsToRoot(vars: Record<string, string>): void {
   }
 }
 
+/**
+ * Read a custom theme's vars from the localStorage mirror the FOUC script uses.
+ * Key: "vibe.customTheme.<name>". Returns the parsed vars when valid, null otherwise.
+ *
+ * This mirrors the same localStorage key the FOUC inline script in index.html reads
+ * on first paint. Using it here as the IDB-gap fallback in the apply-effect keeps
+ * the two paths consistent without introducing an IDB dependency (R-FLASH-01).
+ *
+ * Security (T-22-01 mirror): JSON.parse wrapped in try/catch; rejects non-object
+ * and array values so malformed entries cannot inject unexpected properties.
+ * Privacy: localStorage access wrapped in try/catch (throws in strict privacy mode).
+ */
+function readStoredCustomVars(name: string): Record<string, string> | null {
+  try {
+    const raw = localStorage.getItem("vibe.customTheme." + name);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+    ) {
+      return parsed as Record<string, string>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Runtime owner of the named theme. localStorage is the source of truth for
 // first paint; the injected settings store is a best-effort durable mirror.
 export function VibeThemeProvider({ children }: { children: ReactNode }) {
@@ -288,8 +318,17 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
         // invocation also applies the correct vars.
         applyVarsToRoot(pendingCustomVarsRef.current);
       } else {
-        // No vars available (e.g. stale localStorage on initial mount): Aurora fallback.
-        applyVarsToRoot(VIBE_THEMES[DEFAULT_THEME]);
+        // No pending vars from setTheme. Try the localStorage mirror the FOUC script
+        // uses — this avoids an Aurora flash during the IDB-load gap on reload when
+        // the custom theme vars are already in localStorage but IDB hasn't resolved.
+        const ls = readStoredCustomVars(name);
+        if (ls !== null) {
+          applyVarsToRoot(ls);
+        } else {
+          // No vars available anywhere (deleted theme, privacy-mode localStorage,
+          // or IDB unavailable): Aurora is the safe fallback.
+          applyVarsToRoot(VIBE_THEMES[DEFAULT_THEME]);
+        }
       }
     }
   }, [theme, customThemesState]);
@@ -308,7 +347,14 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
     const name = (theme as string).startsWith("custom:")
       ? (theme as string).slice(7)
       : "";
-    return customThemesState.get(name) ?? VIBE_THEMES[DEFAULT_THEME];
+    // Prefer IDB-loaded state; fall back to the localStorage mirror (same key the
+    // FOUC script uses) to cover the IDB-load gap on reload; ultimate fallback is
+    // Aurora for the deleted-theme / no-localStorage edge case (R-FLASH-01).
+    return (
+      customThemesState.get(name) ??
+      readStoredCustomVars(name) ??
+      VIBE_THEMES[DEFAULT_THEME]
+    );
   }, [theme, customThemesState]);
 
   const setTheme = useCallback(
