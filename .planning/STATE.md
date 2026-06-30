@@ -4,14 +4,14 @@ milestone: v3.1
 milestone_name: Polish & Hardening
 status: executing
 stopped_at: Roadmap written; ready for Phase 23 planning.
-last_updated: "2026-06-30T17:09:22.069Z"
-last_activity: 2026-06-30 -- Phase 24 execution started
+last_updated: "2026-06-30T17:43:47.257Z"
+last_activity: 2026-06-30 -- Phase 25 execution started
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_phases: 2
+  total_plans: 3
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30 after v3.0)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Phase 24 — Launcher CSS Polish
+**Current focus:** Phase 25 — Real-Browser Smoke Suite
 
 ## Current Position
 
-Phase: 24 (Launcher CSS Polish) — EXECUTING
+Phase: 25 (Real-Browser Smoke Suite) — EXECUTING
 Plan: 1 of 1
-Status: Executing Phase 24
-Last activity: 2026-06-30 -- Phase 24 execution started
+Status: Executing Phase 25
+Last activity: 2026-06-30 -- Phase 25 execution started
 
 ### v3.1 Phase Map
 
