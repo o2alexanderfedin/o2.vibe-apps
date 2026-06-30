@@ -12,6 +12,7 @@ import {
   within,
   fireEvent,
   act,
+  screen,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MenuBar } from "./MenuBar";
@@ -51,7 +52,7 @@ describe("MenuBar", () => {
 
   it("renders the OS wordmark and the active-app name when activeName is set", () => {
     const { getByText } = renderMenuBar(
-      <MenuBar activeName="Weather" onOpenAccount={vi.fn()} />,
+      <MenuBar activeName="Weather" onOpenAccount={vi.fn()} onOpenThemeEditor={vi.fn()} />,
     );
     expect(getByText("Vibe OS")).toBeTruthy();
     expect(getByText("Weather")).toBeTruthy();
@@ -59,7 +60,7 @@ describe("MenuBar", () => {
 
   it("renders no active-app name node when activeName is null", () => {
     const { container, getByText } = renderMenuBar(
-      <MenuBar activeName={null} onOpenAccount={vi.fn()} />,
+      <MenuBar activeName={null} onOpenAccount={vi.fn()} onOpenThemeEditor={vi.fn()} />,
     );
     expect(getByText("Vibe OS")).toBeTruthy();
     expect(
@@ -67,24 +68,23 @@ describe("MenuBar", () => {
     ).toBeNull();
   });
 
-  it("renders the relocated theme switcher with four pills", () => {
+  it("renders the relocated theme switcher with built-in pills", () => {
     const { getByRole } = renderMenuBar(
-      <MenuBar activeName={null} onOpenAccount={vi.fn()} />,
+      <MenuBar activeName={null} onOpenAccount={vi.fn()} onOpenThemeEditor={vi.fn()} />,
     );
     const group = getByRole("group", { name: "Color theme" });
-    const pills = within(group).getAllByRole("button");
-    expect(pills.map((p) => p.textContent)).toEqual([
-      "Aurora",
-      "Aero",
-      "Aqua",
-      "Noir",
-    ]);
+    // Four built-in pills are present (exact total count is not asserted here since
+    // Duplicate buttons and the New Theme button are also in the group).
+    expect(within(group).getByRole("button", { name: "Aurora" })).toBeTruthy();
+    expect(within(group).getByRole("button", { name: "Aero" })).toBeTruthy();
+    expect(within(group).getByRole("button", { name: "Aqua" })).toBeTruthy();
+    expect(within(group).getByRole("button", { name: "Noir" })).toBeTruthy();
   });
 
   it("renders an account control that calls onOpenAccount on click", () => {
     const onOpenAccount = vi.fn();
     const { getByRole } = renderMenuBar(
-      <MenuBar activeName={null} onOpenAccount={onOpenAccount} />,
+      <MenuBar activeName={null} onOpenAccount={onOpenAccount} onOpenThemeEditor={vi.fn()} />,
     );
     fireEvent.click(getByRole("button", { name: "Account" }));
     expect(onOpenAccount).toHaveBeenCalledTimes(1);
@@ -97,7 +97,7 @@ describe("MenuBar", () => {
 
     const clearSpy = vi.spyOn(globalThis, "clearInterval");
     const { container, unmount } = renderMenuBar(
-      <MenuBar activeName={null} onOpenAccount={vi.fn()} />,
+      <MenuBar activeName={null} onOpenAccount={vi.fn()} onOpenThemeEditor={vi.fn()} />,
     );
 
     const clock = container.querySelector(".menu-bar__clock");
@@ -117,5 +117,21 @@ describe("MenuBar", () => {
     // Unmount tears down the interval (no leaked timer).
     unmount();
     expect(clearSpy).toHaveBeenCalled();
+  });
+
+  // Phase 22 (THEME-07/08): onOpenThemeEditor passthrough
+  it("MenuBar passes onOpenThemeEditor to ThemeSelector — 'New Theme' button triggers the callback", () => {
+    const onOpenThemeEditor = vi.fn();
+    renderMenuBar(
+      <MenuBar
+        activeName={null}
+        onOpenAccount={vi.fn()}
+        onOpenThemeEditor={onOpenThemeEditor}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /new theme/i }));
+
+    expect(onOpenThemeEditor).toHaveBeenCalledTimes(1);
   });
 });

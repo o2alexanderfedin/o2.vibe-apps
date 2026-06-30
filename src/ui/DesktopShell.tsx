@@ -17,6 +17,7 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { type ComponentType } from "react";
 import { KeyDialog } from "./KeyDialog";
+import { ThemeEditor } from "./ThemeEditor";
 import { WindowFrame } from "./WindowFrame";
 import {
   WindowManagerProvider,
@@ -186,6 +187,17 @@ function ThrottledAppContent({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+/**
+ * State for the ThemeEditor modal. null = editor closed.
+ * When non-null, carries the optional pre-fill vars and editingName so the editor
+ * opens in duplicate-from-built-in or edit-existing-custom-theme mode.
+ * Mirrors the KeyDialog open/close pattern (Phase 22, THEME-06/07).
+ */
+type ThemeEditorState = {
+  initialVars?: Record<string, string>;
+  editingName?: string;
+} | null;
+
 // DesktopShell owns its OWN WindowManagerProvider so the component is testable
 // standalone (DesktopShell.test.tsx and the migrated open-flow tests render a
 // bare <DesktopShell/> with no App wrapper, and would otherwise throw when
@@ -226,6 +238,10 @@ function DesktopShellInner() {
   // or blocks the rest of the desktop. Also reachable from the menu-bar account
   // control (SHELL-03).
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
+  // Gates the ThemeEditor modal (Phase 22, THEME-06/07). null = closed; non-null
+  // carries optional initialVars/editingName so the editor opens in the right mode.
+  // Mirrors the keyDialogOpen pattern so the desktop stays usable beneath the modal.
+  const [themeEditorState, setThemeEditorState] = useState<ThemeEditorState>(null);
   // Gates the search/launcher overlay (Phase 17, CREATE-01/02): opened from the
   // dock magnifier, closed on backdrop click / close control / after an open.
   const [launcherOpen, setLauncherOpen] = useState(false);
@@ -975,6 +991,7 @@ function DesktopShellInner() {
       <MenuBar
         activeName={activeWindow?.title ?? null}
         onOpenAccount={() => setKeyDialogOpen(true)}
+        onOpenThemeEditor={(opts) => setThemeEditorState(opts ?? {})}
       />
       <Dock
         windows={windowManager.windows}
@@ -1002,6 +1019,18 @@ function DesktopShellInner() {
           fallback or the menu-bar account control. The desktop stays mounted
           underneath, so the page never crashes and the rest stays usable. */}
       {keyDialogOpen && <KeyDialog onClose={() => setKeyDialogOpen(false)} />}
+
+      {/* Theme editor modal (Phase 22, THEME-06/07): mounted on demand when the
+          user clicks New Theme, Duplicate, or Edit in the theme switcher. The
+          desktop remains fully mounted beneath the overlay — exactly the same
+          pattern as the KeyDialog above. */}
+      {themeEditorState !== null && (
+        <ThemeEditor
+          onClose={() => setThemeEditorState(null)}
+          initialVars={themeEditorState.initialVars}
+          editingName={themeEditorState.editingName}
+        />
+      )}
     </div>
   );
 }
