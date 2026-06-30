@@ -128,11 +128,11 @@ describe("RecordingSettingsStore deleteRaw", () => {
     expect(await store.readRaw("custom:foo")).toBeNull();
   });
 
-  it("rawDeletes.has returns true for a deleted key", async () => {
+  it("rawDeletes includes the key after deleteRaw", async () => {
     const store: RecordingSettingsStore = createRecordingSettingsStore();
     await store.writeRaw("custom:foo", "{}");
     await store.deleteRaw("custom:foo");
-    expect(store.rawDeletes.has("custom:foo")).toBe(true);
+    expect(store.rawDeletes.includes("custom:foo")).toBe(true);
   });
 
   it("rawDeletes is a snapshot — new deletes after snapshot do not appear in it", async () => {
@@ -142,23 +142,24 @@ describe("RecordingSettingsStore deleteRaw", () => {
     const snapshot = store.rawDeletes;
     await store.writeRaw("custom:bar", "{}");
     await store.deleteRaw("custom:bar");
-    expect(snapshot.has("custom:foo")).toBe(true);
-    expect(snapshot.has("custom:bar")).toBe(false);
+    expect(snapshot.includes("custom:foo")).toBe(true);
+    expect(snapshot.includes("custom:bar")).toBe(false);
   });
 
-  it("rawDeletes collapses duplicates — Set semantics, not multiset", async () => {
+  it("rawDeletes preserves duplicates — array semantics, not Set", async () => {
     const store: RecordingSettingsStore = createRecordingSettingsStore();
     await store.writeRaw("custom:foo", "{}");
     await store.deleteRaw("custom:foo");
     await store.writeRaw("custom:foo", "{}");
     await store.deleteRaw("custom:foo");
-    expect(store.rawDeletes.size).toBe(1);
-    expect(store.rawDeletes.has("custom:foo")).toBe(true);
+    // Array preserves both calls so tests can detect accidental double-deletes.
+    expect(store.rawDeletes.length).toBe(2);
+    expect(store.rawDeletes.filter((k) => k === "custom:foo").length).toBe(2);
   });
 
   it("rawDeletes does not include keys that were only written, not deleted", async () => {
     const store: RecordingSettingsStore = createRecordingSettingsStore();
     await store.writeRaw("custom:written-only", "{}");
-    expect(store.rawDeletes.has("custom:written-only")).toBe(false);
+    expect(store.rawDeletes.includes("custom:written-only")).toBe(false);
   });
 });

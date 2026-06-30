@@ -248,7 +248,7 @@ describe("ThemeEditor", () => {
 
       expect(broadcastIdx).toBeGreaterThanOrEqual(0);
       expect(deleteIdx).toBeGreaterThan(broadcastIdx);
-      expect(store.rawDeletes.has("custom:existingTheme")).toBe(true);
+      expect(store.rawDeletes.includes("custom:existingTheme")).toBe(true);
     } finally {
       broadcast.mockRestore();
     }
