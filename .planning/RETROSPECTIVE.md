@@ -2,6 +2,37 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v3.0 — Trusted Desktop   (Shipped: 2026-06-30 | Phases: 4 | Plans: 18)
+
+### What Was Built
+Opaque-origin iframe isolation for every app body (API key structurally unreachable), the `⋮` menu relocated to host-owned window chrome with maximize/snap/keyboard shortcuts, full desktop persistence across reloads (geometry, z-order, minimized, open-set) via additive `settings`-store keys, and a custom-theme editor over the 12-var contract with live preview, FOUC-free reload, and live `THEME_PUSH` re-skin. 19/19 requirements; 935 tests green; audit PASSED.
+
+### What Worked
+- **Dependency-ordered phasing held.** CHROME-01 (⋮→titlebar) as the hard gate before iframe work meant Phase 20 never hit the `createPortal`-across-opaque-origin trap. The roadmap's "hard ordering constraint" framing paid off.
+- **Research-before-plan caught the real landmines early.** Each phase's researcher surfaced the exact file:line truth (settingsStore had no `writeRaw`; `VIBE_THEMES["custom:x"]` is undefined; JSDOM lacks `CSS.supports`; the FOUC CSP-hash recompute procedure) so planners built around reality, not assumptions.
+- **Worktree-isolated parallel waves** ran Wave-1 plan pairs concurrently with zero merge conflicts (disjoint `files_modified`), and the per-wave post-merge gate caught integration before the next wave built on it.
+- **The review→fix loop earned its cost.** Phase 22's reviewer found a real CR-01 (rename duplicates themes, unreachable orphan pill) and WR-04 (transient Aurora flash on save) that all unit tests had passed — exactly the "verified-but-wrong" class the loop exists to catch.
+
+### What Was Inefficient
+- **`summary-extract` one-liner parsing failed twice** (Phase 19 progress + the v3.0 MILESTONES auto-entry produced `One-liner:` blanks), forcing manual reconstruction of accomplishments. The SUMMARY one-liner format the CLI expects isn't what the executor emits.
+- **STATE.md drifted from reality** between sessions (claimed "Phase 19 not started" while 19+20 were merged), needing a reconcile pass at the start of this run.
+- **Phase 20's SUMMARY.md files were never written** (only VERIFICATION); the naive `summaries < plans` routing would have mis-read a verified+merged phase as unexecuted — flagged and annotated rather than re-run.
+
+### Patterns Established
+- **Additive-IDB-only across features:** both persistence (`"windowLayout"`) and themes (`"custom:<name>"`, `"customThemeIndex"`) share the one `settings` store with orthogonal keys and no DB version bump — the v3.0 way to add durable state.
+- **FOUC change ⇒ CSP-hash recompute in the same commit** is now a hard, tested invariant (csp.test.ts self-validates) applied beyond the original built-in themes.
+- **`sanitizeDisplayName` before any DOM render or IDB/localStorage write** for all user-supplied strings (theme names) — the hygiene boundary.
+
+### Key Lessons
+- For a "verified-but-wrong" risk surface (rename flows, async theme apply), unit tests pass in isolation; an adversarial review pass is what catches the duplication/flash bugs. Keep code-review in the autonomous chain, not optional.
+- When a capability is "latent but not live" (THEME_PUSH exists but the srcdoc memo forces a frame reload), say so explicitly in the audit as tech debt rather than letting "the theme is applied" mask the lost in-frame state.
+
+### Cost Observations
+- Model mix: orchestration on Opus (1M); all sub-agents (research/plan/check/execute/verify/review/fix/integration) on Sonnet.
+- Notable: parallel worktree waves + background agents kept the orchestrator context lean across a 4-phase milestone in a single session; the dominant spend was the execute + review/fix agents, not orchestration.
+
+---
+
 ## Milestone: v2.0 — Vibe OS   (Shipped: 2026-06-26 | Phases: 5 | Plans: 21)
 
 **Verdict:** PASSED — 21/21 requirements satisfied, **727 tests** green (552→727), tsc 0, build clean (no source maps), hygiene + CSP green, tagged `v2.0`. Phases 14–18 each on a feature branch, `--no-ff` merged to develop. Zero new npm dependencies.
