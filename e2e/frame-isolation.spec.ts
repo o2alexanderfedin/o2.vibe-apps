@@ -51,12 +51,12 @@ test.describe("opaque-origin app body", () => {
         .getPropertyValue("--text")
         .trim(),
     );
-    // Click a theme pill that differs from the default (aurora = nth 0). The four
-    // pills render in order aurora/aero/aqua/noir; nth(3) = "noir" is distinct.
+    // Click the Noir pill by exact name — robust to Duplicate buttons added in
+    // Phase 22 which shifted positional indices (nth(3) now lands on "Aero
+    // Duplicate"). Use exact:true because "Duplicate Noir" is a substring match.
     await page
       .getByRole("group", { name: "Color theme" })
-      .getByRole("button")
-      .nth(3)
+      .getByRole("button", { name: "Noir", exact: true })
       .click();
     await expect
       .poll(
