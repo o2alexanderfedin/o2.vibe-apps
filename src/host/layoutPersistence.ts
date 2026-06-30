@@ -73,9 +73,11 @@ export function isLayoutEntry(v: unknown): v is LayoutEntry {
   if (typeof obj["appType"] !== "string") return false;
   if (typeof obj["title"] !== "string") return false;
   if (typeof obj["icon"] !== "string") return false;
-  if (typeof obj["x"] !== "number") return false;
-  if (typeof obj["y"] !== "number") return false;
-  if (typeof obj["z"] !== "number") return false;
+  // Number.isFinite rejects NaN, Infinity, -Infinity, and non-number types
+  // (unlike global isFinite it does not coerce) — trust boundary T-21-01.
+  if (!Number.isFinite(obj["x"] as number)) return false;
+  if (!Number.isFinite(obj["y"] as number)) return false;
+  if (!Number.isFinite(obj["z"] as number)) return false;
   if (typeof obj["minimized"] !== "boolean") return false;
   return true;
 }
