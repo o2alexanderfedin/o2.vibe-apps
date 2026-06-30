@@ -150,30 +150,35 @@ const VALID_THEMES: ReadonlyArray<VibeThemeName> = [
 const DEFAULT_THEME: VibeThemeName = "aurora";
 
 /**
- * Read the persisted theme name from localStorage. Accepts both built-in
- * VibeThemeName values and "custom:*" strings (Phase 22). Falls back to
- * DEFAULT_THEME when nothing is stored or the stored value is neither a valid
- * built-in nor a "custom:" string.
+ * Read the persisted theme name from localStorage. Accepts built-in
+ * VibeThemeName values AND "custom:*" strings (Phase 22, THEME-07).
+ * Falls back to DEFAULT_THEME when nothing is stored or the stored value is
+ * neither a valid built-in nor a "custom:" string.
  *
- * TDD RED stub: currently still rejects "custom:*" values (returns aurora).
- * GREEN phase will add the "custom:" prefix check.
+ * Security note (T-22-02): the "custom:*" value is only used as a map lookup
+ * key into customThemesState; if absent, VIBE_THEMES["aurora"] is the fallback.
+ * No code-injection risk via this path.
  */
 function readStoredOsTheme(): AnyThemeName {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_OS_THEME);
-    if (stored && (VALID_THEMES as readonly string[]).includes(stored)) {
-      return stored as VibeThemeName;
+    if (stored) {
+      if ((VALID_THEMES as readonly string[]).includes(stored)) {
+        return stored as VibeThemeName;
+      }
+      // Phase 22: accept "custom:*" values as valid persisted selections.
+      if (stored.startsWith("custom:")) {
+        return stored as CustomThemeName;
+      }
     }
-    // TDD RED stub: "custom:*" not yet accepted — falls through to DEFAULT_THEME.
-    // GREEN phase: add `if (stored?.startsWith("custom:")) return stored as CustomThemeName;`
   } catch {
     // localStorage can throw under strict privacy settings — fall through.
   }
   return DEFAULT_THEME;
 }
 
-// Apply a theme's variables instantly (no transition) by setting each custom
-// property on the document root, where they cascade to every mounted subtree.
+// Apply a built-in theme's variables instantly (no transition) by setting each
+// custom property on the document root, where they cascade to every mounted subtree.
 function applyVibeTheme(name: VibeThemeName): void {
   const root = document.documentElement;
   for (const [prop, value] of Object.entries(VIBE_THEMES[name])) {
@@ -181,7 +186,7 @@ function applyVibeTheme(name: VibeThemeName): void {
   }
 }
 
-// Apply an arbitrary vars map to :root (used for custom themes in GREEN phase).
+// Apply an arbitrary vars map to :root (used for custom themes).
 function applyVarsToRoot(vars: Record<string, string>): void {
   const root = document.documentElement;
   for (const [prop, value] of Object.entries(vars)) {
@@ -195,17 +200,57 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<AnyThemeName>(readStoredOsTheme);
   const { settingsStore } = useServices();
 
-  // TDD RED stub: customThemesState always empty; GREEN populates from IDB.
+  // Phase 22 (THEME-07): custom themes loaded from IDB on mount.
   const [customThemesState, setCustomThemesState] = useState<
     Map<string, Record<string, string>>
   >(() => new Map());
 
-  // TDD RED stub: refreshCustomThemes is a no-op; GREEN reads from IDB.
-  const refreshCustomThemes = useCallback((): Promise<void> => {
-    return Promise.resolve();
-  }, []);
+  /**
+   * Re-read the customThemeIndex and per-theme data keys from IDB, then update
+   * React state. Called on mount and after save/delete operations.
+   *
+   * Security (T-22-01): each JSON.parse is wrapped in try/catch; malformed
+   * entries are skipped silently so one corrupt key cannot crash the provider.
+   */
+  const refreshCustomThemes = useCallback(async (): Promise<void> => {
+    try {
+      const indexRaw = await settingsStore.readRaw("customThemeIndex");
+      if (!indexRaw) {
+        setCustomThemesState(new Map());
+        return;
+      }
+      let names: string[];
+      try {
+        names = JSON.parse(indexRaw) as string[];
+        if (!Array.isArray(names)) {
+          setCustomThemesState(new Map());
+          return;
+        }
+      } catch {
+        setCustomThemesState(new Map());
+        return;
+      }
+      const newMap = new Map<string, Record<string, string>>();
+      for (const name of names) {
+        if (typeof name !== "string") continue;
+        try {
+          const varsRaw = await settingsStore.readRaw(`custom:${name}`);
+          if (!varsRaw) continue;
+          const vars: unknown = JSON.parse(varsRaw);
+          if (vars && typeof vars === "object" && !Array.isArray(vars)) {
+            newMap.set(name, vars as Record<string, string>);
+          }
+        } catch {
+          // Skip malformed theme entry — self-heals on next save.
+        }
+      }
+      setCustomThemesState(newMap);
+    } catch {
+      // Best-effort — IDB unavailable; keep existing state.
+    }
+  }, [settingsStore]);
 
-  // Populate custom themes on mount (no-op in RED, functional in GREEN).
+  // Populate custom themes on mount.
   useEffect(() => {
     void refreshCustomThemes();
   }, [refreshCustomThemes]);
@@ -224,12 +269,22 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [theme, customThemesState]);
 
-  // TDD RED stub: currentVars always empty object; GREEN computes from theme.
-  const currentVars = useMemo(
-    (): Record<string, string> => ({}),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [theme, customThemesState],
-  );
+  /**
+   * Resolved CSS custom-property map for the active theme. Built-in themes
+   * look up VIBE_THEMES directly; custom themes look up customThemesState by
+   * name (without the "custom:" prefix). Falls back to aurora if the custom
+   * name is not yet in state (loading race or deleted-while-active edge case).
+   */
+  const currentVars = useMemo((): Record<string, string> => {
+    if ((VALID_THEMES as readonly string[]).includes(theme as string)) {
+      return VIBE_THEMES[theme as VibeThemeName];
+    }
+    // Custom theme.
+    const name = (theme as string).startsWith("custom:")
+      ? (theme as string).slice(7)
+      : "";
+    return customThemesState.get(name) ?? VIBE_THEMES[DEFAULT_THEME];
+  }, [theme, customThemesState]);
 
   const setTheme = useCallback(
     (name: AnyThemeName, vars?: Record<string, string>) => {
@@ -247,15 +302,29 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
       // Fire-and-forget the durable mirror — never block the UI switch on the
       // async IDB write. localStorage already holds the authoritative value.
       void settingsStore.write(name);
-      // TDD RED stub: always looks up VIBE_THEMES (undefined for custom names).
-      // GREEN phase: resolve vars for broadcastTheme correctly.
-      const resolvedVars: Record<string, string> =
-        vars ??
-        (VIBE_THEMES[name as VibeThemeName] as Record<string, string> | undefined) ??
-        VIBE_THEMES[DEFAULT_THEME];
+      // Resolve vars for broadcastTheme:
+      // 1. Explicit vars param (caller-supplied, e.g. from ThemeEditor save path)
+      // 2. Custom theme: look up in current state (may be stale on first switch)
+      // 3. Built-in theme: look up VIBE_THEMES
+      // 4. Ultimate fallback: aurora
+      let resolvedVars: Record<string, string>;
+      if (vars !== undefined) {
+        resolvedVars = vars;
+      } else if ((name as string).startsWith("custom:")) {
+        const customName = (name as string).slice(7);
+        resolvedVars =
+          customThemesState.get(customName) ?? VIBE_THEMES[DEFAULT_THEME];
+      } else {
+        resolvedVars =
+          (VIBE_THEMES[name as VibeThemeName] as
+            | Record<string, string>
+            | undefined) ?? VIBE_THEMES[DEFAULT_THEME];
+      }
+      // Push the new theme variables to every live frame so opaque-origin app
+      // bodies repaint with the switched theme (their :root can't see the host's).
       broadcastTheme(resolvedVars);
     },
-    [settingsStore],
+    [settingsStore, customThemesState],
   );
 
   return (
