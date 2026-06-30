@@ -293,6 +293,7 @@ export function ThemeEditor({
             className="theme-editor__input"
             value={nameInput}
             placeholder="My theme"
+            maxLength={64}
             onChange={(e) => {
               setNameInput(e.target.value);
               if (error) setError(null);
