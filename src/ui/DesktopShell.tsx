@@ -24,6 +24,7 @@ import {
   type WindowManagerValue,
 } from "./useWindowManager";
 import { resolveOpenApp } from "../intent/resolver";
+import { LAYOUT_KEY, serializeLayout } from "../host/layoutPersistence";
 import {
   resolveComponent,
   evictLiveComponent,
@@ -51,6 +52,11 @@ import { VibeThemeContext, VIBE_THEMES } from "./VibeThemeProvider";
 //   DOCK_RESERVE → .dock bottom:16px + padding 9px*2 + icon 52px ≈ 88px reserved
 const MENU_BAR_H = 40;
 const DOCK_RESERVE = 88;
+
+// Trailing debounce for IDB layout persistence (Phase 21, PERSIST-01): only
+// the final geometry state in a 300ms quiet period reaches the settings store,
+// so dragging a window never produces a write-storm.
+const LAYOUT_SAVE_DEBOUNCE_MS = 300;
 
 // Snap-to-half (Phase 19, plan 19-03, CHROME-03). The SNAP_THRESHOLD that drives
 // both the during-drag drop-zone preview (WindowFrame) and the on-release commit
@@ -664,6 +670,21 @@ function DesktopShellInner() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleClose]);
+
+  // Debounced layout save (Phase 21, PERSIST-01): any change to the windows
+  // array (open, close, move, focus, minimize) starts a 300ms trailing timer;
+  // the last change in a quiet period wins — no write fires during an active
+  // drag. The write-back after mount restore is idempotent (mirrors the
+  // just-loaded layout). Mirrors the MenuBar clock's setInterval idiom.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void services.settingsStore.writeRaw(
+        LAYOUT_KEY,
+        serializeLayout(windowManager.windows),
+      );
+    }, LAYOUT_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [windowManager.windows, services.settingsStore]);
 
   // The active window feeding the menu-bar name comes from the manager's
   // activeWindow() — the SINGLE source of truth for "front-most" that the
