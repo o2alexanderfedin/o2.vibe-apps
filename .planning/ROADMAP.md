@@ -107,7 +107,9 @@ Plans:
   3. A custom theme's glass variables propagate correctly to all six launcher classes with no hardcoded fallback colors
   4. No new CSS custom properties are introduced; the 12-var contract is unchanged
   5. The full test suite remains green; `tsc --noEmit` reports 0 errors
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 24-01-PLAN.md — Apply glass-var recipe (--glass2/--glass/--hi/--text) to 6 .launcher__* interior classes
 **UI hint**: yes
 
 ---
@@ -156,7 +158,7 @@ v1.0 → v1.1 → v2.0 → v3.0 → v3.1 phases execute in numeric order: 1 → 
 | 21. Desktop Persistence | v3.0 | 4/4 | Complete   | 2026-06-30 |
 | 22. Theme Editor & Custom Themes | v3.0 | 5/5 | Complete   | 2026-06-30 |
 | 23. Live Frame Re-Skin | v3.1 | 1/1 | Complete   | 2026-06-30 |
-| 24. Launcher CSS Polish | v3.1 | 0/TBD | Not started | - |
+| 24. Launcher CSS Polish | v3.1 | 0/1 | Not started | - |
 | 25. Real-Browser Smoke Suite | v3.1 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
