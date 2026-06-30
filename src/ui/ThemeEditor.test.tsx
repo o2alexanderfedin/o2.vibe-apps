@@ -397,4 +397,53 @@ describe("ThemeEditor", () => {
       document.documentElement.style.getPropertyValue("--text"),
     ).toBe("#original");
   });
+
+  // Test CR-01 — rename: old IDB entry + old localStorage mirror removed; no duplicate pill
+  it("CR-01: renaming a theme removes the old IDB key and old localStorage mirror", async () => {
+    const store = createRecordingSettingsStore();
+    // Pre-seed the store as if "oldTheme" already exists.
+    await store.writeRaw(
+      "customThemeIndex",
+      JSON.stringify(["oldTheme"]),
+    );
+    await store.writeRaw(
+      "custom:oldTheme",
+      JSON.stringify({ ...VIBE_THEMES.aurora }),
+    );
+    localStorage.setItem(
+      "vibe.customTheme.oldTheme",
+      JSON.stringify({ ...VIBE_THEMES.aurora }),
+    );
+
+    const onClose = vi.fn();
+    renderThemeEditor({ onClose, editingName: "oldTheme" }, store);
+
+    // Change the name to "newTheme" (a rename).
+    const nameInput = screen.getByDisplayValue("oldTheme");
+    fireEvent.change(nameInput, { target: { value: "newTheme" } });
+
+    await act(async () => {
+      screen.getByText("Save theme").click();
+    });
+
+    // Old IDB entry must be deleted exactly once.
+    expect(store.rawDeletes.includes("custom:oldTheme")).toBe(true);
+    expect(store.rawDeletes.filter((k) => k === "custom:oldTheme").length).toBe(1);
+
+    // Old localStorage mirror must be gone.
+    expect(localStorage.getItem("vibe.customTheme.oldTheme")).toBeNull();
+
+    // New IDB entry must be written.
+    expect(store.rawWriteCount("custom:newTheme")).toBe(1);
+
+    // Index must contain ONLY newTheme (not both oldTheme and newTheme).
+    const indexRaw = store.rawWrites.get("customThemeIndex")?.[store.rawWriteCount("customThemeIndex") - 1];
+    expect(indexRaw).toBeDefined();
+    const indexArr = JSON.parse(indexRaw!) as string[];
+    expect(indexArr).toContain("newTheme");
+    expect(indexArr).not.toContain("oldTheme");
+
+    // onClose must have been called (save completed).
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

@@ -183,15 +183,36 @@ export function ThemeEditor({
     const idbKey = `custom:${sanitized}` as AnyThemeName;
     const serialized = JSON.stringify(vars);
 
+    // Detect a name change while in "edit existing" mode. A same-name save is
+    // an idempotent upsert; a rename must also clean up the old key.
+    const isRename =
+      editingName !== undefined && editingName !== sanitized;
+
     try {
-      // Write theme vars.
+      // CR-01: When the user renames a theme, remove the old IDB entry and its
+      // localStorage mirror BEFORE writing under the new key. This prevents the
+      // old name from remaining in the index and appearing as a duplicate pill.
+      if (isRename) {
+        await settingsStore.deleteRaw(`custom:${editingName}`);
+        try {
+          localStorage.removeItem(`vibe.customTheme.${editingName}`);
+        } catch {
+          // localStorage unavailable — best-effort.
+        }
+      }
+
+      // Write theme vars under the new key.
       await settingsStore.writeRaw(idbKey, serialized);
 
-      // Update the enumeration index (add sanitized name if new).
+      // Update the enumeration index: remove the old name (rename path) and
+      // add the new name if not already present.
       const indexRaw = await settingsStore.readRaw("customThemeIndex");
-      const names: string[] = indexRaw
+      let names: string[] = indexRaw
         ? (JSON.parse(indexRaw) as string[])
         : [];
+      if (isRename) {
+        names = names.filter((n) => n !== editingName);
+      }
       if (!names.includes(sanitized)) {
         names.push(sanitized);
       }
