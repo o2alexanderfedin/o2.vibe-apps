@@ -70,7 +70,7 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
 
 - [x] **Phase 23: Live Frame Re-Skin** — RESKIN-01 — remove `themeVars` from the srcdoc memo deps so theme switches re-skin open opaque frames via `THEME_PUSH` without reloading the iframe; in-frame app state survives. (completed 2026-06-30)
 - [x] **Phase 24: Launcher CSS Polish** — POLISH-01 — glass treatment pass on the 6 SearchLauncherPanel interior classes partially styled by the v3.0 audit-debt fix; visually consistent with the rest of the v3.0 chrome. (completed 2026-06-30)
-- [ ] **Phase 25: Real-Browser Smoke Suite** — SMOKE-01, SMOKE-02, SMOKE-03 — Playwright tests that close the Phase 21/22 `human_needed` gaps: reload restores the desktop, custom theme is FOUC-free on first paint, and a theme switch re-skins open frames live in a real browser.
+- [x] **Phase 25: Real-Browser Smoke Suite** — SMOKE-01, SMOKE-02, SMOKE-03 — Playwright tests that close the Phase 21/22 `human_needed` gaps: reload restores the desktop, custom theme is FOUC-free on first paint, and a theme switch re-skins open frames live in a real browser. (completed 2026-06-30)
 
 ## Phase Details
 
@@ -126,7 +126,7 @@ Plans:
   4. All three smoke tests run in the CI headless Chromium environment; no `human_needed` annotations remain for these three behaviors
 **Plans**: 1 plan
 Plans:
-- [ ] 25-01-PLAN.md — Fix nth(3) defect in frame-isolation.spec.ts + add e2e/smoke.spec.ts (SMOKE-01/02/03)
+- [x] 25-01-PLAN.md — Fix nth(3) defect in frame-isolation.spec.ts + add e2e/smoke.spec.ts (SMOKE-01/02/03)
 
 ---
 
@@ -161,7 +161,7 @@ v1.0 → v1.1 → v2.0 → v3.0 → v3.1 phases execute in numeric order: 1 → 
 | 22. Theme Editor & Custom Themes | v3.0 | 5/5 | Complete   | 2026-06-30 |
 | 23. Live Frame Re-Skin | v3.1 | 1/1 | Complete   | 2026-06-30 |
 | 24. Launcher CSS Polish | v3.1 | 1/1 | Complete   | 2026-06-30 |
-| 25. Real-Browser Smoke Suite | v3.1 | 0/TBD | Not started | - |
+| 25. Real-Browser Smoke Suite | v3.1 | 1/1 | Complete   | 2026-06-30 |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
 **v1.1 Real & Robust shipped 2026-06-26 — 5 phases, 12/12 requirements satisfied, 552 tests green.**
