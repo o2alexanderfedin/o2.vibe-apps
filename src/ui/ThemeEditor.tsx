@@ -158,6 +158,14 @@ export function ThemeEditor({
     // Sanitize: strips banned tokens, collapses whitespace.
     const sanitized = sanitizeDisplayName(nameInput.trim());
 
+    // Guard: sanitizeDisplayName returns its "App" fallback when the entire
+    // input consists of banned tokens (e.g. "synthesize"). Surfacing a silent
+    // rename to "App" would confuse the user — reject it here instead.
+    if (sanitized === "App" && nameInput.trim().toLowerCase() !== "app") {
+      setError("That name contains reserved words — choose a different name");
+      return;
+    }
+
     // CSS.supports gate: reject any invalid CSS value before any IDB write.
     for (const key of VAR_KEYS) {
       const value = vars[key] ?? "";

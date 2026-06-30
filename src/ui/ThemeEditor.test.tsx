@@ -318,6 +318,48 @@ describe("ThemeEditor", () => {
     expect(alert).toBeNull();
   });
 
+  // Test WR-01 — reserved-word-only name shows error instead of silently saving as "App"
+  it("WR-01: name that sanitizes entirely to 'App' shows error and writes nothing", async () => {
+    // 'synthesize' is a banned token; sanitizeDisplayName returns "App" for it.
+    // The editor should surface an error rather than saving silently as "App".
+    const store = createRecordingSettingsStore();
+    renderThemeEditor({ onClose: vi.fn() }, store);
+
+    const nameInput = screen.getByPlaceholderText("My theme");
+    fireEvent.change(nameInput, { target: { value: "synthesize" } });
+
+    await act(async () => {
+      screen.getByText("Save theme").click();
+    });
+
+    // No IDB write should occur.
+    expect(store.rawWriteCount("custom:App")).toBe(0);
+    // An error message must be visible.
+    const errorEl = document.querySelector(".theme-editor__error");
+    expect(errorEl).not.toBeNull();
+    expect(errorEl!.textContent).toMatch(/reserved words/i);
+  });
+
+  // Test WR-01b — user typing "App" (the exact fallback word) is allowed through
+  it("WR-01b: user typing literal 'App' is saved under 'custom:App' without error", async () => {
+    // "App" is not a banned token — sanitizeDisplayName("App") returns "App".
+    // The guard only fires when sanitization PRODUCES "App" from non-"app" input.
+    const store = createRecordingSettingsStore();
+    renderThemeEditor({ onClose: vi.fn() }, store);
+
+    const nameInput = screen.getByPlaceholderText("My theme");
+    fireEvent.change(nameInput, { target: { value: "App" } });
+
+    await act(async () => {
+      screen.getByText("Save theme").click();
+    });
+
+    // Should save under "custom:App" with no validation error.
+    expect(store.rawWriteCount("custom:App")).toBe(1);
+    const errorEl = document.querySelector(".theme-editor__error");
+    expect(errorEl).toBeNull();
+  });
+
   // Test 12 — cancel restores :root to original values
   it("cancel: clicking Cancel restores :root CSS vars to their pre-open state", () => {
     // Set a known value on :root before opening the editor.
