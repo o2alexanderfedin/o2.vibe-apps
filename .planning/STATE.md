@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Trusted Desktop
 status: executing
-stopped_at: Roadmap written; ready for Phase 19 planning.
-last_updated: "2026-06-27T21:05:35.625Z"
-last_activity: 2026-06-27 -- Phase 19 planning complete
+stopped_at: Phases 19 & 20 complete + merged (20 verified PASSED); ready for Phase 21 planning.
+last_updated: "2026-06-29T00:00:00.000Z"
+last_activity: 2026-06-29 -- Phase 20 merged complete; STATE reconciled by /gsd-progress
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  completed_phases: 2
+  total_plans: 9
+  completed_plans: 9
+  percent: 50
 ---
 
 # Project State
@@ -25,10 +25,14 @@ See: .planning/PROJECT.md (updated 2026-06-26 after v2.0)
 
 ## Current Position
 
-Phase: 19 (not started)
+Phase: 21 (not started) — Phases 19 & 20 COMPLETE + merged
 Plan: —
 Status: executing
-Last activity: 2026-06-27 -- Phase 19 planning complete
+Last activity: 2026-06-29 -- Phase 20 merged complete (verified PASSED); next: plan Phase 21 Desktop Persistence
+
+> Note: Phase 20 was executed, verified (20-VERIFICATION.md status: passed), and merged,
+> but its per-plan SUMMARY.md files were never written. The work is real and complete;
+> only the summary bookkeeping is missing. Treat Phase 20 as done.
 
 ### v3.0 Phase Map
 
