@@ -2,6 +2,35 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v3.1 — Polish & Hardening   (Shipped: 2026-06-30 | Phases: 3 | Plans: 3)
+
+### What Was Built
+A consolidation milestone closing v3.0 debt: theme switches re-skin open opaque frames in place via `THEME_PUSH` (no iframe reload — Phase 23, a one-line srcdoc-memo dep fix), the SearchLauncherPanel interior moved to the theme-glass var recipe (Phase 24), and a headless Playwright smoke suite (Phase 25) closed the v3.0 Phase 21/22/23 `human_needed` gaps. 5/5 requirements; 936 unit + 5 e2e green.
+
+### What Worked
+- **Right-sized phases.** Three tiny, single-requirement phases (1-line fix, 6-property CSS pass, 1 spec file) each cleared the full discuss→research→plan→execute→verify chain fast. Research still paid off on the two intricate ones (frame-bridge memo, Playwright harness) and was correctly skipped on the CSS phase.
+- **The prior milestone's audit fed this one directly.** v3.0's audit + integration check had already pinpointed the theme-reload root cause (srcdoc memo dep) and the latent `THEME_PUSH` path, so Phase 23 was a confident one-liner rather than an investigation.
+- **e2e suite as the integration test.** Phase 25's real-browser suite exercises persistence-restore + FOUC + live-reskin end-to-end, which doubled as the milestone's integration check — no separate static checker needed.
+- **Research surfaced a latent defect** (frame-isolation `nth(3)` broken by Phase 22's Duplicate buttons) that the milestone then fixed in-scope, honoring "fix pre-existing errors."
+
+### What Was Inefficient
+- **MILESTONES.md auto-accomplishments were garbled at v3.0 close** (the `summary-extract` one-liner parse) and had to be hand-rewritten; at v3.1 close the same CLI produced clean one-liners — inconsistent, worth not trusting blindly.
+- **Headless can't cheaply assert strict first-paint FOUC** — SMOKE-02 settled for asserting the post-reload state; the strict pre-hydration-paint check stayed on the FOUC unit test. Recorded honestly rather than overclaimed.
+
+### Patterns Established
+- **Skip the plan-checker and code-review agents for genuinely trivial, research-verified phases** (1-line dep change, CSS-var swap, test-only) — the execute→verify→gate loop is the proportionate safety net; reserve the heavy adversarial passes for phases with real logic/security surface. (This is an efficiency judgment, not a rule — v3.0's feature phases all kept full review and it caught real bugs.)
+- **`var(--token, <literal>)` fallbacks are the project's border/glass convention** — keep them for consistency; they're dead code when the token is in the theme contract (verified `--bord` is).
+
+### Key Lessons
+- A good milestone audit is an investment that pays out in the *next* milestone: v3.0's audit turned Phase 23 from "investigate the reload bug" into "apply the known one-line fix."
+- Match verification rigor to surface area. Spawning a full reviewer for a one-identifier dep change is waste; running the real e2e suite for the browser-behavior phase is exactly right.
+
+### Cost Observations
+- Model mix: orchestration on Opus (1M); all sub-agents on Sonnet. Skipped plan-check/review on all 3 phases (trivial) — leaner than v3.0.
+- Notable: the whole 3-phase milestone (incl. real-browser Playwright) ran in one session with worktree-isolated executors; the dominant spend was Phase 25's build+preview+Playwright executor (~18 min).
+
+---
+
 ## Milestone: v3.0 — Trusted Desktop   (Shipped: 2026-06-30 | Phases: 4 | Plans: 18)
 
 ### What Was Built
