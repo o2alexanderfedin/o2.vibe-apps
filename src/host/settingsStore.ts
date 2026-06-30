@@ -108,8 +108,15 @@ export const realSettingsStore: SettingsStore = {
     }
     return null;
   },
-  // TDD stub — does not yet delete from IDB; replaced in GREEN phase.
-  async deleteRaw(_key: string): Promise<void> {
-    // no-op stub
+  async deleteRaw(key: string): Promise<void> {
+    let db: Awaited<ReturnType<typeof openRegistry>> | null = null;
+    try {
+      db = await openRegistry();
+      await db.delete("settings", key);
+    } catch {
+      // Best-effort — caller-supplied key, same swallow pattern as writeRaw().
+    } finally {
+      db?.close();
+    }
   },
 };

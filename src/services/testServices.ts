@@ -92,6 +92,7 @@ export function createRecordingSettingsStore(): RecordingSettingsStore {
   let current: string | null = null;
   const rawWritesMap = new Map<string, string[]>();
   const rawCurrentMap = new Map<string, string>();
+  const rawDeletedSet = new Set<string>();
   return {
     write(value: string): Promise<void> {
       writes.push(value);
@@ -131,13 +132,15 @@ export function createRecordingSettingsStore(): RecordingSettingsStore {
     rawWriteCount(key: string): number {
       return rawWritesMap.get(key)?.length ?? 0;
     },
-    // TDD stub — does not yet update rawCurrentMap or track deletes; replaced in GREEN phase.
-    deleteRaw(_key: string): Promise<void> {
+    deleteRaw(key: string): Promise<void> {
+      rawCurrentMap.delete(key);
+      rawDeletedSet.add(key);
       return Promise.resolve();
     },
     get rawDeletes(): ReadonlySet<string> {
-      // TDD stub — always empty; replaced in GREEN phase.
-      return new Set();
+      // Return an immutable snapshot so the ReadonlySet contract is honest —
+      // callers cannot observe future deletes through a previously captured ref.
+      return new Set(rawDeletedSet);
     },
   };
 }
