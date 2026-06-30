@@ -15,6 +15,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -205,6 +206,12 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
     Map<string, Record<string, string>>
   >(() => new Map());
 
+  // WR-04: When setTheme is called with explicit vars, store them here so the
+  // apply-effect can use them if customThemesState hasn't been populated yet
+  // (covers the gap between setTheme and refreshCustomThemes completing).
+  // Refs are safe to mutate outside render; NOT inside a state updater.
+  const pendingCustomVarsRef = useRef<Record<string, string> | null>(null);
+
   /**
    * Re-read the customThemeIndex and per-theme data keys from IDB, then update
    * React state. Called on mount and after save/delete operations.
@@ -258,14 +265,32 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
   // Apply the theme variables on mount and on every theme change.
   useEffect(() => {
     if ((VALID_THEMES as readonly string[]).includes(theme as string)) {
+      // Built-in theme: always apply directly. Clear any pending custom vars.
+      pendingCustomVarsRef.current = null;
       applyVibeTheme(theme as VibeThemeName);
     } else {
-      // Custom theme: apply vars from state if loaded, else aurora fallback.
+      // Custom theme: prefer state-loaded vars (authoritative). If state is not
+      // yet populated (e.g. the gap between setTheme and refreshCustomThemes),
+      // use pending vars left by setTheme's eager apply — prevents Aurora flash.
+      // If neither is available (stale localStorage entry pointing to a deleted
+      // theme), fall back to Aurora.
       const name = (theme as string).startsWith("custom:")
         ? (theme as string).slice(7)
         : "";
-      const vars = customThemesState.get(name) ?? VIBE_THEMES[DEFAULT_THEME];
-      applyVarsToRoot(vars);
+      const stateVars = customThemesState.get(name);
+      if (stateVars !== undefined) {
+        // State is authoritative; clear the pending ref.
+        pendingCustomVarsRef.current = null;
+        applyVarsToRoot(stateVars);
+      } else if (pendingCustomVarsRef.current !== null) {
+        // State not yet loaded; use the vars the caller provided to setTheme.
+        // Do NOT clear the ref here — keep it so Strict-Mode's second effect
+        // invocation also applies the correct vars.
+        applyVarsToRoot(pendingCustomVarsRef.current);
+      } else {
+        // No vars available (e.g. stale localStorage on initial mount): Aurora fallback.
+        applyVarsToRoot(VIBE_THEMES[DEFAULT_THEME]);
+      }
     }
   }, [theme, customThemesState]);
 
@@ -302,6 +327,21 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
       // Fire-and-forget the durable mirror — never block the UI switch on the
       // async IDB write. localStorage already holds the authoritative value.
       void settingsStore.write(name);
+      // WR-04: Prevent Aurora flash when a new custom theme is saved.
+      // If explicit vars are provided (ThemeEditor save path), apply them to
+      // :root eagerly AND store them in pendingCustomVarsRef so the apply-effect
+      // can use them if it fires before refreshCustomThemes populates
+      // customThemesState. Both are safe side-effects outside the state updater.
+      if (vars !== undefined) {
+        pendingCustomVarsRef.current = vars;
+        applyVarsToRoot(vars);
+      } else if ((VALID_THEMES as readonly string[]).includes(name as string)) {
+        pendingCustomVarsRef.current = null; // switching to built-in: clear pending
+        applyVibeTheme(name as VibeThemeName);
+      }
+      // The useEffect([theme, customThemesState]) remains as the canonical
+      // catch-all for mount, theme restore, and cases where vars are not supplied.
+
       // Resolve vars for broadcastTheme:
       // 1. Explicit vars param (caller-supplied, e.g. from ThemeEditor save path)
       // 2. Custom theme: look up in current state (may be stale on first switch)

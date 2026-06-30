@@ -281,4 +281,23 @@ describe("VibeThemeProvider — custom themes (Phase 22)", () => {
       { timeout: 2000 },
     );
   });
+
+  // Test WR-04: setTheme with explicit vars applies to :root immediately (no Aurora flash)
+  it("WR-04: setTheme with explicit vars applies to :root synchronously before re-render", () => {
+    // Render with no pre-seeded customThemesState — simulates the gap where
+    // refreshCustomThemes has not yet populated state after a save.
+    const { getByTestId } = renderWithServices(<CustomProbe />);
+
+    act(() => {
+      // set-custom calls ctx.setTheme("custom:myTheme", CUSTOM_TEST_VARS)
+      // where CUSTOM_TEST_VARS = { "--text": "#ctest01" }
+      getByTestId("set-custom").click();
+    });
+
+    // :root must reflect the explicit vars immediately — not Aurora's --text.
+    // If the eager apply is missing, :root would briefly show Aurora (#f3f1ff).
+    expect(
+      document.documentElement.style.getPropertyValue("--text"),
+    ).toBe(CUSTOM_TEST_VARS["--text"]);
+  });
 });
