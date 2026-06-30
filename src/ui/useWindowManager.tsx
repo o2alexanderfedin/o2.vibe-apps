@@ -223,14 +223,51 @@ export function WindowManagerProvider({
     [],
   );
 
-  // openAt stub — replaced with the real implementation in the GREEN commit.
   const openAt = useCallback(
     (
-      _appType: string,
-      _meta: { title: string; icon: string },
-      _position: { x: number; y: number; z: number; minimized: boolean },
+      appType: string,
+      meta: { title: string; icon: string },
+      position: { x: number; y: number; z: number; minimized: boolean },
     ): string => {
-      throw new Error("openAt: not yet implemented");
+      const n = ++counter;
+      const id = `win-${n}`;
+      const instanceId = `${appType}-${n}`;
+      // Bump zTop to the restored z value OUTSIDE the updater so future
+      // open()/focus() calls assign z values strictly above all restored
+      // windows. Strict-Mode purity: React invokes updaters twice in dev —
+      // mutating zTop here (in the useCallback body, not inside setWindows)
+      // ensures the mutation happens exactly once per openAt call (T-21-06).
+      if (position.z > zTop) {
+        zTop = position.z;
+      }
+
+      setWindows(prev => {
+        const entry: WindowEntry = {
+          id,
+          instanceId,
+          appType,
+          title: sanitizeDisplayName(meta.title),
+          icon: meta.icon,
+          x: position.x,
+          y: position.y,
+          z: position.z,
+          minimized: position.minimized,
+          maximized: false,
+          restoreRect: null,
+          snapSide: null,
+        };
+        // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
+        // before the useEffect mirror fires.
+        openIdsRef.current = new Set([...prev.map(w => w.id), id]);
+        openInstanceIdsRef.current = new Set([
+          ...prev.map(w => w.instanceId),
+          instanceId,
+        ]);
+        logger.info(`Window opened: ${id} (${appType})`);
+        return [...prev, entry];
+      });
+
+      return instanceId;
     },
     [],
   );
