@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Trusted Desktop
 status: executing
-stopped_at: Phases 19 & 20 complete + merged (20 verified PASSED); ready for Phase 21 planning.
-last_updated: "2026-06-29T00:00:00.000Z"
-last_activity: 2026-06-29 -- Phase 20 merged complete; STATE reconciled by /gsd-progress
+stopped_at: Roadmap written; ready for Phase 19 planning.
+last_updated: "2026-06-30T05:41:28.942Z"
+last_activity: 2026-06-30 -- Phase 21 execution started
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 9
-  completed_plans: 9
-  percent: 50
+  completed_phases: 1
+  total_plans: 13
+  completed_plans: 4
+  percent: 31
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26 after v2.0)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** v3.0 Trusted Desktop — roadmap created. Next: `/gsd-plan-phase 19` to plan Window Chrome & Menu Relocation.
+**Current focus:** Phase 21 — Desktop Persistence
 
 ## Current Position
 
-Phase: 21 (not started) — Phases 19 & 20 COMPLETE + merged
-Plan: —
-Status: executing
-Last activity: 2026-06-29 -- Phase 20 merged complete (verified PASSED); next: plan Phase 21 Desktop Persistence
+Phase: 21 (Desktop Persistence) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 21
+Last activity: 2026-06-30 -- Phase 21 execution started
 
 > Note: Phase 20 was executed, verified (20-VERIFICATION.md status: passed), and merged,
 > but its per-plan SUMMARY.md files were never written. The work is real and complete;
