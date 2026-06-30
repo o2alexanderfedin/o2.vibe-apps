@@ -22,9 +22,16 @@ Trusted desktop — 4 phases (19–22), 19/19 requirements satisfied, 935 tests 
 
 Themeable multi-window desktop — 5 phases (14–18), 21/21 requirements satisfied, 727 tests green, tagged `v2.0`. The flat storefront became a draggable-glass-window OS with 4 switchable themes, a dock + menu bar, a search/launcher panel, and theme-aware app generation.
 
-## Next Milestone
+## Current Milestone: v3.1 Polish & Hardening
 
-None planned yet. Run `/gsd-new-milestone` to scope v3.1/v4.0. Candidate backlog includes: in-place live iframe re-skin on theme switch (currently the frame reloads — see RETROSPECTIVE / v3.0 audit tech debt), and the real-browser manual smoke checks deferred from Phases 21–22.
+**Goal:** Close v3.0's tech debt and verification gaps — no new product surface; internal/UX hardening of what shipped in v3.0.
+
+**Target features:**
+- **In-place live iframe re-skin on theme switch** — make the latent `THEME_PUSH` path the live one so switching themes re-skins open opaque frames *without* reloading the iframe, preserving in-frame app state (today the srcdoc is memoized on `themeVars`, forcing a reload).
+- **Automated real-browser coverage** — Playwright tests (Playwright is already a devDependency from Phase 20) that close the Phase 21/22 `human_needed` gaps: a hard reload restores the desktop FOUC-free with the active (custom) theme applied on first paint, and a theme switch re-skins already-open frames live.
+- **SearchLauncherPanel theme-glass CSS pass** — finish the 6 interior classes (`.launcher__search`, `.launcher__input`, `.launcher__open-btn`, `.launcher__working`, `.launcher__chips`, `.launcher__chip`) left partially styled by the v2.0 audit-debt fix.
+
+**Key context:** Zero new runtime dependencies; hygiene lexicon gate, CSP allowlist, and the FOUC/CSP-hash invariant all stay in force. Phase numbering continues from 22 (v3.1 starts at Phase 23). No DB version bump.
 
 ## Requirements
 
