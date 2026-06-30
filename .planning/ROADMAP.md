@@ -223,7 +223,20 @@ Plans:
   - **Name collision guard** — custom themes use `"custom:<name>"` key namespace in IDB so they can never collide with built-in four names. `sanitizeDisplayName` must be applied to user-supplied theme names before any DOM render or IDB write.
   - **THEME_PUSH to frames** — Phase 22 must call the same `broadcastTheme(vars)` path introduced in Phase 20 when a custom theme is activated. If Phase 21 completes before Phase 20, a stub `broadcastTheme` (no-op) must exist to avoid a runtime error; it becomes live when Phase 20 lands.
 
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+**Wave 1** *(parallel — no file overlap)*
+- [ ] 22-01-PLAN.md — Extend VibeThemeProvider with CustomThemeName/AnyThemeName/currentVars/customThemes/refreshCustomThemes; add deleteRaw to SettingsStore (THEME-07, THEME-08)
+- [ ] 22-02-PLAN.md — TDD contrastRatio WCAG utility + FOUC atomic update (index.html + CSP hash recompute in same commit) (THEME-09, THEME-10)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 22-03-PLAN.md — ThemeEditor component: 12-var inputs, live preview, CSS.supports gate, save/delete, contrast warning (THEME-06, THEME-07, THEME-10)
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 22-04-PLAN.md — ThemeSelector custom pills + MenuBar onOpenThemeEditor + DesktopShell line 842 fix + ThemeEditor wiring (THEME-07, THEME-08, THEME-09)
+
+**Wave 4** *(blocked on Wave 3 — phase gate)*
+- [ ] 22-05-PLAN.md — Extend hygiene.test.ts PHASE20_FILES + full tsc + vitest + vite build gate (THEME-06..10, HYGIENE-07)
 **UI hint**: yes
 
 ---
@@ -256,7 +269,7 @@ v1.0 → v1.1 → v2.0 → v3.0 phases execute in numeric order: 1 → … → 1
 | 19. Window Chrome & Menu Relocation | v3.0 | 4/4 | Complete   | 2026-06-27 |
 | 20. Opaque-Origin Frame Isolation | v3.0 | 0/5 | Planned | - |
 | 21. Desktop Persistence | v3.0 | 4/4 | Complete   | 2026-06-30 |
-| 22. Theme Editor & Custom Themes | v3.0 | 0/TBD | Not started | - |
+| 22. Theme Editor & Custom Themes | v3.0 | 0/5 | Planned | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
 **v1.1 Real & Robust shipped 2026-06-26 — 5 phases, 12/12 requirements satisfied, 552 tests green.**
