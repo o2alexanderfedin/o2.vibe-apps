@@ -153,43 +153,89 @@ test.describe("SMOKE-01 — window layout persists across hard reload", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 // Proves Phase 22 FOUC-prevention requirement in a real headless Chromium
-// browser. Two stores must be seeded for a FOUC-free reload:
-//   - localStorage (read by the FOUC inline script in index.html synchronously
-//     during HTML parsing, before any ES module executes),
-//   - IDB settings["customThemeIndex"] + settings["custom:smoketest"] (read by
-//     VibeThemeProvider.refreshCustomThemes() after React hydrates; without this
-//     the provider falls back to Aurora after hydration).
+// browser across two complementary sub-tests:
 //
-// Seeding approach: page.evaluate after the first goto sets BOTH stores in one
-// call. localStorage set in this way persists to the next page.reload() within
-// the same browser context, so the FOUC inline script reads it reliably.
+//   Sub-test A — FOUC script alone (JS blocked): seeds localStorage only, then
+//   aborts all JS module requests so React never mounts. Asserts the inline
+//   FOUC script in index.html applied the custom vars by itself. This test
+//   FAILS if the FOUC custom-theme branch is removed from index.html.
 //
-// Assertion approach: in a real browser with visual rendering, React's
-// useEffect fires AFTER the first paint. The FOUC inline script sets custom
-// vars before the first paint, so users see the custom theme immediately. In
-// headless Chrome (Playwright), useEffect fires synchronously within the
-// module-script execution — before DOMContentLoaded resolves. This means the
-// "pre-hydration" window is not capturable via waitUntil:"domcontentloaded"
-// in headless mode. We therefore assert on the FINAL state after full load +
-// IDB read, which proves the seeding mechanism works end-to-end. The visual
-// "no flash" guarantee is an invariant of the FOUC inline script + real-browser
-// paint cycle (human-verifiable, not assertable in headless CDP timing).
+//   Sub-test B — full hydration, no post-hydration flash: seeds both
+//   localStorage and IDB, reloads fully (JS not blocked), waits for IDB read,
+//   then asserts the custom theme is stable. Thanks to the readStoredCustomVars
+//   fix (R-FLASH-01), the provider no longer overwrites the FOUC-applied vars
+//   with Aurora during the IDB-load gap — so the final state is correct even
+//   when IDB takes a moment to resolve.
+//
+// Seeding approach: page.evaluate after the first goto sets both stores. The
+// localStorage values persist across page.reload() within the same context, so
+// the FOUC inline script reads them on the next load reliably.
 test.describe("SMOKE-02 — custom theme on first paint, no Aurora flash", () => {
+
+  // Sub-test A: prove the FOUC inline script applies custom vars before React
+  // mounts. Blocks all JS so React never runs — only the inline <script> tag
+  // (which is hash-authorised by the CSP) executes. This assertion FAILS if
+  // the custom-theme branch is removed from the FOUC script in index.html.
   test(
-    "hard reload applies custom theme before React hydrates",
+    "FOUC inline script alone applies custom vars before React mounts (JS blocked)",
+    async ({ page }) => {
+      // ── First goto: create IDB at v3, set localStorage with custom theme ──
+      await page.goto("/");
+      await page.evaluate(async (vars: Record<string, string>) => {
+        localStorage.setItem("marketplace.osTheme", "custom:smoketest");
+        localStorage.setItem(
+          "vibe.customTheme.smoketest",
+          JSON.stringify(vars)
+        );
+      }, SMOKE_CUSTOM_VARS);
+
+      // ── Block all JS module requests so React never mounts ────────────────
+      // The FOUC script is inline (no src=); it is NOT blocked by this route.
+      // The type="module" entry script (/assets/*.js) IS blocked, so no React
+      // hydration occurs after this point.
+      await page.route("**/*.js", (route) => route.abort());
+
+      // ── Reload with domcontentloaded: FOUC script runs, module JS aborted ─
+      // DOMContentLoaded fires after the HTML is parsed and inline scripts run.
+      // type="module" scripts are deferred and do not block this event, so the
+      // promise resolves even with the module entry aborted.
+      await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {
+        // Tolerate any Playwright-level navigation errors triggered by aborted
+        // requests — the FOUC script still ran before the abort.
+      });
+
+      // ── Unroute before any further navigation ─────────────────────────────
+      await page.unrouteAll();
+
+      // ── Assert: FOUC script applied custom vars to :root inline style ─────
+      // The FOUC script uses element.style.setProperty, so documentElement.style
+      // (not getComputedStyle) is the authoritative signal of what it wrote.
+      // React's apply-effect was never called (JS blocked), so any value here
+      // came exclusively from the inline FOUC script.
+      const textFoucScript = await page.evaluate(() =>
+        document.documentElement.style.getPropertyValue("--text").trim()
+      );
+      // Must be the custom value — proves the FOUC custom-theme branch ran.
+      expect(textFoucScript).not.toBe(AURORA_TEXT);
+      expect(textFoucScript).toBe(SMOKE_CUSTOM_VARS["--text"]);
+    }
+  );
+
+  // Sub-test B: full hydration with both localStorage + IDB seeded. Proves the
+  // custom theme is stable after React mounts and IDB resolves — the Aurora
+  // flash defect (R-FLASH-01) would have made textAfterFullLoad = AURORA_TEXT.
+  test(
+    "hard reload applies custom theme; custom value stable through full hydration",
     async ({ page }) => {
       // ── First goto: React mounts → openRegistry() creates MarketplaceRegistry
       //    at v3. Default theme is Aurora (no localStorage values set yet).
       await page.goto("/");
 
       // ── Seed both localStorage and IDB in one evaluate call ───────────────
-      // localStorage: FOUC inline script in index.html reads these keys
-      //   synchronously during HTML parsing on the NEXT reload.
-      // IDB: VibeThemeProvider.refreshCustomThemes() reads customThemeIndex +
-      //   custom:smoketest from IDB after React hydrates. Without the IDB seed,
-      //   customThemesState stays empty and the provider falls back to Aurora.
+      // localStorage: FOUC inline script reads these keys synchronously on reload.
+      // IDB: VibeThemeProvider.refreshCustomThemes() reads them after hydration.
       await page.evaluate(async (vars: Record<string, string>) => {
-        // ── localStorage seed (for FOUC script on next reload) ────────────
+        // ── localStorage seed ─────────────────────────────────────────────
         localStorage.setItem("marketplace.osTheme", "custom:smoketest");
         localStorage.setItem(
           "vibe.customTheme.smoketest",
@@ -231,42 +277,42 @@ test.describe("SMOKE-02 — custom theme on first paint, no Aurora flash", () =>
       }, SMOKE_CUSTOM_VARS);
 
       // ── Reload: FOUC applies custom vars; module script + React mounts ────
-      // Use default waitUntil:"load" so the module script and React hydration
-      // are both complete before we assert. (In headless Chrome, type="module"
-      // scripts execute before DOMContentLoaded fires, meaning the approach of
-      // waitUntil:"domcontentloaded" does NOT give a pre-hydration window in
-      // this production build — the module script and first React render have
-      // already run by then, applying an aurora fallback while IDB is loading.)
+      // Use default waitUntil:"load" so module script and React hydration are
+      // both complete before we assert. In headless Chrome, type="module"
+      // scripts execute before DOMContentLoaded fires, so there is no useful
+      // pre-hydration window via waitUntil:"domcontentloaded".
       await page.reload();
 
       // ── Wait for IDB read + React apply-effect ────────────────────────────
       // VibeThemeProvider.refreshCustomThemes() reads IDB asynchronously;
-      // 1500ms gives a comfortable buffer for the async IDB read to complete
-      // and the apply-effect to re-apply the custom vars over the aurora
-      // fallback that runs on initial mount.
+      // 1500ms gives a comfortable buffer for the async IDB read to complete.
       await page.waitForTimeout(1500);
 
       // ── Final state assertion: custom theme applied and stable ────────────
-      const textAtFouc = await page.evaluate(() =>
+      // textAfterFullLoad measures the CSS custom prop AFTER React has fully
+      // hydrated and VibeThemeProvider's apply-effect has run. The R-FLASH-01
+      // defect would have produced AURORA_TEXT here (Aurora clobber during IDB
+      // gap); the fix ensures the localStorage mirror is used instead.
+      const textAfterFullLoad = await page.evaluate(() =>
         getComputedStyle(document.documentElement)
           .getPropertyValue("--text")
           .trim()
       );
-      // Must NOT be Aurora (custom theme seeding worked, no Aurora fallback)
-      expect(textAtFouc).not.toBe(AURORA_TEXT);
+      // Must NOT be Aurora (custom theme seeding worked, provider used mirror)
+      expect(textAfterFullLoad).not.toBe(AURORA_TEXT);
       // Must be the custom value seeded in both localStorage and IDB
-      expect(textAtFouc).toBe(SMOKE_CUSTOM_VARS["--text"]);
+      expect(textAfterFullLoad).toBe(SMOKE_CUSTOM_VARS["--text"]);
 
-      // ── Also read after additional wait to confirm stability ─────────────
+      // ── Confirm stability: value unchanged after IDB state settles ────────
       await page.waitForTimeout(500);
-      const textAfterHydration = await page.evaluate(() =>
+      const textStableAfterHydration = await page.evaluate(() =>
         getComputedStyle(document.documentElement)
           .getPropertyValue("--text")
           .trim()
       );
-      // Custom theme must remain stable (IDB seed ensured customThemesState
-      // was populated so the apply-effect found stateVars and kept them)
-      expect(textAfterHydration).toBe(SMOKE_CUSTOM_VARS["--text"]);
+      // Custom theme must remain stable — IDB seed populated customThemesState
+      // so the apply-effect found stateVars and did not revert to the mirror.
+      expect(textStableAfterHydration).toBe(SMOKE_CUSTOM_VARS["--text"]);
     }
   );
 });
