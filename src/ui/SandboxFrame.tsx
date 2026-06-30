@@ -104,9 +104,14 @@ export function SandboxFrame({
 
   const srcdoc = useMemo(
     () => utils.buildSrcdoc(transpiledJS, themeVars, window.location.origin),
-    // utils is stable across renders because _utils is typically a constant
+    // utils is excluded because it is stable when _utils is a constant object.
+    // themeVars is intentionally excluded so the iframe element remains stable
+    // across theme changes — the factory closure still captures the then-current
+    // themeVars at the time the memo DOES re-run (when transpiledJS changes),
+    // so first-paint CSS is always correct. Subsequent theme updates reach the
+    // live, connected frame via the THEME_PUSH postMessage channel (RESKIN-01).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [transpiledJS, themeVars],
+    [transpiledJS],
   );
 
   // ---------------------------------------------------------------------------
