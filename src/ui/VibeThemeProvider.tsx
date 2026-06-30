@@ -14,6 +14,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -24,9 +25,46 @@ import { broadcastTheme } from "../execution/frameMount";
 /** The four named themes the marketplace ships with. */
 export type VibeThemeName = "aurora" | "aero" | "aqua" | "noir";
 
+/**
+ * A user-created custom theme name. The "custom:" prefix namespaces it away
+ * from the four built-in VibeThemeName literals so there is no collision risk.
+ * Phase 22 (THEME-07/08).
+ */
+export type CustomThemeName = `custom:${string}`;
+
+/**
+ * Union of built-in and custom theme names. Accepted wherever a theme name is
+ * passed: setTheme, theme state, localStorage, readStoredOsTheme().
+ * Phase 22 (THEME-07/08).
+ */
+export type AnyThemeName = VibeThemeName | CustomThemeName;
+
 export interface VibeThemeContextValue {
-  theme: VibeThemeName;
-  setTheme: (name: VibeThemeName) => void;
+  /** Currently active theme name — a built-in or "custom:<name>". */
+  theme: AnyThemeName;
+  /**
+   * Resolved CSS custom-property map for the active theme. Always a valid
+   * Record<string,string>: falls back to VIBE_THEMES["aurora"] when the active
+   * custom theme name is not found in customThemes (edge case: deleted while active).
+   * Phase 22 (THEME-08): used by DesktopShell to pass vars to SandboxFrame.
+   */
+  currentVars: Record<string, string>;
+  /** Switch to any theme — built-in or custom. For custom themes, pass the
+   *  resolved vars so broadcastTheme receives them immediately without waiting
+   *  for the customThemes state to populate. */
+  setTheme: (name: AnyThemeName, vars?: Record<string, string>) => void;
+  /**
+   * Map of saved custom themes keyed by name WITHOUT the "custom:" prefix.
+   * Populated on mount by reading customThemeIndex + per-theme keys from IDB.
+   * Phase 22 (THEME-07).
+   */
+  customThemes: ReadonlyMap<string, Record<string, string>>;
+  /**
+   * Re-reads customThemeIndex and per-theme keys from IDB, updating customThemes
+   * in React state. Call after save or delete to keep the UI in sync.
+   * Phase 22 (THEME-07).
+   */
+  refreshCustomThemes: () => Promise<void>;
 }
 
 // Exported so consumers (the theme selector, tests) can read the current theme
@@ -111,12 +149,23 @@ const VALID_THEMES: ReadonlyArray<VibeThemeName> = [
 // Default theme when nothing valid is persisted (CONTEXT Decision 7).
 const DEFAULT_THEME: VibeThemeName = "aurora";
 
-function readStoredOsTheme(): VibeThemeName {
+/**
+ * Read the persisted theme name from localStorage. Accepts both built-in
+ * VibeThemeName values and "custom:*" strings (Phase 22). Falls back to
+ * DEFAULT_THEME when nothing is stored or the stored value is neither a valid
+ * built-in nor a "custom:" string.
+ *
+ * TDD RED stub: currently still rejects "custom:*" values (returns aurora).
+ * GREEN phase will add the "custom:" prefix check.
+ */
+function readStoredOsTheme(): AnyThemeName {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_OS_THEME);
     if (stored && (VALID_THEMES as readonly string[]).includes(stored)) {
       return stored as VibeThemeName;
     }
+    // TDD RED stub: "custom:*" not yet accepted — falls through to DEFAULT_THEME.
+    // GREEN phase: add `if (stored?.startsWith("custom:")) return stored as CustomThemeName;`
   } catch {
     // localStorage can throw under strict privacy settings — fall through.
   }
@@ -132,19 +181,58 @@ function applyVibeTheme(name: VibeThemeName): void {
   }
 }
 
+// Apply an arbitrary vars map to :root (used for custom themes in GREEN phase).
+function applyVarsToRoot(vars: Record<string, string>): void {
+  const root = document.documentElement;
+  for (const [prop, value] of Object.entries(vars)) {
+    root.style.setProperty(prop, value);
+  }
+}
+
 // Runtime owner of the named theme. localStorage is the source of truth for
 // first paint; the injected settings store is a best-effort durable mirror.
 export function VibeThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<VibeThemeName>(readStoredOsTheme);
+  const [theme, setThemeState] = useState<AnyThemeName>(readStoredOsTheme);
   const { settingsStore } = useServices();
+
+  // TDD RED stub: customThemesState always empty; GREEN populates from IDB.
+  const [customThemesState, setCustomThemesState] = useState<
+    Map<string, Record<string, string>>
+  >(() => new Map());
+
+  // TDD RED stub: refreshCustomThemes is a no-op; GREEN reads from IDB.
+  const refreshCustomThemes = useCallback((): Promise<void> => {
+    return Promise.resolve();
+  }, []);
+
+  // Populate custom themes on mount (no-op in RED, functional in GREEN).
+  useEffect(() => {
+    void refreshCustomThemes();
+  }, [refreshCustomThemes]);
 
   // Apply the theme variables on mount and on every theme change.
   useEffect(() => {
-    applyVibeTheme(theme);
-  }, [theme]);
+    if ((VALID_THEMES as readonly string[]).includes(theme as string)) {
+      applyVibeTheme(theme as VibeThemeName);
+    } else {
+      // Custom theme: apply vars from state if loaded, else aurora fallback.
+      const name = (theme as string).startsWith("custom:")
+        ? (theme as string).slice(7)
+        : "";
+      const vars = customThemesState.get(name) ?? VIBE_THEMES[DEFAULT_THEME];
+      applyVarsToRoot(vars);
+    }
+  }, [theme, customThemesState]);
+
+  // TDD RED stub: currentVars always empty object; GREEN computes from theme.
+  const currentVars = useMemo(
+    (): Record<string, string> => ({}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme, customThemesState],
+  );
 
   const setTheme = useCallback(
-    (name: VibeThemeName) => {
+    (name: AnyThemeName, vars?: Record<string, string>) => {
       // Keep the updater pure — React may invoke it more than once (double
       // render under StrictMode, replays during concurrent/interrupted
       // renders), so side effects must live outside it.
@@ -159,15 +247,30 @@ export function VibeThemeProvider({ children }: { children: ReactNode }) {
       // Fire-and-forget the durable mirror — never block the UI switch on the
       // async IDB write. localStorage already holds the authoritative value.
       void settingsStore.write(name);
-      // Push the new theme variables to every live frame so opaque-origin app
-      // bodies repaint with the switched theme (their :root can't see the host's).
-      broadcastTheme(VIBE_THEMES[name]);
+      // TDD RED stub: always looks up VIBE_THEMES (undefined for custom names).
+      // GREEN phase: resolve vars for broadcastTheme correctly.
+      const resolvedVars: Record<string, string> =
+        vars ??
+        (VIBE_THEMES[name as VibeThemeName] as Record<string, string> | undefined) ??
+        VIBE_THEMES[DEFAULT_THEME];
+      broadcastTheme(resolvedVars);
     },
     [settingsStore],
   );
 
   return (
-    <VibeThemeContext.Provider value={{ theme, setTheme }}>
+    <VibeThemeContext.Provider
+      value={{
+        theme,
+        currentVars,
+        setTheme,
+        customThemes: customThemesState as ReadonlyMap<
+          string,
+          Record<string, string>
+        >,
+        refreshCustomThemes,
+      }}
+    >
       {children}
     </VibeThemeContext.Provider>
   );
