@@ -287,14 +287,15 @@ describe("ThemeEditor", () => {
     expect(store.rawWriteCount("custom:My Theme")).toBe(1);
   });
 
-  // Test 10 — contrast warning renders for low-contrast pair
-  it("contrast warning: role=alert appears when --text and --b1 have contrast < 4.5", () => {
+  // Test 10 — contrast warning renders for low-contrast --text/--wall pair
+  it("contrast warning: role=alert appears when --text and --wall (hex) have contrast < 4.5", () => {
     // #777777 on #ffffff: contrast ratio ≈ 4.48 (below 4.5 WCAG AA).
+    // --wall must be a hex string so contrastRatio can parse it (non-null return).
     renderThemeEditor({
       initialVars: {
         ...VIBE_THEMES.aurora,
         "--text": "#777777",
-        "--b1": "#ffffff",
+        "--wall": "#ffffff",
       },
     });
 
@@ -303,14 +304,26 @@ describe("ThemeEditor", () => {
     expect(alert!.textContent).toMatch(/low contrast/i);
   });
 
-  // Test 11 — contrast warning absent for high-contrast pair
-  it("contrast warning: role=alert is absent when --text and --b1 have contrast >= 4.5", () => {
+  // Test 10b — built-in theme (gradient --wall) does NOT trip the contrast warning
+  it("contrast warning: role=alert is absent for built-in themes (gradient --wall → null ratio)", () => {
+    // All built-in themes use a radial-gradient for --wall.
+    // contrastRatio returns null for non-hex values, so the warning never fires.
+    renderThemeEditor({
+      initialVars: { ...VIBE_THEMES.aurora },
+    });
+
+    const alert = screen.queryByRole("alert");
+    expect(alert).toBeNull();
+  });
+
+  // Test 11 — contrast warning absent for high-contrast hex pair
+  it("contrast warning: role=alert is absent when --text and --wall (hex) have contrast >= 4.5", () => {
     // #ffffff on #000000: contrast ratio = 21:1 (well above threshold).
     renderThemeEditor({
       initialVars: {
         ...VIBE_THEMES.aurora,
         "--text": "#ffffff",
-        "--b1": "#000000",
+        "--wall": "#000000",
       },
     });
 

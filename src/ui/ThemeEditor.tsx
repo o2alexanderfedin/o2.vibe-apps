@@ -8,7 +8,10 @@
 // and refreshes the custom themes list in context.
 //
 // Delete auto-switches to Aurora BEFORE removing the IDB key (CONTEXT/SC#5).
-// Contrast advisory (THEME-10): checks --text vs --b1 WCAG AA ratio; non-blocking.
+// Contrast advisory (THEME-10): checks --text vs --wall WCAG AA ratio; non-blocking.
+// Note: built-in themes use a radial-gradient for --wall, so contrastRatio returns
+// null for them and the warning is suppressed. Custom themes that set --wall to a
+// solid hex color get a meaningful text-on-background contrast check.
 
 import {
   useState,
@@ -248,10 +251,13 @@ export function ThemeEditor({
     onClose();
   }, [editingName, setTheme, settingsStore, refreshCustomThemes, onClose]);
 
-  // Advisory contrast warning: --text vs --b1 pair (WCAG AA threshold 4.5:1).
+  // Advisory contrast warning: --text vs --wall pair (WCAG AA threshold 4.5:1).
+  // Built-in themes use a radial-gradient for --wall, so contrastRatio returns
+  // null and this warning is suppressed for them. Custom themes using a solid hex
+  // background get a meaningful text-on-background check.
   // Non-blocking — Save remains enabled; warning is informational only.
   const showContrastWarning = useMemo((): boolean => {
-    const ratio = contrastRatio(vars["--text"] ?? "", vars["--b1"] ?? "");
+    const ratio = contrastRatio(vars["--text"] ?? "", vars["--wall"] ?? "");
     return ratio !== null && ratio < 4.5;
   }, [vars]);
 
@@ -319,7 +325,7 @@ export function ThemeEditor({
         {/* WCAG AA contrast advisory (non-blocking) */}
         {showContrastWarning && (
           <p role="alert" className="theme-editor__contrast-warning">
-            Low contrast between text and accent — may be hard to read
+            Low contrast between text colour and background — text may be hard to read
           </p>
         )}
 
