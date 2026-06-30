@@ -69,7 +69,7 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
 ### v3.1 Polish & Hardening (Phases 23–25) — IN PROGRESS
 
 - [x] **Phase 23: Live Frame Re-Skin** — RESKIN-01 — remove `themeVars` from the srcdoc memo deps so theme switches re-skin open opaque frames via `THEME_PUSH` without reloading the iframe; in-frame app state survives. (completed 2026-06-30)
-- [ ] **Phase 24: Launcher CSS Polish** — POLISH-01 — glass treatment pass on the 6 SearchLauncherPanel interior classes partially styled by the v3.0 audit-debt fix; visually consistent with the rest of the v3.0 chrome.
+- [x] **Phase 24: Launcher CSS Polish** — POLISH-01 — glass treatment pass on the 6 SearchLauncherPanel interior classes partially styled by the v3.0 audit-debt fix; visually consistent with the rest of the v3.0 chrome. (completed 2026-06-30)
 - [ ] **Phase 25: Real-Browser Smoke Suite** — SMOKE-01, SMOKE-02, SMOKE-03 — Playwright tests that close the Phase 21/22 `human_needed` gaps: reload restores the desktop, custom theme is FOUC-free on first paint, and a theme switch re-skins open frames live in a real browser.
 
 ## Phase Details
@@ -109,7 +109,7 @@ Plans:
   5. The full test suite remains green; `tsc --noEmit` reports 0 errors
 **Plans**: 1 plan
 Plans:
-- [ ] 24-01-PLAN.md — Apply glass-var recipe (--glass2/--glass/--hi/--text) to 6 .launcher__* interior classes
+- [x] 24-01-PLAN.md — Apply glass-var recipe (--glass2/--glass/--hi/--text) to 6 .launcher__* interior classes
 **UI hint**: yes
 
 ---
@@ -158,7 +158,7 @@ v1.0 → v1.1 → v2.0 → v3.0 → v3.1 phases execute in numeric order: 1 → 
 | 21. Desktop Persistence | v3.0 | 4/4 | Complete   | 2026-06-30 |
 | 22. Theme Editor & Custom Themes | v3.0 | 5/5 | Complete   | 2026-06-30 |
 | 23. Live Frame Re-Skin | v3.1 | 1/1 | Complete   | 2026-06-30 |
-| 24. Launcher CSS Polish | v3.1 | 0/1 | Not started | - |
+| 24. Launcher CSS Polish | v3.1 | 1/1 | Complete   | 2026-06-30 |
 | 25. Real-Browser Smoke Suite | v3.1 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
