@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{margin:0;height:100%;overflow:hidden;background:#0c0a18;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+  ::selection{background:rgba(155,124,255,0.5)}
+  textarea,input,button{font-family:inherit}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.18);border-radius:8px}
+  @keyframes vibeFloat{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(7%,-9%) scale(1.14)}66%{transform:translate(-8%,6%) scale(0.92)}}
+  @keyframes vibeSheen{0%{background-position:-160% 0}100%{background-position:260% 0}}
+  @keyframes vibeSweep{0%{transform:translateX(-130%) skewX(-18deg)}100%{transform:translateX(420%) skewX(-18deg)}}
+  @keyframes vibeWin{from{opacity:0;transform:translateY(14px) scale(0.95)}to{opacity:1;transform:none}}
+  @keyframes vibePulse{0%,100%{opacity:0.3}50%{opacity:1}}
+  @keyframes vibeSpin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div style="{{ shellStyle }}">
+
+  <sc-for list="{{ blobs }}" as="b" hint-placeholder-count="4">
+    <div style="{{ b.style }}"></div>
+  </sc-for>
+  <div style="position:absolute;inset:0;background:radial-gradient(120% 80% at 50% -10%, transparent 40%, rgba(0,0,0,0.45) 100%);pointer-events:none;z-index:1"></div>
+
+  <div style="position:absolute;top:0;left:0;right:0;height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:9000;background:linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.03));backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);border-bottom:1px solid rgba(255,255,255,0.14);box-shadow:inset 0 1px 0 rgba(255,255,255,0.35)">
+    <div style="display:flex;align-items:center;gap:16px;min-width:0">
+      <div style="display:flex;align-items:center;gap:9px;font-weight:750;letter-spacing:0.2px;font-size:14px">
+        <div style="width:15px;height:15px;border-radius:5px;background:linear-gradient(135deg,var(--accentA),var(--accentB));box-shadow:inset 0 1px 0 rgba(255,255,255,0.6),0 0 10px var(--accentA);transform:rotate(45deg)"></div>
+        Vibe OS
+      </div>
+      <div style="font-size:13px;opacity:0.62;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ activeName }}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="display:flex;align-items:center;gap:4px;padding:3px;border-radius:11px;background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.1)">
+        <sc-for list="{{ themes }}" as="t" hint-placeholder-count="4">
+          <button onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button>
+        </sc-for>
+      </div>
+      <div style="font-size:13px;font-variant-numeric:tabular-nums;opacity:0.88;letter-spacing:0.3px">{{ clock }}</div>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);width:clamp(320px,93vw,600px);max-height:82vh;z-index:120;border-radius:26px;padding:24px;overflow:hidden;background:linear-gradient(160deg,var(--glass),var(--glass2));backdrop-filter:blur(32px) saturate(195%);-webkit-backdrop-filter:blur(32px) saturate(195%);border:1px solid var(--bord);box-shadow:0 36px 90px rgba(0,0,0,0.5), inset 0 1px 0 var(--hi), inset 0 0 60px rgba(255,255,255,0.04)">
+    <div style="position:absolute;top:0;left:0;right:0;height:50%;background:linear-gradient(180deg,rgba(255,255,255,0.16),transparent);pointer-events:none;border-radius:26px 26px 0 0"></div>
+    <div style="position:relative">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <span style="font-size:21px;font-weight:760;letter-spacing:-0.3px;background:linear-gradient(100deg,var(--accentA),var(--accentB),#ff8fd4);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">Vibe Store</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:20px;background:rgba(52,211,153,0.14);color:#7ff0c0;border:1px solid rgba(52,211,153,0.3)"><span style="width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d399;animation:vibePulse 1.6s ease-in-out infinite"></span>live</span>
+      </div>
+      <div style="font-size:13.5px;opacity:0.6;margin-bottom:18px">Describe an app. We'll vibe it into existence.</div>
+
+      <div style="display:flex;gap:10px;margin-bottom:18px">
+        <input value="{{ query }}" onInput="{{ onQueryInput }}" onKeyDown="{{ onQueryKey }}" placeholder="a pomodoro timer with rain sounds…" style="flex:1;min-width:0;height:48px;border-radius:14px;border:1px solid var(--bord);background:rgba(255,255,255,0.07);color:var(--text);padding:0 16px;font-size:15px;outline:none" style-focus="border-color:var(--accentB);box-shadow:0 0 0 3px rgba(54,214,240,0.18),inset 0 1px 0 rgba(255,255,255,0.2)" />
+        <button onClick="{{ onVibe }}" style="height:48px;padding:0 22px;border-radius:14px;border:none;color:#fff;font-weight:680;font-size:15px;cursor:pointer;white-space:nowrap;background:linear-gradient(135deg,var(--accentA),var(--accentB));box-shadow:0 10px 28px rgba(124,92,255,0.42),inset 0 1px 0 rgba(255,255,255,0.5)" style-hover="filter:brightness(1.08)" style-active="transform:translateY(1px)">Vibe it ✦</button>
+      </div>
+
+      <sc-if value="{{ isIdle }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:1.2px;opacity:0.5;margin-bottom:11px">Try vibing</div>
+          <div style="display:flex;flex-wrap:wrap;gap:9px">
+            <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="5">
+              <button onClick="{{ s.onClick }}" style="display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:12px;border:1px solid var(--bord);background:rgba(255,255,255,0.05);color:var(--text);font-size:13px;cursor:pointer" style-hover="background:rgba(255,255,255,0.13)">{{ s.icon }}{{ s.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isVibing }}" hint-placeholder-val="{{ false }}">
+        <div style="position:relative;border-radius:18px;padding:20px;overflow:hidden;background:rgba(255,255,255,0.05);border:1px solid var(--bord)">
+          <div style="position:absolute;top:0;bottom:0;left:0;width:30%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.18),transparent);animation:vibeSweep 1.5s ease-in-out infinite;pointer-events:none"></div>
+          <div style="display:flex;align-items:center;gap:13px;margin-bottom:18px;position:relative">
+            <div style="width:24px;height:24px;border-radius:50%;border:2.5px solid rgba(255,255,255,0.18);border-top-color:var(--accentB);animation:vibeSpin .9s linear infinite"></div>
+            <div style="font-size:15px;font-weight:620">{{ stepText }}</div>
+          </div>
+          <div style="display:flex;gap:13px;position:relative">
+            <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(90deg,rgba(255,255,255,0.06),rgba(255,255,255,0.2),rgba(255,255,255,0.06));background-size:200% 100%;animation:vibeSheen 1.4s linear infinite"></div>
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:9px">
+              <div style="height:13px;width:70%;border-radius:7px;background:linear-gradient(90deg,rgba(255,255,255,0.06),rgba(255,255,255,0.2),rgba(255,255,255,0.06));background-size:200% 100%;animation:vibeSheen 1.4s linear infinite"></div>
+              <div style="height:13px;width:45%;border-radius:7px;background:linear-gradient(90deg,rgba(255,255,255,0.06),rgba(255,255,255,0.2),rgba(255,255,255,0.06));background-size:200% 100%;animation:vibeSheen 1.4s linear infinite .2s"></div>
+            </div>
+          </div>
+          <div style="margin-top:18px;height:6px;border-radius:6px;background:rgba(0,0,0,0.25);overflow:hidden;position:relative">
+            <div style="{{ vibeBarStyle }}"></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isResult }}" hint-placeholder-val="{{ false }}">
+        <div style="border-radius:18px;padding:18px;background:rgba(255,255,255,0.06);border:1px solid var(--bord);animation:vibeWin .4s ease">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+            {{ result.icon }}
+            <div style="min-width:0">
+              <div style="font-size:17px;font-weight:720;letter-spacing:-0.2px">{{ result.name }}</div>
+              <div style="font-size:12.5px;opacity:0.6">{{ result.tag }} · vibed just now</div>
+            </div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;opacity:0.7">★★★★★</div>
+          </div>
+          <div style="font-size:13px;opacity:0.72;line-height:1.5;padding:11px 13px;border-radius:11px;background:rgba(0,0,0,0.18);margin-bottom:15px">{{ result.prompt }}</div>
+          <div style="display:flex;gap:10px">
+            <button onClick="{{ onOpen }}" style="flex:1;height:44px;border-radius:13px;border:none;color:#fff;font-weight:680;font-size:14.5px;cursor:pointer;background:linear-gradient(135deg,var(--accentA),var(--accentB));box-shadow:0 8px 22px rgba(124,92,255,0.4),inset 0 1px 0 rgba(255,255,255,0.5)" style-hover="filter:brightness(1.08)">Open app</button>
+            <button onClick="{{ onDiscard }}" style="height:44px;padding:0 18px;border-radius:13px;border:1px solid var(--bord);background:rgba(255,255,255,0.05);color:var(--text);font-weight:560;font-size:14px;cursor:pointer" style-hover="background:rgba(255,255,255,0.12)">Discard</button>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <sc-for list="{{ windows }}" as="w" hint-placeholder-count="0">
+    <div style="{{ w.style }}">
+      <div onPointerDown="{{ w.onDown }}" onMouseDown="{{ w.onFocus }}" style="display:flex;align-items:center;gap:10px;padding:10px 13px;cursor:grab;user-select:none;background:linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.02));border-bottom:1px solid rgba(255,255,255,0.1)">
+        <div style="display:flex;gap:7px">
+          <button onClick="{{ w.onClose }}" style="width:13px;height:13px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(180deg,#ff7b72,#ec5d52);box-shadow:inset 0 1px 0 rgba(255,255,255,0.4)"></button>
+          <button onClick="{{ w.onMin }}" style="width:13px;height:13px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(180deg,#ffd479,#f6b73c);box-shadow:inset 0 1px 0 rgba(255,255,255,0.4)"></button>
+          <div style="width:13px;height:13px;border-radius:50%;background:linear-gradient(180deg,#7adf8f,#43c463);box-shadow:inset 0 1px 0 rgba(255,255,255,0.4)"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin:0 auto;transform:translateX(-13px)">
+          {{ w.icon }}
+          <span style="font-size:13px;font-weight:620">{{ w.title }}</span>
+        </div>
+      </div>
+      <div style="padding:0;overflow:auto">{{ w.body }}</div>
+    </div>
+  </sc-for>
+
+  <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:9000;display:flex;align-items:flex-end;gap:6px;padding:9px 13px;border-radius:22px;background:linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.05));backdrop-filter:blur(30px) saturate(190%);-webkit-backdrop-filter:blur(30px) saturate(190%);border:1px solid rgba(255,255,255,0.2);box-shadow:0 18px 50px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.45)">
+    <sc-for list="{{ dock }}" as="d" hint-placeholder-count="1">
+      <button onClick="{{ d.onClick }}" title="{{ d.label }}" style="width:52px;height:52px;border-radius:15px;border:none;background:transparent;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;position:relative;transition:transform .2s cubic-bezier(.2,.8,.2,1);transform-origin:bottom" style-hover="transform:scale(1.22) translateY(-7px)">
+        {{ d.icon }}
+        <sc-if value="{{ d.running }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;bottom:-5px;width:4px;height:4px;border-radius:50%;background:var(--text);opacity:0.7"></div>
+        </sc-if>
+      </button>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    theme: 'aurora', query: '', lastQuery: '', phase: 'idle', vibeProg: 0,
+    stepText: '', result: null, windows: [], installed: [], clock: '',
+    activeName: 'Vibe Store',
+    pomo: { secs: 1500, total: 1500, running: false, mode: 'Focus' },
+    calc: { expr: '0' }, music: { playing: false, t: 0, track: 0 },
+    weather: { unit: 'C' }, notes: { text: '' }
+  };
+
+  steps = ['Reading your vibe…', 'Sketching the layout…', 'Wiring up the logic…', 'Pouring the glass…', 'Adding the shimmer…'];
+  tracks = [{ title: 'Velvet Static', artist: 'Lumen', dur: 184 }, { title: 'Glass Rain', artist: 'Aera', dur: 201 }, { title: 'Neon Tide', artist: 'Visor', dur: 166 }];
+  weatherData = { cond: 'Iridescent haze', loc: 'Nimbus Bay', temp: 21, hours: [['Now', 21], ['1p', 22], ['2p', 23], ['3p', 22], ['4p', 20], ['5p', 19]] };
+
+  THEMES = {
+    aurora: { '--text': '#f3f1ff', '--wall': 'radial-gradient(130% 110% at 18% 8%, #1b1636 0%, #0c0a18 62%)', '--b1': '#7c5cff', '--b2': '#22d3ee', '--b3': '#ff6ec4', '--b4': '#34d399', '--glass': 'rgba(255,255,255,0.10)', '--glass2': 'rgba(255,255,255,0.035)', '--bord': 'rgba(255,255,255,0.22)', '--hi': 'rgba(255,255,255,0.5)', '--accentA': '#9b7cff', '--accentB': '#36d6f0' },
+    aero: { '--text': '#eef6ff', '--wall': 'radial-gradient(130% 120% at 50% -20%, #15406e 0%, #0a1f3a 55%, #06101f 100%)', '--b1': '#4aa3ff', '--b2': '#6ad0ff', '--b3': '#67e8f9', '--b4': '#3b82f6', '--glass': 'rgba(180,220,255,0.16)', '--glass2': 'rgba(120,180,255,0.05)', '--bord': 'rgba(180,220,255,0.34)', '--hi': 'rgba(255,255,255,0.6)', '--accentA': '#4aa3ff', '--accentB': '#67e8f9' },
+    aqua: { '--text': '#f4f8ff', '--wall': 'radial-gradient(120% 110% at 30% 0%, #2a6fd6 0%, #1855b0 45%, #0e3a86 100%)', '--b1': '#5ea9ff', '--b2': '#8fd0ff', '--b3': '#c9e6ff', '--b4': '#3b82f6', '--glass': 'rgba(255,255,255,0.22)', '--glass2': 'rgba(255,255,255,0.08)', '--bord': 'rgba(255,255,255,0.45)', '--hi': 'rgba(255,255,255,0.75)', '--accentA': '#2a7fff', '--accentB': '#5ec8ff' },
+    noir: { '--text': '#f5eeff', '--wall': 'radial-gradient(120% 110% at 70% 10%, #160a1f 0%, #07060b 60%)', '--b1': '#e040fb', '--b2': '#18ffe0', '--b3': '#7c4dff', '--b4': '#ff2d78', '--glass': 'rgba(255,255,255,0.055)', '--glass2': 'rgba(255,255,255,0.02)', '--bord': 'rgba(255,255,255,0.16)', '--hi': 'rgba(255,255,255,0.28)', '--accentA': '#c451ff', '--accentB': '#18ffe0' }
+  };
+
+  catalog = {
+    pomodoro: { kind: 'pomodoro', name: 'FocusFlow', tag: 'Pomodoro timer', grad: 'linear-gradient(135deg,#ff6ec4,#ff9a6e)' },
+    calc: { kind: 'calc', name: 'Sum', tag: 'Calculator', grad: 'linear-gradient(135deg,#7c5cff,#22d3ee)' },
+    weather: { kind: 'weather', name: 'Skylight', tag: 'Weather', grad: 'linear-gradient(135deg,#36d6f0,#9b7cff)' },
+    notes: { kind: 'notes', name: 'Jotter', tag: 'Notes', grad: 'linear-gradient(135deg,#34d399,#22d3ee)' },
+    music: { kind: 'music', name: 'Lumen', tag: 'Lo-fi radio', grad: 'linear-gradient(135deg,#9b7cff,#ff6ec4)' }
+  };
+
+  componentDidMount() {
+    this.tick();
+    this.timer = setInterval(() => this.tick(), 1000);
+  }
+  componentWillUnmount() {
+    clearInterval(this.timer);
+    if (this.vibeInt) clearInterval(this.vibeInt);
+    window.removeEventListener('pointermove', this.onMove);
+    window.removeEventListener('pointerup', this.onUp);
+  }
+
+  tick() {
+    this.setState(st => {
+      const n = new Date();
+      const clock = String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0');
+      let pomo = st.pomo;
+      if (pomo.running && pomo.secs > 0) { pomo = { ...pomo, secs: pomo.secs - 1 }; if (pomo.secs === 0) pomo.running = false; }
+      let music = st.music;
+      if (music.playing) { const dur = this.tracks[music.track].dur; music = { ...music, t: (music.t + 1) % dur }; }
+      return { clock, pomo, music };
+    });
+  }
+
+  // ---- vibe flow ----
+  onQueryInput = (e) => this.setState({ query: e.target.value });
+  onQueryKey = (e) => { if (e.key === 'Enter') this.onVibe(); };
+  onVibe = () => {
+    const q = this.state.query.trim();
+    if (!q) return;
+    if (this.vibeInt) clearInterval(this.vibeInt);
+    this.vibeStart = Date.now();
+    this.setState({ phase: 'vibing', vibeProg: 0, stepText: this.steps[0], lastQuery: q });
+    this.vibeInt = setInterval(() => {
+      const prog = Math.min(1, (Date.now() - this.vibeStart) / 2700);
+      const idx = Math.min(this.steps.length - 1, Math.floor(prog * this.steps.length));
+      this.setState({ vibeProg: prog, stepText: this.steps[idx] });
+      if (prog >= 1) { clearInterval(this.vibeInt); this.vibeInt = null; this.setState({ phase: 'result', result: this.matchApp(q) }); }
+    }, 70);
+  };
+  onOpen = () => { const r = this.state.result; this.openApp(r.kind, r); this.setState({ phase: 'idle', query: '' }); };
+  onDiscard = () => this.setState({ phase: 'idle' });
+  suggestionClick(q) { this.setState({ query: q }, () => this.onVibe()); }
+
+  matchApp(q) {
+    const s = q.toLowerCase();
+    const has = (...k) => k.some(x => s.includes(x));
+    if (has('pomodoro', 'timer', 'focus', 'countdown')) return this.catalog.pomodoro;
+    if (has('calc', 'math', 'bill', 'split', 'tip', 'number')) return this.catalog.calc;
+    if (has('weather', 'forecast', 'temp', 'rain', 'sun', 'climate')) return this.catalog.weather;
+    if (has('note', 'todo', 'write', 'jot', 'memo', 'list')) return this.catalog.notes;
+    if (has('music', 'song', 'radio', 'lofi', 'lo-fi', 'play', 'sound', 'beat', 'audio')) return this.catalog.music;
+    const name = q.split(/\s+/).slice(0, 3).map(w => w ? w[0].toUpperCase() + w.slice(1) : '').join(' ');
+    return { kind: 'generic', name: name || 'Vibe App', tag: 'Custom app', grad: 'linear-gradient(135deg,#22d3ee,#7c5cff)', prompt: q };
+  }
+
+  // ---- window management ----
+  widthFor(k) { return { pomodoro: 300, calc: 288, weather: 340, notes: 340, music: 340, generic: 400 }[k] || 360; }
+  openApp(kind, app) {
+    app = app || this.catalog[kind] || { kind, name: 'App', tag: '', grad: 'linear-gradient(135deg,#22d3ee,#7c5cff)' };
+    this.setState(st => {
+      const exists = st.windows.find(w => w.kind === kind);
+      const installed = st.installed.includes(kind) ? st.installed : [...st.installed, kind];
+      this.ztop = (this.ztop || 200) + 1;
+      let windows;
+      if (exists) { windows = st.windows.map(w => w.kind === kind ? { ...w, z: this.ztop, min: false } : w); }
+      else {
+        const id = 'w' + (this.wid = (this.wid || 0) + 1);
+        const n = st.windows.length, vw = window.innerWidth, vh = window.innerHeight;
+        const wd = this.widthFor(kind);
+        const x = Math.max(16, Math.min(vw - wd - 16, vw / 2 - wd / 2 + 140 + n * 26));
+        const y = Math.max(58, vh / 2 - 200 + n * 22);
+        windows = [...st.windows, { id, kind, app, x, y, z: this.ztop, min: false }];
+      }
+      return { windows, installed, activeName: app.name };
+    });
+  }
+  focusWin = (id) => {
+    this.ztop = (this.ztop || 200) + 1;
+    this.setState(st => ({ windows: st.windows.map(w => w.id === id ? { ...w, z: this.ztop, min: false } : w), activeName: (st.windows.find(w => w.id === id) || {}).app?.name || st.activeName }));
+  };
+  closeWin = (id) => this.setState(st => ({ windows: st.windows.filter(w => w.id !== id) }));
+  minWin = (id) => this.setState(st => ({ windows: st.windows.map(w => w.id === id ? { ...w, min: true } : w) }));
+  startDrag(e, id) {
+    e.preventDefault();
+    this.focusWin(id);
+    const w = this.state.windows.find(x => x.id === id);
+    this.drag = { id, ox: e.clientX - w.x, oy: e.clientY - w.y };
+    window.addEventListener('pointermove', this.onMove);
+    window.addEventListener('pointerup', this.onUp);
+  }
+  onMove = (e) => {
+    if (!this.drag) return;
+    const { id, ox, oy } = this.drag;
+    const x = e.clientX - ox, y = Math.max(44, e.clientY - oy);
+    this.setState(st => ({ windows: st.windows.map(w => w.id === id ? { ...w, x, y } : w) }));
+  };
+  onUp = () => { this.drag = null; window.removeEventListener('pointermove', this.onMove); window.removeEventListener('pointerup', this.onUp); };
+
+  // ---- mini-app handlers ----
+  pomoSet(mode) { const m = { Focus: 1500, Break: 300 }[mode]; this.setState({ pomo: { mode, secs: m, total: m, running: false } }); }
+  pomoToggle() { this.setState(st => ({ pomo: { ...st.pomo, running: !st.pomo.running } })); }
+  pomoReset() { this.setState(st => ({ pomo: { ...st.pomo, secs: st.pomo.total, running: false } })); }
+  calcPress(k) {
+    this.setState(st => {
+      let e = st.calc.expr;
+      if (k === 'C') e = '0';
+      else if (k === '=') { try { const r = Function('return (' + e.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-') + ')')(); e = String(Math.round(r * 1e8) / 1e8); } catch (_) { e = 'Error'; } }
+      else if (k === '±') e = e.startsWith('-') ? e.slice(1) : '-' + e;
+      else if (k === '%') { const v = parseFloat(e); e = isNaN(v) ? '0' : String(v / 100); }
+      else { if (e === '0' || e === 'Error') e = '0123456789.'.includes(k) ? k : e + k; else e += k; }
+      return { calc: { expr: e } };
+    });
+  }
+  musicToggle() { this.setState(st => ({ music: { ...st.music, playing: !st.music.playing } })); }
+  musicNext() { this.setState(st => ({ music: { playing: true, t: 0, track: (st.music.track + 1) % this.tracks.length } })); }
+  musicPrev() { this.setState(st => ({ music: { playing: true, t: 0, track: (st.music.track + this.tracks.length - 1) % this.tracks.length } })); }
+  weatherToggle() { this.setState(st => ({ weather: { unit: st.weather.unit === 'C' ? 'F' : 'C' } })); }
+  notesChange(v) { this.setState({ notes: { text: v } }); }
+
+  // ---- icons ----
+  icon(kind, size) {
+    const h = React.createElement;
+    const grad = (this.catalog[kind] || {}).grad || 'linear-gradient(135deg,#22d3ee,#7c5cff)';
+    const sw = Math.max(1.6, size / 13);
+    const svg = (...c) => h('svg', { width: size * 0.56, height: size * 0.56, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round' }, ...c);
+    let g;
+    if (kind === 'pomodoro') g = svg(h('circle', { key: 1, cx: 12, cy: 13, r: 7 }), h('path', { key: 2, d: 'M12 13V9.5' }), h('path', { key: 3, d: 'M9.5 3.5h5' }));
+    else if (kind === 'calc') g = svg(h('rect', { key: 1, x: 5, y: 3, width: 14, height: 18, rx: 2 }), h('path', { key: 2, d: 'M8 7h8M8 12h0M12 12h0M16 12h0M8 16h0M12 16h0M16 16h0' }));
+    else if (kind === 'weather') g = svg(h('circle', { key: 1, cx: 9, cy: 9, r: 3 }), h('path', { key: 2, d: 'M16 19a3.5 3.5 0 0 0 .3-7A5 5 0 0 0 7 13.5' }));
+    else if (kind === 'notes') g = svg(h('path', { key: 1, d: 'M7 4h10v16H7z' }), h('path', { key: 2, d: 'M10 9h4M10 13h4M10 17h2' }));
+    else if (kind === 'music') g = svg(h('path', { key: 1, d: 'M9 18V6l10-2v12' }), h('circle', { key: 2, cx: 7, cy: 18, r: 2 }), h('circle', { key: 3, cx: 17, cy: 16, r: 2 }));
+    else if (kind === 'store') g = h('div', { style: { width: size * 0.42, height: size * 0.42, borderRadius: size * 0.1, background: 'rgba(255,255,255,0.95)', transform: 'rotate(45deg)', boxShadow: 'inset 0 0 0 ' + (size * 0.07) + 'px ' + 'transparent' } });
+    else g = svg(h('circle', { key: 1, cx: 12, cy: 12, r: 7 }), h('circle', { key: 2, cx: 12, cy: 12, r: 1.6, fill: '#fff' }));
+    return h('div', { style: { width: size, height: size, flex: '0 0 auto', borderRadius: size * 0.26, display: 'grid', placeItems: 'center', background: grad, boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.55), inset 0 -2px 5px rgba(0,0,0,0.25), 0 5px 14px rgba(0,0,0,0.32)' } }, g);
+  }
+
+  glass(r, extra) {
+    return Object.assign({ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--bord)', borderRadius: (r || 14) + 'px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25)' }, extra || {});
+  }
+
+  // ---- mini-app bodies ----
+  renderBody(w) {
+    const h = React.createElement, k = w.kind;
+    const wrap = (kids, pad) => h('div', { style: { padding: (pad == null ? 18 : pad) + 'px', color: 'var(--text)' } }, kids);
+    if (k === 'pomodoro') return wrap(this.pomoBody());
+    if (k === 'calc') return wrap(this.calcBody(), 14);
+    if (k === 'weather') return wrap(this.weatherBody());
+    if (k === 'notes') return wrap(this.notesBody(), 0);
+    if (k === 'music') return wrap(this.musicBody());
+    return wrap(this.genericBody(w));
+  }
+
+  pomoBody() {
+    const h = React.createElement, p = this.state.pomo;
+    const R = 56, C = 2 * Math.PI * R, frac = p.total ? p.secs / p.total : 1;
+    const mm = String(Math.floor(p.secs / 60)).padStart(2, '0'), ss = String(p.secs % 60).padStart(2, '0');
+    const pill = (m) => h('button', { key: m, onClick: () => this.pomoSet(m), style: { padding: '6px 14px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 620, color: p.mode === m ? '#fff' : 'var(--text)', background: p.mode === m ? 'linear-gradient(135deg,var(--accentA),var(--accentB))' : 'rgba(255,255,255,0.07)' } }, m);
+    return h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 } },
+      h('div', { style: { display: 'flex', gap: 8 } }, pill('Focus'), pill('Break')),
+      h('div', { style: { position: 'relative', width: 150, height: 150 } },
+        h('svg', { width: 150, height: 150, viewBox: '0 0 130 130' },
+          h('circle', { cx: 65, cy: 65, r: R, fill: 'none', stroke: 'rgba(255,255,255,0.1)', strokeWidth: 9 }),
+          h('circle', { cx: 65, cy: 65, r: R, fill: 'none', stroke: 'url(#pg)', strokeWidth: 9, strokeLinecap: 'round', strokeDasharray: C, strokeDashoffset: C * (1 - frac), transform: 'rotate(-90 65 65)', style: { transition: 'stroke-dashoffset .9s linear' } }),
+          h('defs', null, h('linearGradient', { id: 'pg', x1: 0, y1: 0, x2: 1, y2: 1 }, h('stop', { offset: 0, stopColor: 'var(--accentA)' }), h('stop', { offset: 1, stopColor: 'var(--accentB)' })))),
+        h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' } }, h('div', { style: { fontSize: 38, fontWeight: 300, fontVariantNumeric: 'tabular-nums', letterSpacing: '1px' } }, mm + ':' + ss))),
+      h('div', { style: { display: 'flex', gap: 10 } },
+        h('button', { onClick: () => this.pomoToggle(), style: { width: 110, height: 42, borderRadius: 12, border: 'none', cursor: 'pointer', color: '#fff', fontWeight: 660, fontSize: 14, background: 'linear-gradient(135deg,var(--accentA),var(--accentB))', boxShadow: '0 8px 20px rgba(124,92,255,0.35),inset 0 1px 0 rgba(255,255,255,0.5)' } }, p.running ? 'Pause' : 'Start'),
+        h('button', { onClick: () => this.pomoReset(), style: { width: 60, height: 42, borderRadius: 12, cursor: 'pointer', color: 'var(--text)', fontWeight: 560, fontSize: 13, border: '1px solid var(--bord)', background: 'rgba(255,255,255,0.05)' } }, 'Reset')));
+  }
+
+  calcBody() {
+    const h = React.createElement, e = this.state.calc.expr;
+    const rows = [['C', '±', '%', '÷'], ['7', '8', '9', '×'], ['4', '5', '6', '−'], ['1', '2', '3', '+'], ['0', '.', '=']];
+    const key = (kk) => {
+      const op = '÷×−+='.includes(kk), wide = kk === '0';
+      return h('button', { key: kk, onClick: () => this.calcPress(kk), style: { gridColumn: wide ? 'span 2' : 'span 1', height: 52, borderRadius: 13, border: 'none', cursor: 'pointer', fontSize: 18, fontWeight: 560, color: op ? '#fff' : 'var(--text)', background: kk === '=' ? 'linear-gradient(135deg,var(--accentA),var(--accentB))' : op ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)' } }, kk);
+    };
+    return h('div', null,
+      h('div', { style: { textAlign: 'right', fontSize: 40, fontWeight: 250, padding: '14px 10px 20px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' } }, e),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 } }, rows.flatMap(r => r.map(key))));
+  }
+
+  weatherBody() {
+    const h = React.createElement, u = this.state.weather.unit, d = this.weatherData;
+    const conv = (t) => u === 'C' ? t : Math.round(t * 9 / 5 + 32);
+    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+      h('div', { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' } },
+        h('div', null,
+          h('div', { style: { fontSize: 13, opacity: 0.7 } }, d.loc),
+          h('div', { style: { fontSize: 58, fontWeight: 200, lineHeight: 1, letterSpacing: '-2px' } }, conv(d.temp) + '°'),
+          h('div', { style: { fontSize: 13.5, opacity: 0.75 } }, d.cond)),
+        h('button', { onClick: () => this.weatherToggle(), style: { padding: '6px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 620, color: 'var(--text)', border: '1px solid var(--bord)', background: 'rgba(255,255,255,0.07)' } }, '°' + u)),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 6, padding: '14px 10px', borderRadius: 16, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bord)' } },
+        d.hours.map(([hr, t], i) => h('div', { key: i, style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 } },
+          h('div', { style: { fontSize: 11, opacity: 0.6 } }, hr),
+          h('div', { style: { width: 7, height: 7, borderRadius: '50%', background: 'linear-gradient(135deg,var(--accentA),var(--accentB))', boxShadow: '0 0 8px var(--accentB)' } }),
+          h('div', { style: { fontSize: 13, fontWeight: 560 } }, conv(t) + '°')))));
+  }
+
+  notesBody() {
+    const h = React.createElement, t = this.state.notes.text;
+    const words = t.trim() ? t.trim().split(/\s+/).length : 0;
+    return h('div', null,
+      h('textarea', { value: t, onChange: (e) => this.notesChange(e.target.value), placeholder: 'Start writing your vibe…', style: { width: '100%', height: 200, resize: 'none', border: 'none', outline: 'none', background: 'transparent', color: 'var(--text)', fontSize: 14.5, lineHeight: 1.6, padding: '16px 18px' } }),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '10px 18px', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: 11.5, opacity: 0.55 } },
+        h('span', null, words + ' words · ' + t.length + ' chars'), h('span', null, 'Autosaved ✓')));
+  }
+
+  musicBody() {
+    const h = React.createElement, m = this.state.music, tr = this.tracks[m.track], dur = tr.dur;
+    const fmt = (s) => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    const ctrl = (lbl, fn, big) => h('button', { key: lbl, onClick: fn, style: { width: big ? 54 : 42, height: big ? 54 : 42, borderRadius: '50%', border: 'none', cursor: 'pointer', fontSize: big ? 18 : 15, color: big ? '#fff' : 'var(--text)', display: 'grid', placeItems: 'center', background: big ? 'linear-gradient(135deg,var(--accentA),var(--accentB))' : 'rgba(255,255,255,0.08)', boxShadow: big ? '0 8px 20px rgba(124,92,255,0.4),inset 0 1px 0 rgba(255,255,255,0.5)' : 'inset 0 1px 0 rgba(255,255,255,0.2)' } }, lbl);
+    return h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 } },
+      h('div', { style: { width: 130, height: 130, borderRadius: 20, background: 'linear-gradient(135deg,#9b7cff,#ff6ec4,#36d6f0)', boxShadow: '0 14px 36px rgba(0,0,0,0.4),inset 0 2px 0 rgba(255,255,255,0.4)', position: 'relative', overflow: 'hidden' } },
+        h('div', { style: { position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 25%,rgba(255,255,255,0.5),transparent 55%)' } }),
+        m.playing ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', gap: 3, gridAutoFlow: 'column' } }, [0, 1, 2, 3].map(i => h('div', { key: i, style: { width: 5, height: 26, borderRadius: 4, background: 'rgba(255,255,255,0.85)', animation: 'vibePulse ' + (0.6 + i * 0.18) + 's ease-in-out infinite' } }))) : null),
+      h('div', { style: { textAlign: 'center' } },
+        h('div', { style: { fontSize: 16, fontWeight: 680 } }, tr.title),
+        h('div', { style: { fontSize: 12.5, opacity: 0.6 } }, tr.artist)),
+      h('div', { style: { width: '100%' } },
+        h('div', { style: { height: 5, borderRadius: 5, background: 'rgba(255,255,255,0.12)', overflow: 'hidden' } }, h('div', { style: { width: (m.t / dur * 100) + '%', height: '100%', borderRadius: 5, background: 'linear-gradient(90deg,var(--accentA),var(--accentB))', transition: 'width .9s linear' } })),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 11, opacity: 0.55, marginTop: 6, fontVariantNumeric: 'tabular-nums' } }, h('span', null, fmt(m.t)), h('span', null, fmt(dur)))),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 14 } }, ctrl('⏮', () => this.musicPrev()), ctrl(m.playing ? '❚❚' : '▶', () => this.musicToggle(), true), ctrl('⏭', () => this.musicNext())));
+  }
+
+  genericBody(w) {
+    const h = React.createElement;
+    const prompt = w.app.prompt || w.app.tag || 'your vibe';
+    const tile = (lbl, val) => h('div', { style: { flex: 1, padding: '14px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bord)' } },
+      h('div', { style: { fontSize: 23, fontWeight: 720, background: 'linear-gradient(135deg,var(--accentA),var(--accentB))', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' } }, val),
+      h('div', { style: { fontSize: 11.5, opacity: 0.6, marginTop: 2 } }, lbl));
+    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+      h('div', { style: { fontSize: 12, opacity: 0.55 } }, 'Generated from'),
+      h('div', { style: { fontSize: 15, fontWeight: 560, fontStyle: 'italic', lineHeight: 1.45 } }, '“' + prompt + '”'),
+      h('div', { style: { display: 'flex', gap: 12 } }, tile('Components', '12'), tile('Glass layers', '4')),
+      h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 6, height: 70, padding: '0 4px' } },
+        [40, 65, 50, 80, 60, 90, 72].map((v, i) => h('div', { key: i, style: { flex: 1, height: v + '%', borderRadius: '6px 6px 2px 2px', background: 'linear-gradient(180deg,var(--accentB),var(--accentA))', opacity: 0.85, boxShadow: '0 0 12px rgba(124,92,255,0.3)' } }))),
+      h('button', { style: { height: 44, borderRadius: 13, border: 'none', cursor: 'pointer', color: '#fff', fontWeight: 660, fontSize: 14.5, background: 'linear-gradient(135deg,var(--accentA),var(--accentB))', boxShadow: '0 8px 20px rgba(124,92,255,0.35),inset 0 1px 0 rgba(255,255,255,0.5)' } }, "It's alive ✦"));
+  }
+
+  renderVals() {
+    const st = this.state, h = React.createElement;
+    const tv = this.THEMES[st.theme];
+    const shellStyle = Object.assign({ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden', color: 'var(--text)', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif', background: 'var(--wall)' }, tv);
+
+    const blobPos = [{ t: '-12%', l: '-8%', s: 46 }, { t: '6%', l: '58%', s: 50 }, { t: '52%', l: '4%', s: 44 }, { t: '46%', l: '62%', s: 48 }];
+    const blobs = ['--b1', '--b2', '--b3', '--b4'].map((c, i) => ({ style: { position: 'absolute', top: blobPos[i].t, left: blobPos[i].l, width: blobPos[i].s + 'vw', height: blobPos[i].s + 'vw', borderRadius: '50%', background: 'radial-gradient(circle, var(' + c + ') 0%, transparent 68%)', filter: 'blur(60px)', opacity: 0.6, mixBlendMode: 'screen', animation: 'vibeFloat ' + (16 + i * 4) + 's ease-in-out infinite ' + (i * -3) + 's', zIndex: 0 } }));
+
+    const themeKeys = [['aurora', 'Aurora'], ['aero', 'Aero'], ['aqua', 'Aqua'], ['noir', 'Noir']];
+    const themes = themeKeys.map(([key, label]) => ({ label, onClick: () => this.setState({ theme: key }), style: { padding: '4px 11px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: st.theme === key ? '#fff' : 'var(--text)', background: st.theme === key ? 'linear-gradient(135deg,var(--accentA),var(--accentB))' : 'transparent', opacity: st.theme === key ? 1 : 0.62 } }));
+
+    const sugg = [['pomodoro timer with rain sounds', 'Pomodoro timer + rain', 'pomodoro'], ['split-the-bill calculator', 'Split-the-bill calc', 'calc'], ['aurora weather forecast', 'Aurora weather', 'weather'], ['minimal notes app', 'Minimal notes', 'notes'], ['lo-fi radio player', 'Lo-fi radio', 'music']];
+    const suggestions = sugg.map(([q, label, k]) => ({ label, onClick: () => this.suggestionClick(q), icon: h('span', { style: { display: 'inline-flex' } }, this.icon(k, 18)) }));
+
+    const r = st.result;
+    const result = r ? { name: r.name, tag: r.tag, icon: this.icon(r.kind, 54), prompt: '“' + (st.lastQuery || r.tag) + '”' } : null;
+
+    const windows = st.windows.map(w => ({
+      style: { position: 'absolute', left: w.x + 'px', top: w.y + 'px', width: 'min(94vw,' + this.widthFor(w.kind) + 'px)', zIndex: w.z, display: w.min ? 'none' : 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden', background: 'linear-gradient(160deg,var(--glass),var(--glass2))', backdropFilter: 'blur(32px) saturate(195%)', WebkitBackdropFilter: 'blur(32px) saturate(195%)', border: '1px solid var(--bord)', boxShadow: '0 34px 80px rgba(0,0,0,0.5), inset 0 1px 0 var(--hi)', animation: 'vibeWin .35s cubic-bezier(.2,.8,.2,1)' },
+      title: w.app.name, icon: this.icon(w.kind, 22), body: this.renderBody(w),
+      onDown: (e) => this.startDrag(e, w.id), onFocus: () => this.focusWin(w.id), onClose: () => this.closeWin(w.id), onMin: () => this.minWin(w.id)
+    }));
+
+    const dockItems = [{ kind: 'store', label: 'Vibe Store', onClick: () => { }, running: false }];
+    st.installed.forEach(k => dockItems.push({ kind: k, label: (this.catalog[k] || {}).name || k, onClick: () => this.openApp(k), running: !!st.windows.find(w => w.kind === k && !w.min) }));
+    const dock = dockItems.map(d => ({ label: d.label, onClick: d.onClick, running: d.running, icon: this.icon(d.kind, 46) }));
+
+    return {
+      shellStyle, blobs, themes, clock: st.clock, activeName: st.activeName,
+      query: st.query, onQueryInput: this.onQueryInput, onQueryKey: this.onQueryKey, onVibe: this.onVibe,
+      isIdle: st.phase === 'idle', isVibing: st.phase === 'vibing', isResult: st.phase === 'result',
+      suggestions, stepText: st.stepText, result, onOpen: this.onOpen, onDiscard: this.onDiscard,
+      vibeBarStyle: { width: Math.round(st.vibeProg * 100) + '%', height: '100%', borderRadius: '6px', background: 'linear-gradient(90deg,var(--accentA),var(--accentB))', transition: 'width .1s linear' },
+      windows, dock
+    };
+  }
+}
+</script>
+</body>
+</html>
