@@ -300,4 +300,90 @@ describe("VibeThemeProvider — custom themes (Phase 22)", () => {
       document.documentElement.style.getPropertyValue("--text"),
     ).toBe(CUSTOM_TEST_VARS["--text"]);
   });
+
+  // ── AURORA-FLASH tests (Phase 22 post-hydration flash defect) ────────────────
+  //
+  // Defect: on reload with an active custom theme, VibeThemeProvider's apply-effect
+  // fires before refreshCustomThemes() populates customThemesState (async IDB read).
+  // With customThemesState empty AND pendingCustomVarsRef null (fresh mount, no
+  // setTheme call), the previous code fell through to the Aurora fallback —
+  // overwriting the correct custom vars the FOUC inline script had applied.
+  //
+  // Fix: read the localStorage mirror ("vibe.customTheme.<name>") — the same key
+  // the FOUC script uses — as the gap fallback before falling back to Aurora.
+
+  // Full 12-var custom map matching SMOKE_CUSTOM_VARS in smoke.spec.ts.
+  const AURORA_FLASH_VARS: Record<string, string> = {
+    "--text":    "#003366",
+    "--wall":    "radial-gradient(130% 110% at 18% 8%, #001122 0%, #000a15 62%)",
+    "--b1":      "#0066ff",
+    "--b2":      "#0099ff",
+    "--b3":      "#00ccff",
+    "--b4":      "#0044ff",
+    "--glass":   "rgba(0,0,255,0.10)",
+    "--glass2":  "rgba(0,0,255,0.035)",
+    "--bord":    "rgba(0,0,255,0.22)",
+    "--hi":      "rgba(0,0,255,0.5)",
+    "--accentA": "#0033ff",
+    "--accentB": "#0088ff",
+  };
+
+  // AURORA-FLASH-01: apply-effect uses localStorage mirror — not Aurora — during
+  // the IDB-load gap on initial mount with an active custom theme.
+  // RED before fix (Aurora clobber); GREEN after fix (custom value preserved).
+  it("AURORA-FLASH-01: apply-effect uses localStorage mirror, not Aurora, during IDB gap on mount", () => {
+    // Seed both localStorage keys exactly as the FOUC script + readStoredCustomVars use.
+    localStorage.setItem(STORAGE_KEY_OS_THEME, "custom:foo");
+    localStorage.setItem("vibe.customTheme.foo", JSON.stringify(AURORA_FLASH_VARS));
+
+    // Empty settings store → refreshCustomThemes resolves with an empty Map,
+    // simulating the async IDB-load gap. pendingCustomVarsRef starts null (no
+    // setTheme has been called). This is exactly the gap that caused the Aurora flash.
+    const store = createRecordingSettingsStore();
+    renderWithServices(<Probe />, store);
+
+    // Synchronously after render — before/without awaiting the async IDB effect:
+    // --text must be the custom value from the localStorage mirror, NOT Aurora's "#f3f1ff".
+    expect(
+      document.documentElement.style.getPropertyValue("--text"),
+    ).toBe(AURORA_FLASH_VARS["--text"]);
+    expect(
+      document.documentElement.style.getPropertyValue("--text"),
+    ).not.toBe(VIBE_THEMES.aurora["--text"]);
+  });
+
+  // AURORA-FLASH-02: absent localStorage mirror still falls back to Aurora.
+  // Preserves the deleted-theme behavior: if the user deleted "foo" (mirror absent),
+  // Aurora is the correct fallback. GREEN in both RED and GREEN phases.
+  it("AURORA-FLASH-02: apply-effect falls back to Aurora when localStorage mirror is absent (deleted theme)", () => {
+    // Only the osTheme key is set; the mirror key is absent (deleted-theme scenario).
+    localStorage.setItem(STORAGE_KEY_OS_THEME, "custom:deleted");
+    // Intentionally no "vibe.customTheme.deleted" entry.
+
+    const store = createRecordingSettingsStore();
+    renderWithServices(<Probe />, store);
+
+    // With no vars available anywhere, Aurora is the correct and expected fallback.
+    expect(
+      document.documentElement.style.getPropertyValue("--text"),
+    ).toBe(VIBE_THEMES.aurora["--text"]);
+  });
+
+  // AURORA-FLASH-03: currentVars memo also uses the localStorage mirror during the
+  // IDB-load gap, so any frame opened during the gap gets the correct vars, not Aurora.
+  // RED before fix; GREEN after fix.
+  it("AURORA-FLASH-03: currentVars uses localStorage mirror, not Aurora, during IDB gap", () => {
+    localStorage.setItem(STORAGE_KEY_OS_THEME, "custom:foo");
+    localStorage.setItem("vibe.customTheme.foo", JSON.stringify(AURORA_FLASH_VARS));
+
+    const store = createRecordingSettingsStore();
+    const { getByTestId } = renderWithServices(<CustomProbe />, store);
+
+    // currentVars must reflect the localStorage mirror, not aurora, during the gap.
+    const vars = JSON.parse(
+      getByTestId("currentVars").textContent ?? "{}",
+    ) as Record<string, string>;
+    expect(vars["--text"]).toBe(AURORA_FLASH_VARS["--text"]);
+    expect(vars["--text"]).not.toBe(VIBE_THEMES.aurora["--text"]);
+  });
 });
