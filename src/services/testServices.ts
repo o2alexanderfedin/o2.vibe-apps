@@ -59,17 +59,34 @@ export const noPressureStorageSeam: StoragePressureSeam = {
  * (so `read` round-trips) and exposes a `writes` log + `writeCount` so IoC tests
  * can assert exactly how many times, and with what value, the provider mirrored
  * the choice — all offline, with no real IndexedDB.
+ *
+ * Phase 21 (PERSIST-01) additions: `rawWrites` and `rawWriteCount(key)` track
+ * per-key writeRaw calls so the debounce test in Plan 21-04 can assert that
+ * exactly 1 writeRaw("windowLayout", ...) call fired during a drag session.
  */
 export interface RecordingSettingsStore extends SettingsStore {
   /** Every value passed to `write`, in call order. */
   readonly writes: string[];
   /** Convenience: number of `write` calls so far. */
   readonly writeCount: number;
+  /**
+   * Ordered list of values written per raw key (Phase 21, PERSIST-01).
+   * The map key is the IDB settings key (e.g. "windowLayout"); the value is
+   * an ordered array of every string passed to writeRaw for that key.
+   */
+  readonly rawWrites: ReadonlyMap<string, readonly string[]>;
+  /**
+   * Convenience count of writeRaw calls for a specific key (Phase 21, PERSIST-01).
+   * Returns 0 for a key that has never been written.
+   */
+  rawWriteCount(key: string): number;
 }
 
 export function createRecordingSettingsStore(): RecordingSettingsStore {
   const writes: string[] = [];
   let current: string | null = null;
+  const rawWritesMap = new Map<string, string[]>();
+  const rawCurrentMap = new Map<string, string>();
   return {
     write(value: string): Promise<void> {
       writes.push(value);
@@ -79,11 +96,30 @@ export function createRecordingSettingsStore(): RecordingSettingsStore {
     read(): Promise<string | null> {
       return Promise.resolve(current);
     },
+    writeRaw(key: string, value: string): Promise<void> {
+      const existing = rawWritesMap.get(key);
+      if (existing) {
+        existing.push(value);
+      } else {
+        rawWritesMap.set(key, [value]);
+      }
+      rawCurrentMap.set(key, value);
+      return Promise.resolve();
+    },
+    readRaw(key: string): Promise<string | null> {
+      return Promise.resolve(rawCurrentMap.get(key) ?? null);
+    },
     get writes() {
       return writes;
     },
     get writeCount() {
       return writes.length;
+    },
+    get rawWrites(): ReadonlyMap<string, readonly string[]> {
+      return rawWritesMap;
+    },
+    rawWriteCount(key: string): number {
+      return rawWritesMap.get(key)?.length ?? 0;
     },
   };
 }

@@ -16,6 +16,18 @@ export interface SettingsStore {
   write(value: string): Promise<void>;
   /** Read the persisted value, or null when absent/unavailable. */
   read(): Promise<string | null>;
+  /**
+   * Persist an arbitrary string under an explicit IDB key (best-effort; never
+   * throws). Accepts a caller-supplied key so multiple preferences can share
+   * the same `settings` object store without a fixed SETTINGS_KEY constant.
+   * Phase 21 (PERSIST-01): used by the layout persistence seam.
+   */
+  writeRaw(key: string, value: string): Promise<void>;
+  /**
+   * Read the value stored under the given key, or null when absent.
+   * Mirrors writeRaw — the caller supplies the key, not a fixed constant.
+   */
+  readRaw(key: string): Promise<string | null>;
 }
 
 // Fixed neutral key under which the named-theme preference is stored inside the
@@ -52,6 +64,29 @@ export const realSettingsStore: SettingsStore = {
       // `record` is undefined when the key is absent. The schema now types
       // `value` as string, but IndexedDB is an untyped runtime boundary, so a
       // defensive typeof keeps the read path safe against stale/foreign data.
+      if (record && typeof record.value === "string") {
+        return record.value;
+      }
+    } catch {
+      // Best-effort mirror — fall through to null.
+    }
+    return null;
+  },
+  async writeRaw(key: string, value: string): Promise<void> {
+    try {
+      const db = await openRegistry();
+      const record: SettingRecord = { key, value };
+      await db.put("settings", record, key);
+      db.close();
+    } catch {
+      // Best-effort mirror — caller-supplied key, same swallow pattern as write().
+    }
+  },
+  async readRaw(key: string): Promise<string | null> {
+    try {
+      const db = await openRegistry();
+      const record = await db.get("settings", key);
+      db.close();
       if (record && typeof record.value === "string") {
         return record.value;
       }
