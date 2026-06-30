@@ -272,4 +272,23 @@ describe("SandboxFrame", () => {
 
     vi.useRealTimers();
   });
+
+  it("srcdoc memo does NOT rebuild when only themeVars changes (RESKIN-01 criterion #4)", () => {
+    const buildSrcdocSpy = vi.fn(() => "<html></html>");
+    const { utils } = makeUtils({ buildSrcdoc: buildSrcdocSpy });
+    const { rerender } = render(<SandboxFrame {...defaultProps(utils)} />);
+
+    // Initial render: memo runs once at mount.
+    expect(buildSrcdocSpy).toHaveBeenCalledTimes(1);
+
+    // Re-render with a new themeVars object (different reference, same transpiledJS).
+    const altVars = { ...THEME_VARS, "--text": "#reskin" };
+    rerender(
+      <SandboxFrame {...defaultProps(utils, { themeVars: altVars })} />,
+    );
+
+    // If themeVars were in the dep array, buildSrcdoc would have been called twice.
+    // After the fix it is still called only once (memo did not re-run).
+    expect(buildSrcdocSpy).toHaveBeenCalledTimes(1);
+  });
 });
