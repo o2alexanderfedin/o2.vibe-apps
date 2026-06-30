@@ -124,7 +124,9 @@ Plans:
   2. A Playwright test passes: with a custom theme active, a hard reload shows the custom theme colors on first paint — no Aurora (default) flash is visible before React hydrates
   3. A Playwright test passes: switching theme while an app is open does not reload the frame, and the new theme colors appear in the frame within one animation frame — in-frame state survives
   4. All three smoke tests run in the CI headless Chromium environment; no `human_needed` annotations remain for these three behaviors
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 25-01-PLAN.md — Fix nth(3) defect in frame-isolation.spec.ts + add e2e/smoke.spec.ts (SMOKE-01/02/03)
 
 ---
 
