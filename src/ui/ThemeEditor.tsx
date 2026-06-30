@@ -204,19 +204,29 @@ export function ThemeEditor({
       // Write theme vars under the new key.
       await settingsStore.writeRaw(idbKey, serialized);
 
-      // Update the enumeration index: remove the old name (rename path) and
-      // add the new name if not already present.
-      const indexRaw = await settingsStore.readRaw("customThemeIndex");
-      let names: string[] = indexRaw
-        ? (JSON.parse(indexRaw) as string[])
-        : [];
-      if (isRename) {
-        names = names.filter((n) => n !== editingName);
+      // WR-03: Wrap the index update so that if it fails (IDB error, storage
+      // full, corrupt index JSON) the theme data entry is rolled back, preventing
+      // an orphaned unreachable entry.
+      try {
+        // Update the enumeration index: remove the old name (rename path) and
+        // add the new name if not already present.
+        const indexRaw = await settingsStore.readRaw("customThemeIndex");
+        let names: string[] = indexRaw
+          ? (JSON.parse(indexRaw) as string[])
+          : [];
+        if (isRename) {
+          names = names.filter((n) => n !== editingName);
+        }
+        if (!names.includes(sanitized)) {
+          names.push(sanitized);
+        }
+        await settingsStore.writeRaw("customThemeIndex", JSON.stringify(names));
+      } catch {
+        // Index update failed — roll back the theme data write so no orphaned
+        // unreachable entry is left in IDB.
+        await settingsStore.deleteRaw(idbKey);
+        throw new Error("Theme index update failed");
       }
-      if (!names.includes(sanitized)) {
-        names.push(sanitized);
-      }
-      await settingsStore.writeRaw("customThemeIndex", JSON.stringify(names));
 
       // Mirror to localStorage for FOUC prevention on reload (best-effort).
       try {
