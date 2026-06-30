@@ -190,6 +190,10 @@ export function WindowManagerProvider({
       // one would advance it by 2 per call and create z-order gaps. Compute it
       // once here and close over the constant so the updater stays pure.
       const z = ++zTop;
+      // Hoist outside the updater — React Strict Mode double-invokes updaters;
+      // logging here (same location as the zTop mutation) fires exactly once per
+      // call, matching the zTop discipline already in place.
+      logger.info(`Window opened: ${id} (${appType})`);
 
       setWindows(prev => {
         const { x, y } = cascadePlace(prev);
@@ -214,7 +218,6 @@ export function WindowManagerProvider({
           ...prev.map(w => w.instanceId),
           instanceId,
         ]);
-        logger.info(`Window opened: ${id} (${appType})`);
         return [...prev, entry];
       });
 
@@ -240,6 +243,9 @@ export function WindowManagerProvider({
       if (position.z > zTop) {
         zTop = position.z;
       }
+      // Hoist outside the updater — same Strict-Mode discipline as open() and
+      // the zTop bump above: fires exactly once per openAt call.
+      logger.info(`Window opened: ${id} (${appType})`);
 
       setWindows(prev => {
         const entry: WindowEntry = {
@@ -263,7 +269,6 @@ export function WindowManagerProvider({
           ...prev.map(w => w.instanceId),
           instanceId,
         ]);
-        logger.info(`Window opened: ${id} (${appType})`);
         return [...prev, entry];
       });
 
@@ -412,13 +417,17 @@ export function WindowManagerProvider({
   }, []);
 
   const close = useCallback((id: string) => {
+    // Hoist outside the updater — same Strict-Mode discipline as open()/openAt():
+    // windowsRef.current is the live ref mirror so this lookup is synchronous and
+    // always reflects the current window list without a stale-closure round-trip.
+    const entryForLog = windowsRef.current.find(w => w.id === id);
+    if (entryForLog) {
+      // No explicit root teardown: the app renders in-tree, so removing the
+      // entry below lets React unmount the window's whole subtree.
+      logger.info(`Window closed: ${id} (${entryForLog.appType})`);
+    }
     setWindows(prev => {
       const entry = prev.find(w => w.id === id);
-      if (entry) {
-        // No explicit root teardown: the app renders in-tree, so removing the
-        // entry below lets React unmount the window's whole subtree.
-        logger.info(`Window closed: ${id} (${entry.appType})`);
-      }
       // Remove from both ref mirrors synchronously so isOpen()/
       // isOpenByInstance() return false immediately, before the next render.
       openIdsRef.current = new Set(
