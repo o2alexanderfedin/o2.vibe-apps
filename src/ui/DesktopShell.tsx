@@ -839,7 +839,12 @@ function DesktopShellInner() {
   // outside a VibeThemeProvider; absent a provider it falls back to the default
   // theme. Only consumed in iframe mode — inert under the in-tree default.
   const themeCtx = useContext(VibeThemeContext);
-  const currentThemeVars = VIBE_THEMES[themeCtx?.theme ?? "aurora"];
+  // Phase 22 (THEME-08): use currentVars from context so custom themes (whose
+  // names are not keys in VIBE_THEMES) still deliver a valid vars map to the
+  // SandboxFrame. Falls back to aurora when the context is absent or the custom
+  // theme has not yet loaded into state.
+  const currentThemeVars =
+    themeCtx?.currentVars ?? VIBE_THEMES["aurora"];
 
   return (
     <div
