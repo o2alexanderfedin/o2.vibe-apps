@@ -1,5 +1,17 @@
 # Milestones
 
+## v3.1 Polish & Hardening (Shipped: 2026-06-30)
+
+**Phases completed:** 3 phases, 3 plans, 5 tasks
+
+**Key accomplishments:**
+
+- useMemo dep array narrowed from [transpiledJS, themeVars] to [transpiledJS] in SandboxFrame, activating the latent THEME_PUSH re-skin path so theme switches preserve in-frame React state
+- 6 hardcoded rgba/hex literals replaced with 12-var theme contract in .launcher__input, .launcher__open-btn, and .launcher__chip — launcher interior now re-skins live on any theme switch
+- Headless Playwright smoke tests close Phase 21/22/23 human_needed gaps: SMOKE-01 proves IDB layout persistence, SMOKE-02 proves custom-theme seeding survives hard reload, SMOKE-03 proves THEME_PUSH re-skins frames without reloading (5/5 e2e + 936 unit + tsc clean)
+
+---
+
 ## v3.0 Trusted Desktop (Shipped: 2026-06-30)
 
 **Phases completed:** 4 phases, 18 plans, 10 tasks

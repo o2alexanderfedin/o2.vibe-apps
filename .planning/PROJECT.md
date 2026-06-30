@@ -14,24 +14,17 @@ There is no application server. The user supplies their own Anthropic API key (s
 
 This still holds after v1.0. The v1.1 delegated thin-shell refined *how* the loop runs (behavior is attached on first action rather than produced whole up front), but it did not shift what the loop must deliver: an interactive app that betrays no on-demand mechanic.
 
-## Shipped: v3.0 Trusted Desktop (2026-06-30)
+## Shipped: v3.1 Polish & Hardening (2026-06-30)
 
-Trusted desktop — 4 phases (19–22), 19/19 requirements satisfied, 935 tests green, audit PASSED, tagged `v3.0`. Each app body now runs in an opaque-origin `<iframe sandbox="allow-scripts">` the API key never enters; the `⋮` contextual menu lives in the host-owned titlebar (with maximize/snap/keyboard shortcuts); the desktop (window geometry, z-order, minimized state, open-app set) restores across reloads via additive `settings`-store keys; and users can create, name, edit, and save custom themes over the 12-var contract that join the menu-bar switcher and survive reload FOUC-free. See MILESTONES.md.
+Hardening milestone — 3 phases (23–25), 5/5 requirements satisfied, 936 unit tests + 5 e2e green, audit PASSED, tagged `v3.1`. Closed v3.0's tech debt and verification gaps with no new product surface: theme switches now re-skin open opaque frames **in place** via `THEME_PUSH` (no iframe reload — in-frame app state survives); the SearchLauncherPanel interior uses the theme-glass var recipe; and the v3.0 Phase 21/22 `human_needed` gaps are now covered by automated headless Playwright tests (reload restores the desktop, custom theme survives reload, live re-skin). See MILESTONES.md.
 
-## Prior: v2.0 Vibe OS (2026-06-26)
+## Prior: v3.0 Trusted Desktop (2026-06-30)
 
-Themeable multi-window desktop — 5 phases (14–18), 21/21 requirements satisfied, 727 tests green, tagged `v2.0`. The flat storefront became a draggable-glass-window OS with 4 switchable themes, a dock + menu bar, a search/launcher panel, and theme-aware app generation.
+Trusted desktop — 4 phases (19–22), 19/19 requirements satisfied, 935 tests green, tagged `v3.0`. Each app body runs in an opaque-origin `<iframe sandbox="allow-scripts">` the API key never enters; the `⋮` menu is host-owned chrome; the desktop restores across reloads; and users can author custom themes over the 12-var contract that survive reload FOUC-free.
 
-## Current Milestone: v3.1 Polish & Hardening
+## Next Milestone
 
-**Goal:** Close v3.0's tech debt and verification gaps — no new product surface; internal/UX hardening of what shipped in v3.0.
-
-**Target features:**
-- **In-place live iframe re-skin on theme switch** — make the latent `THEME_PUSH` path the live one so switching themes re-skins open opaque frames *without* reloading the iframe, preserving in-frame app state (today the srcdoc is memoized on `themeVars`, forcing a reload).
-- **Automated real-browser coverage** — Playwright tests (Playwright is already a devDependency from Phase 20) that close the Phase 21/22 `human_needed` gaps: a hard reload restores the desktop FOUC-free with the active (custom) theme applied on first paint, and a theme switch re-skins already-open frames live.
-- **SearchLauncherPanel theme-glass CSS pass** — finish the 6 interior classes (`.launcher__search`, `.launcher__input`, `.launcher__open-btn`, `.launcher__working`, `.launcher__chips`, `.launcher__chip`) left partially styled by the v2.0 audit-debt fix.
-
-**Key context:** Zero new runtime dependencies; hygiene lexicon gate, CSP allowlist, and the FOUC/CSP-hash invariant all stay in force. Phase numbering continues from 22 (v3.1 starts at Phase 23). No DB version bump.
+None planned yet. Run `/gsd-new-milestone` to scope the next one. Candidate directions: a v4.0 net-new feature milestone (app sharing/export, workspaces/multi-desktop, expanded gallery, collaboration), or the deferred **[G2] unified Intent contract** internal refactor.
 
 ## Requirements
 
@@ -159,6 +152,13 @@ Themeable multi-window desktop — 5 phases (14–18), 21/21 requirements satisf
 **Hygiene (v3.0)**
 - ✓ [HYGIENE-07] Lexicon gate extended to all new v3.0 surfaces (frame bridge, srcdoc, ThemeEditor) — v3.0
 
+**Polish & hardening (v3.1)**
+- ✓ [RESKIN-01] Theme switch re-skins open opaque frames in place via THEME_PUSH (srcdoc no longer depends on themeVars); in-frame state survives — v3.1
+- ✓ [POLISH-01] SearchLauncherPanel interior (6 classes) uses the theme-glass var recipe; no hardcoded literals — v3.1
+- ✓ [SMOKE-01] Playwright: hard reload restores open windows at saved geometry/z-order/minimized — v3.1
+- ✓ [SMOKE-02] Playwright: custom theme survives reload and applies (strict first-paint flash backed by Phase 22 FOUC unit test) — v3.1
+- ✓ [SMOKE-03] Playwright: theme switch re-skins the open frame live without reloading it — v3.1
+
 > **Deferred beyond v2.0:**
 > - **SEC-01 / SEC-02 / SEC-03** (general sandbox / iframe isolation hardening) — eligible for a later milestone.
 > - **HARD-01** (`<iframe sandbox>` isolation) — windowing layer designed for contained future adoption.
@@ -170,9 +170,7 @@ Themeable multi-window desktop — 5 phases (14–18), 21/21 requirements satisf
 <!-- Next-milestone candidates. All are hypotheses until shipped. -->
 
 - [ ] **[G2] Unified `Intent` contract** — collapse the parallel `routeModification` / `Modification` path into a single `Intent { operation, kind, contextBundle }` resolver. Internal refactor; no user-facing value yet.
-- [ ] **In-place live iframe re-skin on theme switch** — today a theme switch reloads the opaque frame (srcdoc memoized on `themeVars`), so stateful apps lose in-frame state; make the latent `THEME_PUSH` the live path by removing `themeVars` from the srcdoc memo deps. (v3.0 audit tech debt.)
-- [ ] **Real-browser smoke pass for v3.0** — manual confirmation of the Phase 21/22 `human_needed` checks: reload restores the desktop FOUC-free, and a theme switch re-skins open frames live.
-- [ ] **SearchLauncherPanel CSS polish** — 6 interior classes (`.launcher__search`, `.launcher__input`, `.launcher__open-btn`, `.launcher__working`, `.launcher__chips`, `.launcher__chip`) partially styled by audit-debt fix (commit `8f0e601`); a final theme-glass treatment pass remains.
+- [ ] **Strict pre-paint FOUC assertion (SMOKE-02 follow-up)** — the headless SMOKE-02 asserts the settled post-reload custom-theme state, not the literal pre-hydration first paint (Vite module-defer timing). A future enhancement could assert the first painted frame directly. Low priority — FOUC-script logic is unit-tested.
 
 ### Out of Scope
 
@@ -246,4 +244,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-30 — shipped milestone v3.0 Trusted Desktop (opaque-origin iframe isolation + window chrome + desktop persistence + theme editor); 19/19 requirements, 935 tests green, audit PASSED, `v3.0` tagged*
+*Last updated: 2026-06-30 — shipped milestone v3.1 Polish & Hardening (live in-place frame re-skin + launcher glass polish + real-browser Playwright smoke suite); 5/5 requirements, 936 unit + 5 e2e green, audit PASSED, `v3.1` tagged. Closed all v3.0 tech debt + human_needed gaps.*
