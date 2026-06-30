@@ -975,6 +975,7 @@ function DesktopShellInner() {
       <MenuBar
         activeName={activeWindow?.title ?? null}
         onOpenAccount={() => setKeyDialogOpen(true)}
+        onOpenThemeEditor={() => {}}
       />
       <Dock
         windows={windowManager.windows}
