@@ -2,7 +2,10 @@
 //
 // Pure function — no browser API, no imports, safe in JSDOM.
 // Used by ThemeEditor to show an advisory contrast warning when the
-// text/background ratio falls below the WCAG AA threshold of 4.5:1.
+// text-colour / background-colour (--text vs --wall) ratio falls below the
+// WCAG AA threshold of 4.5:1. Returns null for non-hex values (gradients,
+// rgba), which is the expected result for built-in themes whose --wall is a
+// radial-gradient — those themes intentionally suppress the warning.
 
 // Linearize a single sRGB channel value in [0..1] per WCAG 2.1 §1.4.3.
 function linearize(c: number): number {
