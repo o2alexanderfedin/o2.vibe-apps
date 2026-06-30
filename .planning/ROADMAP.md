@@ -190,8 +190,8 @@ Plans:
 **Plans**: 4 plans
 Plans:
 **Wave 1** *(parallel — no file overlap)*
-- [ ] 21-01-PLAN.md — Extend SettingsStore with writeRaw/readRaw + create layoutPersistence module (PERSIST-01)
-- [ ] 21-02-PLAN.md — Add openAt to WindowManagerValue for explicit-geometry restore (PERSIST-02)
+- [x] 21-01-PLAN.md — Extend SettingsStore with writeRaw/readRaw + create layoutPersistence module (PERSIST-01)
+- [x] 21-02-PLAN.md — Add openAt to WindowManagerValue for explicit-geometry restore (PERSIST-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 21-03-PLAN.md — Wire debounced save effect + mount-only restore effect in DesktopShell (PERSIST-01, PERSIST-02, PERSIST-03)
@@ -255,7 +255,7 @@ v1.0 → v1.1 → v2.0 → v3.0 phases execute in numeric order: 1 → … → 1
 | 18. Theme-Aware Generation | v2.0 | 4/4 | Complete | 2026-06-26 |
 | 19. Window Chrome & Menu Relocation | v3.0 | 4/4 | Complete   | 2026-06-27 |
 | 20. Opaque-Origin Frame Isolation | v3.0 | 0/5 | Planned | - |
-| 21. Desktop Persistence | v3.0 | 0/TBD | Not started | - |
+| 21. Desktop Persistence | v3.0 | 2/4 | In Progress|  |
 | 22. Theme Editor & Custom Themes | v3.0 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
