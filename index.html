@@ -16,7 +16,7 @@
          with buildSrcdoc's output (it fails CI on any bootstrap edit or React re-embed). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-eval' 'sha256-lbdl+fs2oGJ9PUrXbgMIg0tWiqh+N0sPwD/8u/894VQ=' 'sha256-9zmfBaDiPxLfoBYY7cQq+dgKP3xCifoa/z5T3EQToFY='; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.anthropic.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://api.frankfurter.dev; img-src 'self' data:; font-src 'self';"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' 'sha256-8Bk+Rf26odMnPYZdW1mOxS01ZIGzT+3Bfq5SfwHxtl0=' 'sha256-9zmfBaDiPxLfoBYY7cQq+dgKP3xCifoa/z5T3EQToFY='; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.anthropic.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://api.frankfurter.dev; img-src 'self' data:; font-src 'self';"
     />
     <script>
       (function () {
@@ -85,10 +85,29 @@
           }
         };
         var vibeStored = localStorage.getItem('marketplace.osTheme');
-        var vibeTheme = VIBE_THEMES[vibeStored] ? vibeStored : 'aurora';
-        var vars = VIBE_THEMES[vibeTheme];
-        for (var k in vars) {
-          document.documentElement.style.setProperty(k, vars[k]);
+        if (vibeStored && vibeStored.indexOf('custom:') === 0) {
+          var customName = vibeStored.slice(7);
+          try {
+            var raw = localStorage.getItem('vibe.customTheme.' + customName);
+            var customVars = raw ? JSON.parse(raw) : null;
+            if (customVars && typeof customVars === 'object') {
+              for (var k in customVars) {
+                document.documentElement.style.setProperty(k, customVars[k]);
+              }
+            } else {
+              var aurora = VIBE_THEMES['aurora'];
+              for (var k in aurora) { document.documentElement.style.setProperty(k, aurora[k]); }
+            }
+          } catch (_) {
+            var aurora = VIBE_THEMES['aurora'];
+            for (var k in aurora) { document.documentElement.style.setProperty(k, aurora[k]); }
+          }
+        } else {
+          var vibeTheme = VIBE_THEMES[vibeStored] ? vibeStored : 'aurora';
+          var vars = VIBE_THEMES[vibeTheme];
+          for (var k in vars) {
+            document.documentElement.style.setProperty(k, vars[k]);
+          }
         }
       })();
     </script>
