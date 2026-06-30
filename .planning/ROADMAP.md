@@ -233,7 +233,7 @@ Plans:
 - [x] 22-03-PLAN.md — ThemeEditor component: 12-var inputs, live preview, CSS.supports gate, save/delete, contrast warning (THEME-06, THEME-07, THEME-10)
 
 **Wave 3** *(blocked on Wave 2)*
-- [ ] 22-04-PLAN.md — ThemeSelector custom pills + MenuBar onOpenThemeEditor + DesktopShell line 842 fix + ThemeEditor wiring (THEME-07, THEME-08, THEME-09)
+- [x] 22-04-PLAN.md — ThemeSelector custom pills + MenuBar onOpenThemeEditor + DesktopShell line 842 fix + ThemeEditor wiring (THEME-07, THEME-08, THEME-09)
 
 **Wave 4** *(blocked on Wave 3 — phase gate)*
 - [ ] 22-05-PLAN.md — Extend hygiene.test.ts PHASE20_FILES + full tsc + vitest + vite build gate (THEME-06..10, HYGIENE-07)
@@ -269,7 +269,7 @@ v1.0 → v1.1 → v2.0 → v3.0 phases execute in numeric order: 1 → … → 1
 | 19. Window Chrome & Menu Relocation | v3.0 | 4/4 | Complete   | 2026-06-27 |
 | 20. Opaque-Origin Frame Isolation | v3.0 | 0/5 | Planned | - |
 | 21. Desktop Persistence | v3.0 | 4/4 | Complete   | 2026-06-30 |
-| 22. Theme Editor & Custom Themes | v3.0 | 3/5 | In Progress|  |
+| 22. Theme Editor & Custom Themes | v3.0 | 4/5 | In Progress|  |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
 **v1.1 Real & Robust shipped 2026-06-26 — 5 phases, 12/12 requirements satisfied, 552 tests green.**
