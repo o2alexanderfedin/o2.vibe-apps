@@ -36,10 +36,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RESKIN-01 | TBD | Pending |
-| SMOKE-01 | TBD | Pending |
-| SMOKE-02 | TBD | Pending |
-| SMOKE-03 | TBD | Pending |
-| POLISH-01 | TBD | Pending |
-
-*(Phase assignments filled in by the roadmapper.)*
+| RESKIN-01 | Phase 23 | Pending |
+| SMOKE-01 | Phase 25 | Pending |
+| SMOKE-02 | Phase 25 | Pending |
+| SMOKE-03 | Phase 25 | Pending |
+| POLISH-01 | Phase 24 | Pending |
