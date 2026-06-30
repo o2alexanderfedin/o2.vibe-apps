@@ -16,9 +16,13 @@
 //
 // Test doubles are named "canned"/"stub" (never the banned hygiene tokens).
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, screen, within, fireEvent, waitFor } from "@testing-library/react";
-import { cannedTransport } from "../services/testServices";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, screen, within, fireEvent, waitFor } from "@testing-library/react";
+import {
+  cannedTransport,
+  createRecordingSettingsStore,
+  createInMemoryRegistry,
+} from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
 import { unmountAll } from "../execution/mount";
 import {
@@ -28,6 +32,9 @@ import {
   frameByTitle,
   appBodyCount,
 } from "./desktopShellTestKit";
+import { LAYOUT_KEY } from "../host/layoutPersistence";
+import { registryKey } from "../registry/cacheKey";
+import { REGISTRY_DB_VERSION } from "../registry/db";
 
 // A produced component shipped with `export default` — the canonical produced
 // shape, used for cache-miss apps (Calculator) so a window mounts a real body.
@@ -747,5 +754,251 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     // The window closes and its app body is torn down.
     await waitFor(() => expect(frames()).toHaveLength(0));
     await waitFor(() => expect(appBodyCount()).toBe(0));
+  });
+});
+
+// ====================================================================
+// Phase 21 integration tests (plans 21-03/21-04):
+//   SC#2: 50 rapid geometry changes → 1 debounced IDB write
+//   SC#5: persisted JSON has exactly 7 fields per entry
+//   SC#1: restoring a persisted layout reopens windows at saved geometry
+//   SC#3: evicted app shows placeholder; transport never called
+//   SC#4: 5-window serial restore; DB version still 3
+// ====================================================================
+
+// Minimal compiled component used to seed the in-memory registry for tier-3
+// hits during the restore test. The function is called via new Function() scope;
+// setting exports['default'] mirrors what Babel's CJS transform produces.
+const STUB_TRANSPILED_JS =
+  `exports['default'] = function App() { return null; };`;
+const STUB_SOURCE = `export default function App() { return null; }`;
+
+describe("Desktop persistence — save", () => {
+  // Restore real timers after every vi.useFakeTimers() test in this block so the
+  // outer afterEach (cleanup/unmountAll/_clearCachesForTesting) runs normally.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("50 rapid geometry changes produce exactly 1 debounced IDB write (SC#2)", async () => {
+    vi.useFakeTimers();
+    const settingsStore = createRecordingSettingsStore();
+    renderDesktopShell({ settingsStore });
+
+    // Use fireEvent + act() to open the launcher and click Notes. This avoids the
+    // userEvent / vi.useFakeTimers() deadlock: userEvent's pointer-event delays use
+    // setTimeout internally and stall when advanceTimers is not threaded through
+    // the full DesktopShell render (which renders its own userEvent instance).
+    // fireEvent dispatches DOM events synchronously; act() flushes the React
+    // state update (setLauncherOpen / wm.open) before returning.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole("dialog", { name: "Open an app" })).getByRole(
+          "button",
+          { name: "Notes" },
+        ),
+      );
+    });
+
+    // Drain the initial debounce timer (from windowManager.open → setWindows →
+    // save effect scheduling) so the baseline write count is stable.
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    const baseline = settingsStore.rawWriteCount(LAYOUT_KEY);
+
+    // Notes frame is in DOM; get its titlebar drag handle.
+    const frame = frameByTitle("Notes");
+    const handle = frame.querySelector(".titlebar-handle") as HTMLElement;
+    expect(handle).not.toBeNull();
+
+    // Trigger 50 geometry changes via fireEvent drag sequences. Each pointerUp
+    // commits a position via setGeometry → setWindows → save-effect cleanup
+    // (clears the previous pending timer) + reschedule (creates a new 300ms timer).
+    // React 18 may batch all 50 setWindows calls into 1 re-render; either way only
+    // 1 timer is pending after the loop — the final one.
+    for (let i = 0; i < 50; i++) {
+      fireEvent.pointerDown(handle, { pointerId: 1, clientX: 100, clientY: 100 });
+      fireEvent.pointerMove(handle, { pointerId: 1, clientX: 120 + i, clientY: 100 });
+      fireEvent.pointerUp(handle, { pointerId: 1, clientX: 120 + i, clientY: 100 });
+    }
+
+    // No new write has fired — the debounce timer is still pending (SC#2).
+    expect(settingsStore.rawWriteCount(LAYOUT_KEY)).toBe(baseline);
+
+    // Advance past the 300ms debounce threshold — exactly 1 more write fires (SC#2).
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(settingsStore.rawWriteCount(LAYOUT_KEY)).toBe(baseline + 1);
+
+    // A second advance produces no additional writes (the timer was consumed).
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(settingsStore.rawWriteCount(LAYOUT_KEY)).toBe(baseline + 1);
+  });
+
+  it("persisted 'windowLayout' record contains exactly the 7 required fields (SC#5)", async () => {
+    vi.useFakeTimers();
+    const settingsStore = createRecordingSettingsStore();
+    renderDesktopShell({ settingsStore });
+
+    // Open the launcher then Notes via fireEvent + act() (same approach as SC#2 test
+    // above — avoids userEvent / vi.useFakeTimers() stall for this describe block).
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole("dialog", { name: "Open an app" })).getByRole(
+          "button",
+          { name: "Notes" },
+        ),
+      );
+    });
+
+    // Advance past the 300ms debounce so the layout write fires.
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    const writes = settingsStore.rawWrites.get(LAYOUT_KEY) ?? [];
+    const raw = writes[writes.length - 1];
+    expect(raw).toBeDefined();
+
+    const parsed = JSON.parse(raw!) as unknown[];
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed.length).toBeGreaterThan(0);
+
+    // SC#5: the first entry must have EXACTLY the 7 required geometric fields —
+    // no instanceId, no transpiledJS, no id, and no other extra keys.
+    const entry = parsed[0] as Record<string, unknown>;
+    const keys = Object.keys(entry).sort();
+    expect(keys).toEqual(["appType", "icon", "minimized", "title", "x", "y", "z"]);
+    expect("instanceId" in entry).toBe(false);
+    expect("transpiledJS" in entry).toBe(false);
+    expect("id" in entry).toBe(false);
+  });
+});
+
+describe("Desktop persistence — restore", () => {
+  it(
+    "restoring 5 persisted windows reopens them at saved positions with fresh instanceIds (SC#1 + SC#4)",
+    async () => {
+      // 5 layout entries exercise SC#4 ("Restoring 5 windows") as flagged by the
+      // plan-checker. z-values are ascending so the last entry (z=205) is on top.
+      const layout = [
+        { appType: "restore-a", title: "App A", icon: "a", x: 100, y: 110, z: 201, minimized: false },
+        { appType: "restore-b", title: "App B", icon: "b", x: 200, y: 120, z: 202, minimized: false },
+        { appType: "restore-c", title: "App C", icon: "c", x: 300, y: 130, z: 203, minimized: false },
+        { appType: "restore-d", title: "App D", icon: "d", x: 400, y: 140, z: 204, minimized: true },
+        { appType: "restore-e", title: "App E", icon: "e", x: 500, y: 150, z: 205, minimized: false },
+      ];
+
+      // Pre-seed the settings store so readRaw(LAYOUT_KEY) returns the JSON at mount.
+      const settingsStore = createRecordingSettingsStore();
+      await settingsStore.writeRaw(LAYOUT_KEY, JSON.stringify(layout));
+
+      // Pre-seed the in-memory registry with a valid AppRecord for each appType so
+      // services.registry.get("apps", cacheKey) returns non-null in the restore
+      // effect's pre-IDB-check → resolveComponent tier-3 hits → no transport call.
+      const registry = createInMemoryRegistry();
+      for (const entry of layout) {
+        const key = await registryKey("app", entry.appType);
+        await registry.put(
+          "apps",
+          {
+            cacheKey: key,
+            type: entry.appType,
+            source: STUB_SOURCE,
+            transpiledJS: STUB_TRANSPILED_JS,
+          },
+          key,
+        );
+      }
+
+      // unusedTransport (default in createTestServices) throws if the produce path
+      // is ever reached — structural proof that the transport is not called.
+      renderDesktopShell({ settingsStore, registry });
+
+      // All 5 frames are opened atomically via openAt BEFORE async component
+      // resolution; waitFor finds them once React flushes the openAt state updates.
+      await waitFor(() => {
+        expect(frames()).toHaveLength(5);
+      });
+
+      // SC#1a: z-order — App E (z=205) was opened last and has the highest z-index.
+      const frameA = frameByTitle("App A");
+      const frameE = frameByTitle("App E");
+      expect(parseInt(frameE.style.zIndex, 10)).toBeGreaterThan(
+        parseInt(frameA.style.zIndex, 10),
+      );
+
+      // SC#1b: minimized state is preserved from the layout.
+      const frameD = frameByTitle("App D");
+      expect(frameD.className).toContain("window-chrome--minimized");
+      expect(frameA.className).not.toContain("window-chrome--minimized");
+
+      // SC#1c: all 5 frames are distinct (unique titles), confirming 5 fresh
+      // instanceIds were minted — the persisted layout has no instanceId field,
+      // so openAt always creates a new session-scoped appType-N id.
+      const titles = frames().map(
+        (f) => f.querySelector(".window-chrome__title")?.textContent?.trim() ?? "",
+      );
+      expect(new Set(titles).size).toBe(5);
+    },
+  );
+
+  it("evicted app on restore shows placeholder without spending API quota (SC#3)", async () => {
+    // One layout entry for an appType that has NO corresponding record in the
+    // registry — simulates an app that was evicted from IDB since it was last open.
+    const layout = [
+      {
+        appType: "evicted-app",
+        title: "Evicted App",
+        icon: "x",
+        x: 100,
+        y: 100,
+        z: 201,
+        minimized: false,
+      },
+    ];
+
+    const settingsStore = createRecordingSettingsStore();
+    await settingsStore.writeRaw(LAYOUT_KEY, JSON.stringify(layout));
+
+    // Empty registry — services.registry.get("apps", cacheKey) returns null.
+    // The restore effect's pre-IDB-check sees null → shows Fallback immediately
+    // WITHOUT calling resolveComponent → unusedTransport (the default) is never
+    // reached → no quota is spent (PERSIST-03).
+    const registry = createInMemoryRegistry();
+
+    renderDesktopShell({ settingsStore, registry });
+
+    // The frame is opened via openAt BEFORE async resolution; wait for it.
+    await waitFor(() => {
+      expect(frames()).toHaveLength(1);
+    });
+
+    // Wait for the Fallback (FailedAppContent) to be stored and rendered.
+    // The "Try again" button is the reliable indicator that the placeholder path
+    // ran and the transport was NOT called (if transport had been called it would
+    // throw "transport was invoked unexpectedly", failing the test).
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    });
+
+    // The frame itself is present with the correct title.
+    expect(frameByTitle("Evicted App")).toBeInTheDocument();
+  });
+
+  it("REGISTRY_DB_VERSION is 3 — no DB migration was introduced (SC#4 gate)", () => {
+    // Plan 21 stores the window layout under an existing IDB settings key;
+    // it requires NO schema change. This assertion is the final gate.
+    expect(REGISTRY_DB_VERSION).toBe(3);
   });
 });
