@@ -97,3 +97,69 @@ describe("RecordingSettingsStore raw methods", () => {
     expect(await store.read()).toBe("light");
   });
 });
+
+describe("realSettingsStore deleteRaw", () => {
+  it("deleteRaw resolves without throwing", async () => {
+    await realSettingsStore.writeRaw("custom:testTheme", '{"--text":"#fff"}');
+    await expect(
+      realSettingsStore.deleteRaw("custom:testTheme"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("deleteRaw removes the key so readRaw returns null after delete", async () => {
+    await realSettingsStore.writeRaw("custom:deleteTest", '{"--text":"#abc"}');
+    expect(await realSettingsStore.readRaw("custom:deleteTest")).not.toBeNull();
+    await realSettingsStore.deleteRaw("custom:deleteTest");
+    expect(await realSettingsStore.readRaw("custom:deleteTest")).toBeNull();
+  });
+
+  it("deleteRaw on an absent key resolves without throwing", async () => {
+    await expect(
+      realSettingsStore.deleteRaw("custom:neverWritten__test"),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("RecordingSettingsStore deleteRaw", () => {
+  it("readRaw returns null after deleteRaw for the same key", async () => {
+    const store: RecordingSettingsStore = createRecordingSettingsStore();
+    await store.writeRaw("custom:foo", '{"--text":"#fff"}');
+    await store.deleteRaw("custom:foo");
+    expect(await store.readRaw("custom:foo")).toBeNull();
+  });
+
+  it("rawDeletes includes the key after deleteRaw", async () => {
+    const store: RecordingSettingsStore = createRecordingSettingsStore();
+    await store.writeRaw("custom:foo", "{}");
+    await store.deleteRaw("custom:foo");
+    expect(store.rawDeletes.includes("custom:foo")).toBe(true);
+  });
+
+  it("rawDeletes is a snapshot — new deletes after snapshot do not appear in it", async () => {
+    const store: RecordingSettingsStore = createRecordingSettingsStore();
+    await store.writeRaw("custom:foo", "{}");
+    await store.deleteRaw("custom:foo");
+    const snapshot = store.rawDeletes;
+    await store.writeRaw("custom:bar", "{}");
+    await store.deleteRaw("custom:bar");
+    expect(snapshot.includes("custom:foo")).toBe(true);
+    expect(snapshot.includes("custom:bar")).toBe(false);
+  });
+
+  it("rawDeletes preserves duplicates — array semantics, not Set", async () => {
+    const store: RecordingSettingsStore = createRecordingSettingsStore();
+    await store.writeRaw("custom:foo", "{}");
+    await store.deleteRaw("custom:foo");
+    await store.writeRaw("custom:foo", "{}");
+    await store.deleteRaw("custom:foo");
+    // Array preserves both calls so tests can detect accidental double-deletes.
+    expect(store.rawDeletes.length).toBe(2);
+    expect(store.rawDeletes.filter((k) => k === "custom:foo").length).toBe(2);
+  });
+
+  it("rawDeletes does not include keys that were only written, not deleted", async () => {
+    const store: RecordingSettingsStore = createRecordingSettingsStore();
+    await store.writeRaw("custom:written-only", "{}");
+    expect(store.rawDeletes.includes("custom:written-only")).toBe(false);
+  });
+});

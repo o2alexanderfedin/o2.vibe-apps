@@ -8,13 +8,18 @@
 
 import { useEffect, useState } from "react";
 import { User } from "lucide-react";
-import { ThemeSelector } from "./ThemeSelector";
+import { ThemeSelector, type ThemeSelectorProps } from "./ThemeSelector";
 
 export interface MenuBarProps {
   /** Title of the currently focused window; null when no window is active. */
   activeName: string | null;
   /** Opens the KeyDialog (SHELL-03 — account/key management). */
   onOpenAccount: () => void;
+  /**
+   * Opens the ThemeEditor (Phase 22, THEME-06/07). Passed through to
+   * ThemeSelector's Duplicate/Edit/New Theme entry points.
+   */
+  onOpenThemeEditor: ThemeSelectorProps["onOpenThemeEditor"];
 }
 
 // 24-hour HH:MM, locale-aware. Module-local so it is trivially unit-testable
@@ -27,7 +32,7 @@ function formatClock(d: Date): string {
   });
 }
 
-export function MenuBar({ activeName, onOpenAccount }: MenuBarProps) {
+export function MenuBar({ activeName, onOpenAccount, onOpenThemeEditor }: MenuBarProps) {
   const [clock, setClock] = useState(() => formatClock(new Date()));
 
   useEffect(() => {
@@ -44,7 +49,7 @@ export function MenuBar({ activeName, onOpenAccount }: MenuBarProps) {
         )}
       </div>
       <div className="menu-bar__right">
-        <ThemeSelector />
+        <ThemeSelector onOpenThemeEditor={onOpenThemeEditor} />
         <button
           type="button"
           className="app-bar__icon-btn"

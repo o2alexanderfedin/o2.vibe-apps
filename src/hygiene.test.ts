@@ -242,11 +242,13 @@ describe("sanitize boundary: model-supplied names cannot leak banned tokens to v
 // ---------------------------------------------------------------------------
 
 // The Phase 20 source files whose user-visible copy this gate protects.
+// Extended in Phase 22 (plan 22-05) to cover ThemeEditor.tsx.
 const PHASE20_FILES = [
   "src/execution/frameBridge.ts",
   "src/execution/frameMount.ts",
   "src/ui/SandboxFrame.tsx",
   "src/ui/SandboxFrame.css",
+  "src/ui/ThemeEditor.tsx",
 ];
 
 const ISOLATION_WORDS = /\b(iframe|sandbox|isolation)\b/i;
