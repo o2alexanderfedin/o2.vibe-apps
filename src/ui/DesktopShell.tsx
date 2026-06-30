@@ -264,6 +264,13 @@ function DesktopShellInner() {
   // map (CR-02 / WR-01).
   const transpiledMapRef = useRef(transpiledMap);
   transpiledMapRef.current = transpiledMap;
+  // Gates the save effect so it cannot write before the mount-only restore has
+  // finished reading. Without this a slow IDB read lets the initial save-effect
+  // timer fire first and clobber the stored layout with "[]" (WR-04, PERSIST-01).
+  // Set to true by restoreDesktop() after all openAt calls complete (including
+  // the early-return paths for empty/missing data, so a fresh desktop still
+  // saves normally after the first user change).
+  const restoredRef = useRef(false);
 
   // Tear down a window: evict its live component, route close through the
   // manager (which unmounts the single root), and drop its body/position.
@@ -678,9 +685,17 @@ function DesktopShellInner() {
   // Debounced layout save (Phase 21, PERSIST-01): any change to the windows
   // array (open, close, move, focus, minimize) starts a 300ms trailing timer;
   // the last change in a quiet period wins — no write fires during an active
-  // drag. The write-back after mount restore is idempotent (mirrors the
-  // just-loaded layout). Mirrors the MenuBar clock's setInterval idiom.
+  // drag. Mirrors the MenuBar clock's setInterval idiom.
+  //
+  // WR-04 race guard: skip ALL writes until the mount-only restore has set
+  // restoredRef.current = true. On slow storage the 300ms timer can fire before
+  // the async readRaw resolves, clobbering the persisted layout with "[]". The
+  // ref costs nothing on every subsequent call (the guard is a single boolean
+  // branch) and is set in all three code paths of restoreDesktop() — including
+  // the empty/missing-data early-return paths — so a fresh desktop (no saved
+  // layout) still enables saves normally after the first user-driven change.
   useEffect(() => {
+    if (!restoredRef.current) return; // restore not yet complete — skip write
     const timer = setTimeout(() => {
       void services.settingsStore.writeRaw(
         LAYOUT_KEY,
@@ -706,10 +721,20 @@ function DesktopShellInner() {
   useEffect(() => {
     async function restoreDesktop(): Promise<void> {
       const raw = await services.settingsStore.readRaw(LAYOUT_KEY);
-      if (!raw) return; // nothing persisted — fresh session
+      if (!raw) {
+        // Nothing persisted — fresh session. Release the save gate so the first
+        // user-driven window change is saved normally (WR-04).
+        restoredRef.current = true;
+        return;
+      }
 
       const layout = deserializeLayout(raw);
-      if (layout.length === 0) return; // empty or corrupt — fresh start
+      if (layout.length === 0) {
+        // Empty or corrupt data — treat as a fresh start. Same gate release so
+        // a fresh desktop still saves after the first window open (WR-04).
+        restoredRef.current = true;
+        return;
+      }
 
       // Sort ascending so the last-opened window has the highest z and
       // appears on top, matching the visual order at save time.
@@ -730,6 +755,12 @@ function DesktopShellInner() {
         );
         opened.push({ appType: entry.appType, title: entry.title, instanceId });
       }
+
+      // All openAt calls are synchronously complete — release the save gate.
+      // The next windows-state change (from storeComponent below, or from a user
+      // action) will trigger the save effect with restoredRef.current === true,
+      // so saves correctly reflect the restored layout (WR-04).
+      restoredRef.current = true;
 
       // Resolve components serially (1 concurrent). Cache hits (tiers 1-3)
       // never reach tryAcquire(); evicted or unresolvable apps fall through
