@@ -59,7 +59,7 @@ All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727
 
 - [x] **Phase 19: Window Chrome & Menu Relocation** - Relocate the `⋮` contextual menu into the window titlebar (right-aligned), add maximize/snap/keyboard shortcuts; hard prerequisite for all iframe work. (completed 2026-06-27)
 - [x] **Phase 20: Opaque-Origin Frame Isolation** - Convert each app body to `<iframe sandbox="allow-scripts">` brokered by `postMessage`; the API key never enters the frame; 827 tests green via in-tree fallback + Playwright proves the real round-trip. (completed 2026-06-27)
-- [ ] **Phase 21: Desktop Persistence** - Restore window geometry, z-order, open-app set, and minimized state across reloads using additive keys in the existing IDB `settings` store; no DB version bump.
+- [x] **Phase 21: Desktop Persistence** - Restore window geometry, z-order, open-app set, and minimized state across reloads using additive keys in the existing IDB `settings` store; no DB version bump. (completed 2026-06-30)
 - [ ] **Phase 22: Theme Editor & Custom Themes** - Create, name, edit, and save custom themes over the 12-var contract; custom themes appear in the menu-bar switcher and survive reload FOUC-free.
 
 ## Phase Details
@@ -187,7 +187,17 @@ Plans:
   - **Multi-tab IDB conflict** — two tabs open during reload may write conflicting `"windowLayout"` values. Last-write-wins via IDB transaction ordering is acceptable for v3.0; document as known multi-tab behavior, not a bug.
   - **No in-app state persisted** — scroll position, form values, and any runtime state of generated apps are intentionally not saved; generated apps have no stable serialization contract. A user returning to an app sees its initial state.
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1** *(parallel — no file overlap)*
+- [x] 21-01-PLAN.md — Extend SettingsStore with writeRaw/readRaw + create layoutPersistence module (PERSIST-01)
+- [x] 21-02-PLAN.md — Add openAt to WindowManagerValue for explicit-geometry restore (PERSIST-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 21-03-PLAN.md — Wire debounced save effect + mount-only restore effect in DesktopShell (PERSIST-01, PERSIST-02, PERSIST-03)
+
+**Wave 3** *(blocked on Wave 2 — phase gate)*
+- [x] 21-04-PLAN.md — Test suite: debounce, restore, eviction, shape + full suite/hygiene/build gate (PERSIST-01, PERSIST-02, PERSIST-03)
 
 ---
 
@@ -245,7 +255,7 @@ v1.0 → v1.1 → v2.0 → v3.0 phases execute in numeric order: 1 → … → 1
 | 18. Theme-Aware Generation | v2.0 | 4/4 | Complete | 2026-06-26 |
 | 19. Window Chrome & Menu Relocation | v3.0 | 4/4 | Complete   | 2026-06-27 |
 | 20. Opaque-Origin Frame Isolation | v3.0 | 0/5 | Planned | - |
-| 21. Desktop Persistence | v3.0 | 0/TBD | Not started | - |
+| 21. Desktop Persistence | v3.0 | 4/4 | Complete   | 2026-06-30 |
 | 22. Theme Editor & Custom Themes | v3.0 | 0/TBD | Not started | - |
 
 **v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**

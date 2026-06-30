@@ -25,6 +25,11 @@ import {
 } from "./useWindowManager";
 import { resolveOpenApp } from "../intent/resolver";
 import {
+  LAYOUT_KEY,
+  serializeLayout,
+  deserializeLayout,
+} from "../host/layoutPersistence";
+import {
   resolveComponent,
   evictLiveComponent,
   deriveDisplayName,
@@ -51,6 +56,11 @@ import { VibeThemeContext, VIBE_THEMES } from "./VibeThemeProvider";
 //   DOCK_RESERVE → .dock bottom:16px + padding 9px*2 + icon 52px ≈ 88px reserved
 const MENU_BAR_H = 40;
 const DOCK_RESERVE = 88;
+
+// Trailing debounce for IDB layout persistence (Phase 21, PERSIST-01): only
+// the final geometry state in a 300ms quiet period reaches the settings store,
+// so dragging a window never produces a write-storm.
+const LAYOUT_SAVE_DEBOUNCE_MS = 300;
 
 // Snap-to-half (Phase 19, plan 19-03, CHROME-03). The SNAP_THRESHOLD that drives
 // both the during-drag drop-zone preview (WindowFrame) and the on-release commit
@@ -254,6 +264,13 @@ function DesktopShellInner() {
   // map (CR-02 / WR-01).
   const transpiledMapRef = useRef(transpiledMap);
   transpiledMapRef.current = transpiledMap;
+  // Gates the save effect so it cannot write before the mount-only restore has
+  // finished reading. Without this a slow IDB read lets the initial save-effect
+  // timer fire first and clobber the stored layout with "[]" (WR-04, PERSIST-01).
+  // Set to true by restoreDesktop() after all openAt calls complete (including
+  // the early-return paths for empty/missing data, so a fresh desktop still
+  // saves normally after the first user change).
+  const restoredRef = useRef(false);
 
   // Tear down a window: evict its live component, route close through the
   // manager (which unmounts the single root), and drop its body/position.
@@ -664,6 +681,150 @@ function DesktopShellInner() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleClose]);
+
+  // Debounced layout save (Phase 21, PERSIST-01): any change to the windows
+  // array (open, close, move, focus, minimize) starts a 300ms trailing timer;
+  // the last change in a quiet period wins — no write fires during an active
+  // drag. Mirrors the MenuBar clock's setInterval idiom.
+  //
+  // WR-04 race guard: skip ALL writes until the mount-only restore has set
+  // restoredRef.current = true. On slow storage the 300ms timer can fire before
+  // the async readRaw resolves, clobbering the persisted layout with "[]". The
+  // ref costs nothing on every subsequent call (the guard is a single boolean
+  // branch) and is set in all three code paths of restoreDesktop() — including
+  // the empty/missing-data early-return paths — so a fresh desktop (no saved
+  // layout) still enables saves normally after the first user-driven change.
+  useEffect(() => {
+    if (!restoredRef.current) return; // restore not yet complete — skip write
+    const timer = setTimeout(() => {
+      void services.settingsStore.writeRaw(
+        LAYOUT_KEY,
+        serializeLayout(windowManager.windows),
+      );
+    }, LAYOUT_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [windowManager.windows, services.settingsStore]);
+
+  // Mount-only restore (Phase 21, PERSIST-02/03): reads the persisted layout
+  // from IDB and re-opens all saved windows at their exact geometry via
+  // openAt, sorted by z ascending so the highest-z window is opened last and
+  // appears on top. Then resolves each component serially (1 concurrent).
+  //
+  // PERSIST-03 critical path: services.registry.get("apps", cacheKey) is
+  // checked BEFORE calling resolveComponent. A null result means the app was
+  // evicted from IDB — we show the placeholder immediately without reaching
+  // tryAcquire() at loader.ts:320 (no quota spend on evicted apps).
+  //
+  // Empty dep array is intentional: this runs once on mount and reads live
+  // refs (windowManagerRef, handleOpenRef) rather than stale closure values —
+  // the same discipline used by the keyboard-shortcut effect above.
+  useEffect(() => {
+    async function restoreDesktop(): Promise<void> {
+      const raw = await services.settingsStore.readRaw(LAYOUT_KEY);
+      if (!raw) {
+        // Nothing persisted — fresh session. Release the save gate so the first
+        // user-driven window change is saved normally (WR-04).
+        restoredRef.current = true;
+        return;
+      }
+
+      const layout = deserializeLayout(raw);
+      if (layout.length === 0) {
+        // Empty or corrupt data — treat as a fresh start. Same gate release so
+        // a fresh desktop still saves after the first window open (WR-04).
+        restoredRef.current = true;
+        return;
+      }
+
+      // Sort ascending so the last-opened window has the highest z and
+      // appears on top, matching the visual order at save time.
+      const sorted = [...layout].sort((a, b) => a.z - b.z);
+
+      // Open all windows atomically before async resolution so frames appear
+      // immediately at their persisted geometry with no cascade flash.
+      const opened: Array<{
+        appType: string;
+        title: string;
+        instanceId: string;
+      }> = [];
+      for (const entry of sorted) {
+        const instanceId = windowManagerRef.current.openAt(
+          entry.appType,
+          { title: entry.title, icon: entry.icon },
+          { x: entry.x, y: entry.y, z: entry.z, minimized: entry.minimized },
+        );
+        opened.push({ appType: entry.appType, title: entry.title, instanceId });
+      }
+
+      // All openAt calls are synchronously complete — release the save gate.
+      // The next windows-state change (from storeComponent below, or from a user
+      // action) will trigger the save effect with restoredRef.current === true,
+      // so saves correctly reflect the restored layout (WR-04).
+      restoredRef.current = true;
+
+      // Resolve components serially (1 concurrent). Cache hits (tiers 1-3)
+      // never reach tryAcquire(); evicted or unresolvable apps fall through
+      // to the placeholder path (PERSIST-03).
+      for (const { appType, title, instanceId } of opened) {
+        // Guard: window may have been closed before resolution completed.
+        if (!windowManagerRef.current.isOpenByInstance(instanceId)) continue;
+        try {
+          const intent = await resolveOpenApp(appType);
+          // PERSIST-03: check IDB before calling resolveComponent so that
+          // an evicted app never reaches tryAcquire() in loader.ts:320.
+          const stored = await services.registry.get("apps", intent.cacheKey);
+          if (stored != null) {
+            // App is cached in IDB — resolve through the three-tier loader.
+            const Component = await resolveComponent(
+              instanceId,
+              appType,
+              intent.cacheKey,
+              services,
+            );
+            if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
+              evictLiveComponent(instanceId);
+              continue;
+            }
+            storeComponent(instanceId, Component);
+          } else {
+            // App evicted from IDB — show placeholder without spending quota.
+            if (!windowManagerRef.current.isOpenByInstance(instanceId)) continue;
+            const Fallback = makeFallback({
+              needsAuth: false,
+              throttled: false,
+              onConnect: () => setKeyDialogOpen(true),
+              onRetry: () => {
+                const wid = windowManagerRef.current.windows.find(
+                  (w) => w.instanceId === instanceId,
+                )?.id;
+                if (wid) handleClose(wid, instanceId);
+                void handleOpenRef.current(appType, title);
+              },
+            });
+            storeComponent(instanceId, Fallback);
+          }
+        } catch {
+          // resolveOpenApp threw (bad app type) or resolveComponent failed.
+          // Show placeholder so the window is never a silent blank frame.
+          if (!windowManagerRef.current.isOpenByInstance(instanceId)) continue;
+          const Fallback = makeFallback({
+            needsAuth: false,
+            throttled: false,
+            onConnect: () => setKeyDialogOpen(true),
+            onRetry: () => {
+              const wid = windowManagerRef.current.windows.find(
+                (w) => w.instanceId === instanceId,
+              )?.id;
+              if (wid) handleClose(wid, instanceId);
+              void handleOpenRef.current(appType, title);
+            },
+          });
+          storeComponent(instanceId, Fallback);
+        }
+      }
+    }
+    void restoreDesktop();
+  }, []); // mount-only — intentional empty deps (reads live refs, not stale closures)
 
   // The active window feeding the menu-bar name comes from the manager's
   // activeWindow() — the SINGLE source of truth for "front-most" that the
