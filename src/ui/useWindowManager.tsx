@@ -106,6 +106,22 @@ export interface WindowManagerValue {
   /** Returns the active (topmost non-minimized) window id, or null if none.
    *  Convenience wrapper over activeWindow() (same selection logic, WR-05). */
   activeId: () => string | null;
+  /**
+   * Open a window at explicit geometry, bypassing cascadePlace. Use this for
+   * the desktop restore path (Plan 21-03) — call it with the persisted x/y/z
+   * and minimized state so the window appears at its saved position without a
+   * cascade-flash. Bumps the module-level zTop to Math.max(zTop, position.z)
+   * outside the React updater so subsequent open()/focus() calls assign z
+   * values strictly above all restored windows (Strict-Mode purity: the
+   * updater body remains pure; the zTop mutation happens exactly once in the
+   * useCallback body, not inside setWindows). Returns the freshly minted
+   * session-scoped instanceId (appType-N).
+   */
+  openAt: (
+    appType: string,
+    meta: { title: string; icon: string },
+    position: { x: number; y: number; z: number; minimized: boolean },
+  ) => string;
 }
 
 export const WindowManagerContext =
@@ -203,6 +219,18 @@ export function WindowManagerProvider({
       });
 
       return instanceId;
+    },
+    [],
+  );
+
+  // openAt stub — replaced with the real implementation in the GREEN commit.
+  const openAt = useCallback(
+    (
+      _appType: string,
+      _meta: { title: string; icon: string },
+      _position: { x: number; y: number; z: number; minimized: boolean },
+    ): string => {
+      throw new Error("openAt: not yet implemented");
     },
     [],
   );
@@ -397,6 +425,7 @@ export function WindowManagerProvider({
   const value: WindowManagerValue = {
     windows,
     open,
+    openAt,
     focus,
     minimize,
     restore,
