@@ -187,7 +187,17 @@ Plans:
   - **Multi-tab IDB conflict** — two tabs open during reload may write conflicting `"windowLayout"` values. Last-write-wins via IDB transaction ordering is acceptable for v3.0; document as known multi-tab behavior, not a bug.
   - **No in-app state persisted** — scroll position, form values, and any runtime state of generated apps are intentionally not saved; generated apps have no stable serialization contract. A user returning to an app sees its initial state.
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1** *(parallel — no file overlap)*
+- [ ] 21-01-PLAN.md — Extend SettingsStore with writeRaw/readRaw + create layoutPersistence module (PERSIST-01)
+- [ ] 21-02-PLAN.md — Add openAt to WindowManagerValue for explicit-geometry restore (PERSIST-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 21-03-PLAN.md — Wire debounced save effect + mount-only restore effect in DesktopShell (PERSIST-01, PERSIST-02, PERSIST-03)
+
+**Wave 3** *(blocked on Wave 2 — phase gate)*
+- [ ] 21-04-PLAN.md — Test suite: debounce, restore, eviction, shape + full suite/hygiene/build gate (PERSIST-01, PERSIST-02, PERSIST-03)
 
 ---
 
