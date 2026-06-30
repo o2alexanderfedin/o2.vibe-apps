@@ -181,7 +181,7 @@ describe("serializeLayout", () => {
   it("never includes id in serialized output", () => {
     const result = serializeLayout([sampleWindow]);
     const parsed = JSON.parse(result) as Record<string, unknown>[];
-    expect(Object.keys(parsed[0])).not.toContain("id");
+    expect(Object.keys(parsed[0]!)).not.toContain("id");
   });
 
   it("never includes maximized in serialized output", () => {
@@ -223,8 +223,8 @@ describe("serializeLayout", () => {
     const result = serializeLayout([sampleWindow, second]);
     const parsed = JSON.parse(result) as LayoutEntry[];
     expect(parsed).toHaveLength(2);
-    expect(parsed[0].appType).toBe("notes");
-    expect(parsed[1].appType).toBe("clock");
+    expect(parsed[0]!.appType).toBe("notes");
+    expect(parsed[1]!.appType).toBe("clock");
   });
 });
 
@@ -255,7 +255,7 @@ describe("deserializeLayout", () => {
     ]);
     const result = deserializeLayout(raw);
     expect(result).toHaveLength(1);
-    expect(result[0].appType).toBe("notes");
+    expect(result[0]!.appType).toBe("notes");
   });
 
   it("filters out invalid entries mixed with valid ones", () => {
@@ -265,7 +265,7 @@ describe("deserializeLayout", () => {
     ]);
     const result = deserializeLayout(raw);
     expect(result).toHaveLength(1);
-    expect(result[0].appType).toBe("notes");
+    expect(result[0]!.appType).toBe("notes");
   });
 
   it("returns typed LayoutEntry objects (isLayoutEntry is true for each)", () => {
@@ -297,7 +297,7 @@ describe("round-trip: serializeLayout → deserializeLayout", () => {
   it("recovers the 7 LayoutEntry fields from a serialized window", () => {
     const result = deserializeLayout(serializeLayout([sampleWindow]));
     expect(result).toHaveLength(1);
-    const entry = result[0];
+    const entry = result[0]!;
     expect(entry.appType).toBe(sampleWindow.appType);
     expect(entry.title).toBe(sampleWindow.title);
     expect(entry.icon).toBe(sampleWindow.icon);
@@ -314,7 +314,7 @@ describe("round-trip: serializeLayout → deserializeLayout", () => {
 
   it("round-trip drops transient WindowEntry fields", () => {
     const result = deserializeLayout(serializeLayout([sampleWindow]));
-    const entry = result[0] as Record<string, unknown>;
+    const entry = result[0] as unknown as Record<string, unknown>;
     expect(entry["instanceId"]).toBeUndefined();
     expect(entry["id"]).toBeUndefined();
     expect(entry["maximized"]).toBeUndefined();
