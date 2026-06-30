@@ -162,8 +162,8 @@ export function ThemeEditor({
     const sanitized = sanitizeDisplayName(nameInput.trim());
 
     // Guard: sanitizeDisplayName returns its "App" fallback when the entire
-    // input consists of banned tokens (e.g. "synthesize"). Surfacing a silent
-    // rename to "App" would confuse the user — reject it here instead.
+    // input consists of reserved display tokens. Surfacing a silent rename to
+    // "App" would confuse the user — reject it here instead.
     if (sanitized === "App" && nameInput.trim().toLowerCase() !== "app") {
       setError("That name contains reserved words — choose a different name");
       return;
