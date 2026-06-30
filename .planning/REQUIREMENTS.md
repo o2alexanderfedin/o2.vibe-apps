@@ -36,8 +36,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RESKIN-01 | Phase 23 | Pending |
-| SMOKE-01 | Phase 25 | Pending |
-| SMOKE-02 | Phase 25 | Pending |
-| SMOKE-03 | Phase 25 | Pending |
-| POLISH-01 | Phase 24 | Pending |
+| RESKIN-01 | Phase 23 | Satisfied |
+| SMOKE-01 | Phase 25 | Satisfied |
+| SMOKE-02 | Phase 25 | Satisfied |
+| SMOKE-03 | Phase 25 | Satisfied |
+| POLISH-01 | Phase 24 | Satisfied |
