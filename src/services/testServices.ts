@@ -116,7 +116,12 @@ export function createRecordingSettingsStore(): RecordingSettingsStore {
       return writes.length;
     },
     get rawWrites(): ReadonlyMap<string, readonly string[]> {
-      return rawWritesMap;
+      // Return a snapshot with frozen value arrays so the ReadonlyMap contract
+      // is honest — callers cannot mutate the store's internal write history
+      // even with a cast (IN-01). Test-double only; no production impact.
+      return new Map(
+        [...rawWritesMap.entries()].map(([k, v]) => [k, Object.freeze([...v])]),
+      );
     },
     rawWriteCount(key: string): number {
       return rawWritesMap.get(key)?.length ?? 0;
