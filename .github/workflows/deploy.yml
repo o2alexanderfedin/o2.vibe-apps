@@ -62,3 +62,40 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  release:
+    name: Publish GitHub Release
+    # Only for version tags, and only once the build + Pages deploy succeeded.
+    needs: [build, deploy]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release and upload its asset
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build portable bundle
+        run: npm run build # root base "/" — self-hostable, unlike the Pages build
+
+      - name: Package site
+        run: |
+          cd dist
+          zip -r "../o2-vibe-apps-${GITHUB_REF_NAME}.zip" .
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag \
+            "o2-vibe-apps-${GITHUB_REF_NAME}.zip"
