@@ -1,8 +1,9 @@
 name: Deploy to GitHub Pages
 
+# Deploy once per release: version tags only. workflow_dispatch stays for
+# manual re-deploys from main (the github-pages environment permits both).
 on:
   push:
-    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -54,10 +55,6 @@ jobs:
   deploy:
     name: Deploy to Pages
     needs: build
-    # Pages deploys from main (and manual dispatch) only. A release tag points
-    # at the same commit main already deployed, and the github-pages environment
-    # restricts deployments to main — so a tag deploy is both redundant and blocked.
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -69,8 +66,8 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    # Only for version tags, once the build (typecheck + tests + build) succeeded.
-    needs: build
+    # Only for version tags, once the build succeeded and the site deployed.
+    needs: [build, deploy]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
