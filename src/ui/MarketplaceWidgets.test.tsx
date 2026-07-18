@@ -18,17 +18,13 @@
 // Test doubles are named "canned"/"stub"/"testTransport" (never banned tokens).
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import {
-  createTestServices,
-  type TestServicesOverrides,
-} from "../services/testServices";
+import { cleanup, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { _clearCachesForTesting } from "../execution/loader";
+import { unmountAll } from "../execution/mount";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
+import type { TestServicesOverrides } from "../services/testServices";
 import { rawWidgetFixture } from "../test/fixtures/load";
+import { renderDesktopShell as renderMarketplace, openApp } from "./desktopShellTestKit";
 
 // An app source that declares three widgets and renders each via useWidget.
 // Shipped fenced + with `export default` (the real model output shape). The
@@ -86,33 +82,17 @@ function compositionTransport(
   };
 }
 
-function renderMarketplace(overrides: TestServicesOverrides = {}) {
-  const services = createTestServices(overrides);
-  const user = userEvent.setup();
-  render(
-    <ServicesProvider services={services}>
-      <Marketplace />
-    </ServicesProvider>,
-  );
-  return { services, user };
-}
-
-async function openApp(
-  user: ReturnType<typeof userEvent.setup>,
-  displayName: string,
-): Promise<void> {
-  const card = screen.getByRole("button", {
-    name: new RegExp("^" + displayName + " —"),
-  });
-  await user.click(card);
-}
-
 beforeEach(() => {
   _clearCachesForTesting();
 });
 
 afterEach(() => {
   cleanup();
+  // Apps now mount into the WindowFrame's manager-owned root (a separate
+  // createRoot), which RTL's cleanup() does not own. Explicitly tear those
+  // roots down so a window's mount-effect timers/state loops cannot leak across
+  // tests (the windowed open flow, Phase 15).
+  unmountAll();
   _clearCachesForTesting();
 });
 
@@ -126,7 +106,7 @@ describe("Marketplace — composed app: all declared widgets render on first pai
   function servicesForComposedApp(): TestServicesOverrides {
     return {
       transport: compositionTransport(
-        { weather: appComposingWidgets(WIDGETS) },
+        { calculator: appComposingWidgets(WIDGETS) },
         {
           "line-chart": rawWidgetFixture("line-chart"),
           "data-table": rawWidgetFixture("data-table"),
@@ -139,9 +119,9 @@ describe("Marketplace — composed app: all declared widgets render on first pai
   it("renders the host app AND all three real widgets on first paint (no pop-in)", async () => {
     const { user } = renderMarketplace(servicesForComposedApp());
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // Host app rendered.
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
     // No pop-in: ALL three widget shells are present synchronously on the SAME
@@ -163,8 +143,8 @@ describe("Marketplace — composed app: all declared widgets render on first pai
   it("each widget is in its OWN WidgetShell with an independent ⋮ menu (WIDGET-04)", async () => {
     const { user } = renderMarketplace(servicesForComposedApp());
 
-    await openApp(user, "Weather");
-    await screen.findByRole("region", { name: "Weather" });
+    await openApp(user, "Calculator");
+    await screen.findByRole("region", { name: "Calculator" });
 
     // Each widget gets its own group region labeled by type, each with a ⋮ button.
     for (const type of WIDGETS) {
@@ -212,12 +192,23 @@ describe("Marketplace — composed app: all declared widgets render on first pai
 
     const { user } = renderMarketplace({ transport: countingTransport });
 
-    await openApp(user, "Weather");
-    await screen.findByText("Line Chart");
+    await openApp(user, "Calculator");
+    const firstRegion = await screen.findByRole("region", { name: "Calculator" });
+    await within(firstRegion).findByText("Line Chart");
+
+    // Close the first window before re-opening (the open flow is windowed now —
+    // each open mounts its own WindowFrame; closing the first keeps the assertion
+    // about a clean SECOND open and avoids two concurrent copies of the same app).
+    // Use the traffic-light close (authoritative in windowed mode; hideClose=true suppresses the inner ×).
+    const firstFrame = firstRegion.closest(".window-chrome") as HTMLElement;
+    fireEvent.click(within(firstFrame).getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "Calculator" })).not.toBeInTheDocument(),
+    );
 
     // Force the registry path on the second open by clearing in-memory caches.
     _clearCachesForTesting();
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
     expect((await screen.findAllByText("Stat Card")).length).toBeGreaterThanOrEqual(1);
 
     // Each widget type was produced exactly once — the second open reused the
@@ -238,7 +229,7 @@ describe("Marketplace — a widget that throws at render is isolated (WIDGET-05)
   it("the throwing widget shows a neutral placeholder; the app + sibling widgets keep working", async () => {
     const { user } = renderMarketplace({
       transport: compositionTransport(
-        { weather: appComposingWidgets(["stat-card", "data-table"]) },
+        { calculator: appComposingWidgets(["stat-card", "data-table"]) },
         {
           "stat-card": THROWING_WIDGET,
           "data-table": rawWidgetFixture("data-table"),
@@ -246,9 +237,9 @@ describe("Marketplace — a widget that throws at render is isolated (WIDGET-05)
       ),
     });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // The host app still rendered.
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
     // The sibling (data-table) still rendered its real content (findByText waits
@@ -278,7 +269,7 @@ describe("Marketplace — a widget that fails to produce is isolated (WIDGET-05)
     // parent app keeps working (no crash, no blank).
     const { user } = renderMarketplace({
       transport: compositionTransport(
-        { weather: appComposingWidgets(["stat-card", "broken-widget"]) },
+        { calculator: appComposingWidgets(["stat-card", "broken-widget"]) },
         {
           "stat-card": rawWidgetFixture("stat-card"),
           "broken-widget": GARBAGE_WIDGET,
@@ -286,9 +277,9 @@ describe("Marketplace — a widget that fails to produce is isolated (WIDGET-05)
       ),
     });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // Host app rendered, good widget rendered.
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
     expect(within(region).getByText("Stat Card")).toBeInTheDocument();
@@ -321,9 +312,9 @@ describe("Marketplace — a widget that fails to produce is isolated (WIDGET-05)
 
     const { user } = renderMarketplace({ transport: truncated });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // Host survives; the widget that couldn't be produced is simply absent.
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
     expect(

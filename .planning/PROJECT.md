@@ -2,100 +2,229 @@
 
 ## What This Is
 
-A browser-based **app marketplace** where users browse, open, and interact with **apps** — each of which is a live React widget produced on demand by a cheap LLM (Claude Haiku), cached per-app in IndexedDB, and injected into the page at runtime. Apps are composed of smaller **widgets** (also produced on demand), and any app or widget can be tweaked, cloned, or removed through a contextual natural-language prompt. To the user there is no "AI" and no "generate" button — apps simply *exist* on the platform, and the platform takes care of everything behind the storefront.
+A client-only, browser-based **generative app marketplace**. Users browse a storefront, open an **app**, and interact with it — and each app is a live React component produced on demand by a cheap LLM (Claude Haiku, using the user's own API key), compiled in the browser via `@babel/standalone`, cached per-app in IndexedDB, and injected into the page at runtime. Apps can also be composed of smaller **widgets** (the same resolve/cache/produce machinery), and any app can be tweaked, cloned, or removed through a contextual natural-language prompt. To the user there is no "AI" and no "generate" button — apps simply *exist* on the platform.
 
-The product runs entirely client-side: there is no application server. The user supplies their own Anthropic API key (stored locally), and the platform calls `api.anthropic.com` directly from the browser. Backend-style data operations are themselves produced on demand as cached handlers.
+There is no application server. The user supplies their own Anthropic API key (stored locally in `localStorage`), and the platform calls `api.anthropic.com` directly from the browser. Backend-style data operations are themselves produced on demand as cached **handlers**.
+
+**As actually built (v1.0 + v1.1):** the seeded path (the bundled `Notes` app) ships a complete monolithic source. Every other storefront card takes the on-demand path. As of the v1.1 pivot, unseeded apps default to a **delegated thin-shell**: the model first returns a behavior-free module (initial state + a markup-only view whose interactive elements carry `data-action`, plus a precise action spec), and a permanent shell mounts it with a single container click-delegate that **produces each action's handler on demand and caches it** (stable per-`(appType, action)` key → every re-press is an O(1) cache hit). This makes handlers the primary behavior mechanism, with a graceful fallback to the monolithic path when a delegated module can't be instantiated.
 
 ## Core Value
 
 **A user opens an app from the storefront and it renders and works** — instantly on a cache hit, seamlessly produced on a cache miss — **and nothing visible ever reveals that the app was made on demand.** The resolve → cache → compile → render → interact loop is the product; if everything else fails, this loop must still deliver a working, interactive app while preserving the illusion that apps are first-class platform citizens.
 
+This still holds after v1.0. The v1.1 delegated thin-shell refined *how* the loop runs (behavior is attached on first action rather than produced whole up front), but it did not shift what the loop must deliver: an interactive app that betrays no on-demand mechanic.
+
+## Shipped: v3.1 Polish & Hardening (2026-06-30)
+
+Hardening milestone — 3 phases (23–25), 5/5 requirements satisfied, 936 unit tests + 5 e2e green, audit PASSED, tagged `v3.1`. Closed v3.0's tech debt and verification gaps with no new product surface: theme switches now re-skin open opaque frames **in place** via `THEME_PUSH` (no iframe reload — in-frame app state survives); the SearchLauncherPanel interior uses the theme-glass var recipe; and the v3.0 Phase 21/22 `human_needed` gaps are now covered by automated headless Playwright tests (reload restores the desktop, custom theme survives reload, live re-skin). See MILESTONES.md.
+
+## Prior: v3.0 Trusted Desktop (2026-06-30)
+
+Trusted desktop — 4 phases (19–22), 19/19 requirements satisfied, 935 tests green, tagged `v3.0`. Each app body runs in an opaque-origin `<iframe sandbox="allow-scripts">` the API key never enters; the `⋮` menu is host-owned chrome; the desktop restores across reloads; and users can author custom themes over the 12-var contract that survive reload FOUC-free.
+
+## Next Milestone
+
+None planned yet. Run `/gsd-new-milestone` to scope the next one. Candidate directions: a v4.0 net-new feature milestone (app sharing/export, workspaces/multi-desktop, expanded gallery, collaboration), or the deferred **[G2] unified Intent contract** internal refactor.
+
 ## Requirements
 
 ### Validated
 
-<!-- Shipped and confirmed valuable. -->
+<!-- Shipped and confirmed valuable. v1.0 milestone PASSED: 42/42 active requirements, 8/8 phases, 368 tests green, released v0.1.0, validated live in-browser. -->
 
-(None yet — ship to validate)
+**Storefront & shell**
+- ✓ [SHELL-01] Marketplace storefront grid of available app types, openable — v1.0
+- ✓ [SHELL-02] Opening an app shows a neutral loading affordance — v1.0
+- ✓ [SHELL-03] User can configure / change / clear their own Anthropic API key from the UI (stored locally) — v1.0
+- ✓ [SHELL-04] User can switch theme between light / dark / system, applied via CSS variables — v1.0
+- ✓ [SHELL-05] An opened app renders inside an app shell with its own contextual menu — v1.0
+
+**Resolve → cache → render loop**
+- ✓ [LOOP-01] Opening or interacting produces a structured intent — v1.0
+- ✓ [LOOP-02] Opaque, normalization-stable SHA-256 cache-key derivation — v1.0
+- ✓ [LOOP-03] Registry init with IndexedDB probe + in-memory Map fallback — v1.0
+- ✓ [LOOP-04] On a cache hit, the app renders immediately from the local registry (no model call) — v1.0
+- ✓ [LOOP-05] On a cache miss, the platform calls Haiku, compiles, stores, and renders — v1.0
+- ✓ [LOOP-06] Generated source is compiled once and the compiled string is stored — v1.0
+- ✓ [LOOP-07] Compiled string is re-instantiated via `new Function`, never re-compiled twice in a session — v1.0
+- ✓ [LOOP-08] Session-scoped in-memory transpiled cache — v1.0
+
+**Generation (cache-miss core value)**
+- ✓ [GEN-01] Eager Babel load (classic runtime) before the first production attempt — v1.0
+- ✓ [GEN-02] Single Anthropic egress with the four mandatory browser headers — v1.0
+- ✓ [GEN-03] Response code-fence stripping and `max_tokens` truncation guard — v1.0
+- ✓ [GEN-04] JSX → JS transpile in-browser, classic-runtime `React.createElement` output — v1.0
+- ✓ [GEN-05] Constrained `new Function` instantiation with an explicit named scope — v1.0
+
+**Widgets & composition**
+- ✓ [WIDGET-01] An app can declare sub-widgets resolved (cache or produce) before mount — v1.0
+- ✓ [WIDGET-02] `@widget` dependency parse — v1.0
+- ✓ [WIDGET-03] Transitive widget pre-warm to avoid render-time waterfalls — v1.0
+- ✓ [WIDGET-04] A widget renders inside its own shell with its own contextual menu — v1.0
+- ✓ [WIDGET-05] A failing widget shows a placeholder without crashing its parent app — v1.0
+
+**Contextual modification**
+- ✓ [MOD-01] Shared contextual prompt popover accepting free-form instructions — v1.0
+- ✓ [MOD-02] Prompt routing for remove / clone / tweak intents — v1.0
+- ✓ [MOD-03] Remove and clone resolved client-side without a model call — v1.0
+- ✓ [MOD-04] A tweak produces a new cache key, resolves it, and replaces the target in place — v1.0
+
+**Resilience**
+- ✓ [RESIL-01] Typed model HTTP errors (key-missing / 401 / 429 / generic) — v1.0
+- ✓ [RESIL-02] Backoff + jitter + token-bucket on the model transport — v1.0
+- ✓ [RESIL-03] Render error boundary with retry, contained per app/widget — v1.0
+- ✓ [RESIL-04] Self-heal production retries (≈3) feeding the compiler error back into the next attempt — v1.0
+- ✓ [RESIL-05] Sliding-window produce cost cap (produce gate) — v1.0
+- ✓ [RESIL-06] Storage-pressure LRU eviction over a swappable storage seam — v1.0
+
+**Backend-style handlers**
+- ✓ [HANDLER-01] A single helper resolves a cached handler or produces one on first need, transparently — v1.0
+- ✓ [HANDLER-02] Dual-cache (session + IndexedDB) for produced handlers — v1.0
+- ✓ [HANDLER-03] Handlers run in a constrained, denylist-shadowed `new Function` scope — v1.0
+
+**Devtools hygiene (cross-cutting, non-negotiable)**
+- ✓ [HYGIENE-01] No devtools-visible surface narrates the on-demand mechanic — v1.0
+- ✓ [HYGIENE-02] The banned "synthesi*" family appears in no source surface — v1.0
+- ✓ [HYGIENE-03] CI lexicon gate (`hygiene.test.ts`) enforces the banned-token set across `src/**` + `index.html` — v1.0
+- ✓ [HYGIENE-04] Sourcemaps off + neutral naming for stores/keys/logs/CSS — v1.0
+- ✓ [HYGIENE-05] API key sent only to `api.anthropic.com`, never logged (proven by console-spy test) — v1.0
+- ✓ [HYGIENE-06] CI gate extended to all new v2.0 surfaces + model-supplied display string sanitization — v2.0
+
+**Security (v1 scope)**
+- ✓ [SEC-04] CSP meta tag pinning `connect-src` to self + `api.anthropic.com`, tested — v1.0
+
+**Windowing system (v2.0)**
+- ✓ [WIN-01] Draggable glass window with macOS-style titlebar (traffic-light + icon + title) — v2.0
+- ✓ [WIN-02] Multiple concurrent independent windows; active-app name in menu bar — v2.0
+- ✓ [WIN-03] Window raise (z-order), drag clamped to viewport, cascade placement — v2.0
+- ✓ [WIN-04] Minimize to dock / restore — v2.0
+- ✓ [WIN-05] Close with full subtree teardown, no root leaks — v2.0
+- ✓ [WIN-06] Dock with running indicators + hover-scale + magnifier launcher icon — v2.0
+- ✓ [WIN-07] Menu bar: OS wordmark + active-app name + live clock — v2.0
+- ✓ [WIN-08] Desktop surface with themed animated wallpaper — v2.0
+
+**Themeable shell (v2.0)**
+- ✓ [THEME-01] Four built-in themes (Aurora / Aero / Aqua / Noir) selectable from menu bar — v2.0
+- ✓ [THEME-02] Theme switch re-skins host chrome AND all open app windows live — v2.0
+- ✓ [THEME-03] Active theme persists; FOUC-safe first paint — v2.0
+- ✓ [THEME-04] Themes as CSS custom properties on document root — v2.0
+- ✓ [THEME-05] Backward-compat alias bridge for pre-v2.0 cached apps — v2.0
+
+**Search / launcher panel (v2.0)**
+- ✓ [CREATE-01] Dock magnifier opens SearchLauncherPanel with text input + pre-installed apps — v2.0
+- ✓ [CREATE-02] Describe → find-or-produce → window on desktop (cache hit = instant) — v2.0
+- ✓ [CREATE-03] Pre-installed app selection opens window on desktop, dock running dot — v2.0
+
+**Theme-aware generation (v2.0)**
+- ✓ [TGEN-01] Produced apps reference theme CSS-var contract (no hardcoded colors) — v2.0
+- ✓ [TGEN-02] Post-compile colorCheck → self-heal loop on violations (≤3 retries) — v2.0
+- ✓ [TGEN-03] Model-supplied names sanitized before titlebar/dock/menu — v2.0
+
+**Performance (v2.0)**
+- ✓ [PERF-01] Minimized windows display:none; animated wallpaper degrades under prefers-reduced-motion — v2.0
+
+**Window chrome & relocation (v3.0)**
+- ✓ [CHROME-01] `⋮` contextual menu relocated into host-owned window titlebar (right-aligned) — v3.0
+- ✓ [CHROME-02] Maximize to work area (viewport minus menu bar minus dock) via green traffic-light + titlebar double-click — v3.0
+- ✓ [CHROME-03] Half-tiling: edge-drag drop-zone preview + `Ctrl+←/→` snap — v3.0
+- ✓ [CHROME-04] `Cmd/Ctrl+W` close / `Cmd/Ctrl+M` minimize, gated to active Vibe OS window — v3.0
+
+**Opaque-origin frame isolation (v3.0, HARD-01)**
+- ✓ [SANDBOX-01] App body runs in `<iframe sandbox="allow-scripts">` (opaque origin, never `allow-same-origin`) — v3.0
+- ✓ [SANDBOX-02] API key never enters the frame (3-param type-enforced `buildSrcdoc`) — v3.0
+- ✓ [SANDBOX-03] Typed `postMessage` RPC with origin+source validation, allowlist, proto-pollution defense — v3.0
+- ✓ [SANDBOX-04] Theme vars pushed per-frame; live re-skin via `THEME_PUSH` — v3.0
+- ✓ [SANDBOX-05] In-tree fallback keeps suite green; Playwright proves the real round-trip — v3.0
+- ✓ [SANDBOX-06] Unresponsive-frame ping/timeout → force-close overlay — v3.0
+
+**Desktop persistence (v3.0)**
+- ✓ [PERSIST-01] Debounced (~300ms) layout save; no write-storm — v3.0
+- ✓ [PERSIST-02] Restore window geometry, z-order, minimized state, open-app set on reload (fresh instanceIds) — v3.0
+- ✓ [PERSIST-03] Evicted, un-re-resolvable app → placeholder with retry; never spends quota — v3.0
+
+**Theme editor & custom themes (v3.0)**
+- ✓ [THEME-06] Theme editor over the 12-var contract with live `:root` preview + `CSS.supports` validation — v3.0
+- ✓ [THEME-07] Name/save/duplicate/delete custom themes; `"custom:<name>"` namespace; sanitized names — v3.0
+- ✓ [THEME-08] Custom themes in the menu-bar switcher; selecting re-skins host + frames (THEME_PUSH) — v3.0
+- ✓ [THEME-09] Custom themes survive reload FOUC-free (localStorage mirror + recomputed CSP hash) — v3.0
+- ✓ [THEME-10] Advisory (non-blocking) WCAG-AA contrast warning — v3.0
+
+**Hygiene (v3.0)**
+- ✓ [HYGIENE-07] Lexicon gate extended to all new v3.0 surfaces (frame bridge, srcdoc, ThemeEditor) — v3.0
+
+**Polish & hardening (v3.1)**
+- ✓ [RESKIN-01] Theme switch re-skins open opaque frames in place via THEME_PUSH (srcdoc no longer depends on themeVars); in-frame state survives — v3.1
+- ✓ [POLISH-01] SearchLauncherPanel interior (6 classes) uses the theme-glass var recipe; no hardcoded literals — v3.1
+- ✓ [SMOKE-01] Playwright: hard reload restores open windows at saved geometry/z-order/minimized — v3.1
+- ✓ [SMOKE-02] Playwright: custom theme survives reload and applies (strict first-paint flash backed by Phase 22 FOUC unit test) — v3.1
+- ✓ [SMOKE-03] Playwright: theme switch re-skins the open frame live without reloading it — v3.1
+
+> **Deferred beyond v2.0:**
+> - **SEC-01 / SEC-02 / SEC-03** (general sandbox / iframe isolation hardening) — eligible for a later milestone.
+> - **HARD-01** (`<iframe sandbox>` isolation) — windowing layer designed for contained future adoption.
+> - **G2** unified `Intent` contract — internal refactor.
+> - Custom themes, window-layout persistence — v3.x candidates.
 
 ### Active
 
-<!-- Current scope. Building toward these. All are hypotheses until shipped. -->
+<!-- Next-milestone candidates. All are hypotheses until shipped. -->
 
-**Storefront & shell**
-- [ ] User sees a marketplace storefront grid of available app types and can open one
-- [ ] User can configure / change / clear their own Anthropic API key from the UI (stored locally)
-- [ ] User can switch theme between light / dark / system, applied via CSS variables on `:root`
-
-**Resolve → cache → render loop**
-- [ ] Opening or interacting with an app produces a structured intent (operation, kind, type, cacheKey, context)
-- [ ] On a cache hit, the app/widget renders immediately from the local registry (no model call)
-- [ ] On a cache miss, the platform calls Haiku with the user's key, compiles the result, stores it, and renders it
-- [ ] Generated source is compiled once (JSX → JS), the compiled string is stored, and it is never re-compiled from storage twice in a session
-- [ ] An opened app renders inside an app shell with its own contextual menu
-
-**Widgets & composition**
-- [ ] An app can declare and use sub-widgets, which are resolved (cache or produce) before the app mounts
-- [ ] A widget renders inside its own shell with its own contextual menu, independent of its parent app
-- [ ] A failing widget shows a placeholder without crashing its parent app
-
-**Contextual modification**
-- [ ] A contextual prompt popover (shared by apps and widgets) accepts free-form natural-language instructions
-- [ ] Prompt routing handles remove / clone / tweak intents (remove and clone resolved client-side without a model call)
-- [ ] A tweak produces a new cache key, resolves it (cache or produce), and replaces the target in place
-
-**Resilience**
-- [ ] A render error is caught by an error boundary that offers a retry, without taking down the rest of the page
-- [ ] A failed production attempt is automatically retried (bounded) with the compiler error fed back into the next attempt
-- [ ] Missing/invalid API key, rate limiting, and storage-unavailable conditions degrade gracefully with neutral, non-revealing messaging
-
-**Backend-style handlers (optional layer)**
-- [ ] Apps and widgets can request a data operation through a single helper that resolves a cached handler or produces one on first need, transparently
-
-**Devtools hygiene (cross-cutting, non-negotiable)**
-- [ ] No browser-devtools-visible surface (JS symbol names, IndexedDB store/key names, console logs, network payloads/headers, source comments, CSS class names, HTML attributes, error messages, localStorage keys) reveals that apps are produced on demand
-- [ ] The word "synthesize / synthesized / synthesis" appears in **no** devtools-visible surface — including source comments, since source maps expose them
+- [ ] **[G2] Unified `Intent` contract** — collapse the parallel `routeModification` / `Modification` path into a single `Intent { operation, kind, contextBundle }` resolver. Internal refactor; no user-facing value yet.
+- [ ] **Strict pre-paint FOUC assertion (SMOKE-02 follow-up)** — the headless SMOKE-02 asserts the settled post-reload custom-theme state, not the literal pre-hydration first paint (Vite module-defer timing). A future enhancement could assert the first painted frame directly. Low priority — FOUC-script logic is unit-tested.
 
 ### Out of Scope
 
 <!-- Explicit boundaries with reasoning. -->
 
-- **Server-side application backend** — the architecture is deliberately client-only; "handlers" run in-browser against mock/local data. No server to build or operate.
-- **Real authentication / accounts / billing** — the subscription framing is product narrative; v1 has no auth system. The only credential is the user's own Anthropic API key in `localStorage`.
-- **Multi-user sync / sharing of generated apps** — the registry is local (IndexedDB) per browser; no cloud registry in v1.
-- **`<iframe sandbox>` isolation of generated code** — noted as a production hardening step; v1 runs generated code in a constrained `new Function()` scope. Tracked as a known security tradeoff, not v1 scope.
-- **A user-visible "generate / AI / synthesize" surface** — actively excluded by the core illusion; the user never sees the mechanic.
-- **Proxying the Anthropic API through our own server** — would break the client-only, zero-infra model and expose us to key handling; the key goes browser → `api.anthropic.com` only.
+- **Server-side application backend** — the architecture is deliberately client-only; "handlers" run in-browser. No server to build or operate. *(Still valid.)*
+- **Real authentication / accounts / billing** — the only credential is the user's own Anthropic API key in `localStorage`; the subscription framing is product narrative. *(Still valid.)*
+- **Multi-user sync / sharing of generated apps** — the registry is local (IndexedDB) per browser; no cloud registry. *(Still valid.)*
+- **Naming the mechanic (AI / LLM / "generate" / "synthesize") in any user- or devtools-visible surface** — still actively excluded and enforced by the CI lexicon gate. *(Still valid.)* **Note (v2.0):** a *visible creation surface* is no longer excluded — the user may describe an app and open it through a branded front-door — but it must never name the underlying mechanic.
+- **Proxying the Anthropic API through our own server** — would break the client-only, zero-infra model and the "never proxy the key" rule; the key goes browser → `api.anthropic.com` only. *(Still valid.)*
+- **Streaming code generation** — non-streaming is required (can't compile partial JSX) and a visible source stream in the Network tab is a hygiene leak surface. *(Still valid.)*
+
+> **Moved out of Out-of-Scope:** `<iframe sandbox>` isolation was previously listed here as a known tradeoff. It is now a tracked **Active** v2 candidate (HARD-01), not an excluded boundary.
 
 ## Context
 
-- **Pure browser application, no build step for generated code.** Generated JSX is compiled in the browser via `@babel/standalone` and instantiated with `new Function(...)`, receiving only an explicit, named scope (`React`, and for apps a `useWidget` hook). No `window`/`document`/globals leak into generated code.
-- **Two-tier generation model.** "App" is the user-facing name for a top-level widget; "Widget" is the internal name for anything composable inside an app. The same resolve/cache/produce pattern applies to apps, widgets, and backend-style handlers.
-- **Local-first registry.** A single IndexedDB database holds three object stores — `apps`, `widgets`, `handlers` — keyed by opaque hashes. Cache keys are stable: same type + normalized prompt → same key.
-- **User-funded inference.** All model calls use the user's own Anthropic API key from `localStorage`, sent only to `api.anthropic.com` over HTTPS.
-- **The illusion is a feature, not a detail.** An advanced user opening devtools (F12) must not be able to tell that apps are produced on demand. This shapes naming, logging, storage, network payloads, comments, CSS, and error copy throughout the codebase.
-- **Reference blueprint:** `docs/vibeappstore.md` — the full system blueprint (layers, schemas, prompt templates, file/module structure, MVP checklist) that this project implements.
+- **Current size & stack.** ~21k LOC of strict TypeScript (production + test suite; 727 tests green), `tsc` 0, build clean, tagged `v2.0`. Stack: **Vite 8**, **React 19.2 / react-dom 19.2**, **@babel/standalone classic-runtime** (pinned v7 default), **idb 8** over IndexedDB (DB v3 with `settings` store), **Claude Haiku** (`claude-haiku-4-5-20251001`) via direct browser `fetch`. **Zero new npm dependencies added in v2.0.**
+- **Module layout** (diverged from blueprint tree, by design): `src/registry/` (db, cacheKey, registry, storagePressure, settingsStore), `src/intent/` (resolver, routeModification), `src/execution/` (producer, transpile, widgetParse, widgetPrewarm, instantiate, mount, colorCheck, sanitizeDisplayName), `src/host/` (modelClient, resilience: token-bucket, backoff, produce gate, error backstop), `src/services/` (IoC seams: transport / registry / key / gate / settings injected for tests), `src/data/` + `src/apps/` (app registry + seeds + dataBroker), `src/ui/` (DesktopShell, WindowFrame, Dock, MenuBar, SearchLauncherPanel, VibeThemeProvider, ThemeSelector, AppShell, WidgetShell, ContextualPrompt, AppBar, KeyDialog, useDrag, useWindowManager, iconForApp).
+- **Pure browser application, no build step for generated code.** Generated JSX is compiled in-browser and instantiated with `new Function(...)` receiving only an explicit named scope (`React`, plus `useWidget` / `runHandler` / a `require` shim). `window` / `document` / `localStorage` are reachable as ambient globals — `new Function` is containment-by-convention, not a security boundary (HARD-01 is the fix).
+- **Local-first registry.** A single IndexedDB database holds three object stores — `apps`, `widgets`, `handlers` — keyed by opaque hashes, with an in-memory `Map` fallback behind an identical async interface when IndexedDB is unavailable.
+- **The illusion is enforced, not aspirational.** A CI lexicon gate (`src/hygiene.test.ts`) bans the mechanic-revealing lexicon across `src/**` + `index.html`; production ships with `build.sourcemap: false`; stores, keys, logs, and CSS use neutral naming; the gated logger is the only logging path.
+- **Known tech debt (from the blueprint-vs-built delta):**
+  - **Network apps can't fetch in the sandboxed handler scope** — Weather / Currency degrade to a fallback. Inherent to the current handler containment; the Active "sanctioned network-data path" addresses it.
+  - **Generated reducers can have state-machine quirks** — inherent to on-demand apps; the Active "reducer-reliability hardening" item addresses it.
+  - **cacheKey latent constraint** — historically `SHA-256(type)` dropped `kind` + `prompt`; matters once widgets activate or per-prompt tweak variants need distinct keys (tracked under Active G1-followups / G3).
+- **Reference blueprint:** `docs/vibeappstore.md` — the **pre-pivot v1.0 blueprint**. Reality has moved past it (v1.1 delegated thin-shell, flat token budget, host/services layers); doc reconciliation is a known follow-up.
 
 ## Constraints
 
-- **Tech stack**: React + react-dom, `@babel/standalone` (in-browser JSX compilation, loaded eagerly at init), IndexedDB (optionally via the `idb` wrapper), Anthropic Claude Haiku (`claude-haiku-4-5-20251001`) via direct browser `fetch` to `/v1/messages` — Why: zero-infra, client-only, on-demand generation with the user's own key.
+- **Tech stack**: React + react-dom, `@babel/standalone` (in-browser JSX compilation, loaded eagerly at init), IndexedDB via the `idb` wrapper, Anthropic Claude Haiku (`claude-haiku-4-5-20251001`) via direct browser `fetch` to `/v1/messages` — Why: zero-infra, client-only, on-demand generation with the user's own key.
 - **Security**: generated code runs only in a `new Function()` scope with an explicit named parameter list (no `eval`, no global pollution); rendering goes through React's virtual DOM (no `innerHTML`); the API key lives in `localStorage`, is sent only to `api.anthropic.com`, and is never logged or proxied — Why: arbitrary generated code must be contained and the user's secret protected.
-- **Devtools hygiene (hard rule)**: nothing visible via F12 may reveal the on-demand mechanic; the literal token "synthesize/synthesized/synthesis" must not appear in any devtools-visible surface, including source comments — Why: the entire product premise is that apps simply exist on the platform.
-- **Performance**: load Babel before the first production attempt (its ~450KB download must not block a cache miss); compile each app/widget once and persist the compiled string; keep a session-scoped in-memory compiled cache; pre-warm an app's declared widget dependencies before mounting it to avoid render-time waterfalls — Why: the loop must feel instant on hits and acceptable on misses.
+- **Devtools hygiene (hard rule)**: nothing visible via F12 may reveal the on-demand mechanic; the banned token family must not appear in any devtools-visible surface, including source comments — Why: the entire product premise is that apps simply exist on the platform. Enforced by the CI lexicon gate.
+- **Performance**: load Babel before the first production attempt (its download must not block a cache miss); compile each app/widget once and persist the compiled string; keep a session-scoped in-memory compiled cache; pre-warm an app's declared widget dependencies before mounting it — Why: the loop must feel instant on hits and acceptable on misses.
 - **Storage discipline**: never store compiled functions in IndexedDB — store the compiled JS string and re-instantiate via `new Function()` on load — Why: functions aren't serializable and recompilation must be controlled.
-- **Resilience budget**: bounded self-heal retries (≈3) feeding the **compiler** error (not the runtime error) back to the model, because compiler errors are more actionable — Why: maximize the chance a cache miss still yields a working app.
+- **Resilience budget**: bounded self-heal retries (≈3) feeding the **compiler** error (not the runtime error) back to the model — Why: compiler errors are more actionable, maximizing the chance a cache miss still yields a working app.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Produce apps/widgets on demand via Claude Haiku using the user's own API key, fully client-side | Zero backend/infra; inference cost sits with the user; fits the "platform just works" narrative | — Pending |
-| Single IndexedDB registry (`apps`/`widgets`/`handlers`) with stable opaque cache keys; store compiled JS string, never functions | Deterministic cache hits, serializable storage, compile-once guarantee | — Pending |
-| "App" = user-facing top-level widget; "Widget" = internal composable building block; same resolve/cache/produce pattern for both (and for handlers) | One mental model and one engine for everything | — Pending |
-| Run generated code in a constrained `new Function()` scope (React + `useWidget` only) rather than `<iframe>` for v1 | Simpler v1; iframe sandboxing deferred to production hardening | — Pending (⚠️ revisit for production) |
-| Treat devtools hygiene / the "apps just exist" illusion as a first-class, enforced constraint across naming, logs, storage, network, comments, CSS, errors | The illusion is the product; a single leak breaks it | — Pending |
-| Self-heal generation loop (≈3 attempts) feeding the compiler error back into the prompt | Compiler errors (line/token) are the most actionable feedback for the model | — Pending |
-| Structure the roadmap as a **Vertical MVP** (each phase ships an end-to-end working slice) | Get a usable marketplace fast, then add capability slice by slice | — Pending |
+| Structure the roadmap as a **Vertical MVP** — each phase ships an end-to-end working slice | Get a usable marketplace fast, then add capability slice by slice | ✓ Good — 8 phases, each a working slice; v1.0 shipped end-to-end |
+| Treat **devtools hygiene first** — the "apps just exist" illusion as a first-class, enforced constraint (naming, logs, storage, network, comments, CSS, errors), gated in CI | The illusion is the product; a single leak breaks it | ✓ Good — CI lexicon gate + sourcemaps-off held green across all 8 phases |
+| **Classic-runtime Babel + `new Function`** for the runtime path (pin v7 classic default; explicit scope: `React`, `useWidget`, `runHandler`) | Classic `React.createElement` output matches the injected scope; v8 automatic runtime would break instantiation | ✓ Good — confirmed working; superior Babel diagnostics feed the self-heal loop |
+| **Run generated code in a constrained `new Function()` scope** rather than `<iframe>` for v1 | Simpler v1; the code is the user's own key generating UI for the same user | ⚠ Revisit — containment-by-convention, not a security boundary; HARD-01 (iframe) is the v2 fix |
+| **Delegated thin-shell** as the default for unseeded apps (v1.1 pivot, post-v1.0) — behavior-free module + per-action handlers produced on demand and cached | Contradicts the monolithic `<400`-line model; makes handlers the primary behavior mechanism; re-press is an O(1) cache hit | ✓ Good — built, merged, validated live; graceful fallback to monolith keeps legacy/seed paths non-breaking |
+| **Flat `MAX_TOKENS = 8192`** (not the blueprint's per-kind 1500/1000/800 budgets) | 2048 truncated real components → transpile failures; a single generous cap is simpler and more reliable | ✓ Good — arguably better than the per-kind scheme; flag only for doc reconciliation |
+| **IoC / DI everywhere** — inject the LLM transport, registry, key store, and produce gate so tests substitute the model | Makes the open→render flow testable with real captured Haiku fixtures and no live network | ✓ Good — DI invariant verified (single injected egress chokepoint; 368 tests run offline) |
+| **registryKey folds `kind` + `prompt`** (the G1 close for shipped paths) | Stable, distinct keys per app/kind/prompt within the shipped surface | ⚠ Revisit — fully extends only once widgets activate; the bare `SHA-256(type)` collision risk remains latent until then |
+| **Theme vars on `document.documentElement`** (not React context) | CSS inheritance reaches all app subtrees regardless of mount strategy; FOUC-safe via `localStorage` sync-read in `index.html` | ✓ Good — Phase 14 confirmed; re-skin acceptance test proves all subtrees update |
+| **Windows render in-tree (memoized `WindowBody`) not separate `createRoot` roots** | Detached roots ran outside `act()` scope in tests → self-updating fixture hung; in-tree eliminates the root-leak class | ✓ Good — Phase 15 architectural deviation; WIN-02 intent (concurrent, independent) fully met; appBodyCount invariant green |
+| **Zero new npm dependencies for v2.0** | react-draggable has React 19 `findDOMNode` breakage; framer-motion is 674KB–4.8MB | ✓ Good — hand-rolled `useDrag` (setPointerCapture + rAF) + VibeThemeProvider + all desktop components within the constraint |
+| **`colorCheck` allows grayscale hex + neutral-alpha shadows** | Prevents false positives on legitimate shadow/border conventions in generated UIs | ✓ Good — 44/44 colorCheck tests include the shadow-not-flagged case; CR-02 closed the 4-digit `#rgba` evasion path |
+| **`sanitizeDisplayName` wired in `useWindowManager.open()`** (not in the producer) | Sanitization happens at chrome-render time, not at produce time — catches model-supplied names from any path | ✓ Good — "AI Weather" → "Weather" behavioral test green; titlebar/dock/menu can't render a banned token |
+| **FOUC script duplicates VIBE_THEMES verbatim** (not shared import) | Script must run before any module load; sync by convention (copied values) + same-commit CSP hash invariant | ✓ Good — FOUC gate green across all phase exits; csp.test.ts recomputes hash from live file |
 
 ## Evolution
 
@@ -115,4 +244,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-24 after initialization*
+*Last updated: 2026-06-30 — shipped milestone v3.1 Polish & Hardening (live in-place frame re-skin + launcher glass polish + real-browser Playwright smoke suite); 5/5 requirements, 936 unit + 5 e2e green, audit PASSED, `v3.1` tagged. Closed all v3.0 tech debt + human_needed gaps.*

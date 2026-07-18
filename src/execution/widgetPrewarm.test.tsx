@@ -15,8 +15,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { prewarmWidgets, WIDGET_CONCURRENCY } from "./widgetPrewarm";
-import { cacheKey } from "../registry/cacheKey";
+import { prewarmWidgets, WIDGET_CONCURRENCY, MAX_WIDGET_DEPTH } from "./widgetPrewarm";
+import { registryKey } from "../registry/cacheKey";
 import {
   createTestServices,
   createInMemoryRegistry,
@@ -169,7 +169,7 @@ describe("prewarmWidgets — DI: injected registry/transport (WIDGET-02)", () =>
     // Pre-seed the widgets store with a resolved record; the transport must
     // never be touched for that type (seeded paths don't call the model).
     const registry: Registry = createInMemoryRegistry();
-    const key = await cacheKey("seeded-widget");
+    const key = await registryKey("widget", "seeded-widget");
     await registry.put(
       "widgets",
       {
@@ -202,7 +202,7 @@ describe("prewarmWidgets — DI: injected registry/transport (WIDGET-02)", () =>
 
     await prewarmWidgets(widgetSource("host", ["fresh-widget"]), services);
 
-    const key = await cacheKey("fresh-widget");
+    const key = await registryKey("widget", "fresh-widget");
     const stored = await registry.get("widgets", key);
     expect(typeof stored?.["source"]).toBe("string");
     expect(typeof stored?.["transpiledJS"]).toBe("string");
@@ -221,5 +221,34 @@ describe("prewarmWidgets — DI: injected registry/transport (WIDGET-02)", () =>
     expect(screen.getByRole("group", { name: "stat-card" })).toBeInTheDocument();
     // …and the produced widget content renders inside it.
     expect(screen.getByTestId("stat-card")).toBeInTheDocument();
+  });
+});
+
+describe("prewarmWidgets — composition-depth cap (WIDGET-06)", () => {
+  it("bounds a straight-line nesting chain at MAX_WIDGET_DEPTH; deeper types are isolated", async () => {
+    // Build a chain longer than the cap: host → d1 → d2 → … → dN, each widget
+    // declaring the next. Root deps are depth 1, so types d1..d{MAX} resolve and
+    // anything deeper (d{MAX+1}+) is dropped — absent from the map (useWidget null),
+    // exactly like a resolve failure. No infinite loop, no unbounded resolution.
+    const total = MAX_WIDGET_DEPTH + 4; // a few levels past the cap
+    const sources: Record<string, string> = {};
+    for (let i = 1; i <= total; i += 1) {
+      const next = i < total ? ["d" + (i + 1)] : [];
+      sources["d" + i] = widgetSource("d" + i, next);
+    }
+    const rec = widgetTransport(sources);
+    const services = createTestServices({ transport: rec.transport });
+
+    const map = await prewarmWidgets(widgetSource("host", ["d1"]), services);
+
+    // Exactly MAX_WIDGET_DEPTH widgets resolve (d1..d{MAX} at depths 1..MAX)…
+    expect(map.size).toBe(MAX_WIDGET_DEPTH);
+    expect(map.has("d" + MAX_WIDGET_DEPTH)).toBe(true);
+    // …and the first type beyond the cap (depth MAX+1) is never resolved.
+    expect(map.has("d" + (MAX_WIDGET_DEPTH + 1))).toBe(false);
+    expect(map.has("d" + total)).toBe(false);
+    // The cap short-circuits resolution: the transport is never asked for the
+    // over-deep types (call count == the resolved types).
+    expect(rec.calls).toBe(MAX_WIDGET_DEPTH);
   });
 });

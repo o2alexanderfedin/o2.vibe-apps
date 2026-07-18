@@ -1,9 +1,11 @@
-// UI integration tests for the Marketplace open flow.
+// UI integration tests for the DesktopShell open flow (Phase 16 migration of the
+// former Marketplace open-flow tests).
 //
-// These render the REAL Marketplace with INJECTED dependencies — a canned
+// These render the REAL DesktopShell with INJECTED dependencies — a canned
 // transport (no network) and an in-memory registry (no real IndexedDB) — and
-// drive the full user flow through the rendered DOM. Test doubles are named
-// "canned"/"stub"/"testTransport" (never the banned hygiene tokens).
+// drive the full user flow through the rendered DOM. Apps are opened via the
+// launcher (dock magnifier → app button) since the flat storefront grid is gone.
+// Test doubles are named "canned"/"stub"/"testTransport" (never banned tokens).
 //
 // Coverage:
 //   1. Open a seeded app (Notes) → its UI appears in the open region.
@@ -13,17 +15,10 @@
 //   4. Close then re-open a cached app → it renders again (silent-failure guard).
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import {
-  createTestServices,
-  cannedTransport,
-  type TestServicesOverrides,
-} from "../services/testServices";
+import { cleanup, screen, within, waitFor, fireEvent } from "@testing-library/react";
+import { cannedTransport } from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
-import type { Services } from "../services/services";
+import { renderDesktopShell as renderMarketplace, openApp } from "./desktopShellTestKit";
 
 // A produced component mirroring real output: ships with `export default`,
 // uses a hook, and is interactive. Before the transpile fix this rendered
@@ -39,31 +34,6 @@ export default function App() {
   );
 }
 `;
-
-function renderMarketplace(overrides: TestServicesOverrides = {}): {
-  services: Services;
-  user: ReturnType<typeof userEvent.setup>;
-} {
-  const services = createTestServices(overrides);
-  const user = userEvent.setup();
-  render(
-    <ServicesProvider services={services}>
-      <Marketplace />
-    </ServicesProvider>,
-  );
-  return { services, user };
-}
-
-/** Click a storefront card by its display name (aria-label starts with it). */
-async function openApp(
-  user: ReturnType<typeof userEvent.setup>,
-  displayName: string,
-): Promise<void> {
-  const card = screen.getByRole("button", {
-    name: new RegExp("^" + displayName + " —"),
-  });
-  await user.click(card);
-}
 
 beforeEach(() => {
   _clearCachesForTesting();
@@ -88,16 +58,16 @@ describe("Marketplace open flow (UI integration, injected deps)", () => {
   });
 
   it("opens an unseeded app whose transport returns `export default` TSX → its UI renders", async () => {
-    // Weather is NOT seeded — it routes through the transport. The canned
+    // Calculator is NOT seeded — it routes through the transport. The canned
     // transport returns a component shipped with `export default` (the shape
     // that silently failed to render before the transpile fix).
     const { user } = renderMarketplace({
       transport: cannedTransport(EXPORT_DEFAULT_TSX),
     });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     expect(within(region).getByText("Produced Component")).toBeInTheDocument();
     // The produced component is interactive end-to-end.
     const button = within(region).getByRole("button", { name: "Open Now" });
@@ -129,21 +99,23 @@ describe("Marketplace open flow (UI integration, injected deps)", () => {
       transport: cannedTransport(EXPORT_DEFAULT_TSX),
     });
 
-    // First open: produces + caches the unseeded Weather app.
-    await openApp(user, "Weather");
-    const region1 = await screen.findByRole("region", { name: "Weather" });
+    // First open: produces + caches the unseeded Calculator app.
+    await openApp(user, "Calculator");
+    const region1 = await screen.findByRole("region", { name: "Calculator" });
     expect(within(region1).getByText("Produced Component")).toBeInTheDocument();
 
-    // Close it.
-    const closeButton = within(region1).getByRole("button", { name: "Close Weather" });
-    await user.click(closeButton);
+    // Close it via the traffic-light (the authoritative close in windowed mode).
+    // Use fireEvent.click to avoid userEvent pointer-lifecycle issues on unmount.
+    const frame = region1.closest(".window-chrome") as HTMLElement;
+    const closeButton = within(frame).getByRole("button", { name: "Close" });
+    fireEvent.click(closeButton);
     await waitFor(() =>
-      expect(screen.queryByRole("region", { name: "Weather" })).not.toBeInTheDocument(),
+      expect(screen.queryByRole("region", { name: "Calculator" })).not.toBeInTheDocument(),
     );
 
     // Re-open: served from the registry (tier-3 cache) — must render again.
-    await openApp(user, "Weather");
-    const region2 = await screen.findByRole("region", { name: "Weather" });
+    await openApp(user, "Calculator");
+    const region2 = await screen.findByRole("region", { name: "Calculator" });
     expect(within(region2).getByText("Produced Component")).toBeInTheDocument();
   });
 });

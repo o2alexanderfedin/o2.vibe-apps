@@ -1,161 +1,124 @@
 # Roadmap: Vibe App Store
 
-## Overview
+## Milestones
 
-The journey is a Vertical MVP: eight phases, each shipping an end-to-end, user-visible slice rather than a horizontal technical layer. We begin by baking the "apps just exist" devtools-hygiene illusion and the storefront shell into the foundation (Phase 1) — opaque keys, neutral naming, a gated logger, the single Anthropic egress boundary, a source-maps-off build, and a CI lexicon gate are cheaper to establish first than to retrofit. Phase 2 proves the resolve → compile → instantiate → render loop with a seeded static app and model risk removed, de-risking the novel `new Function` + classic-Babel + `createRoot` mechanics. Phase 3 joins the model to that loop, at which point the **core value is met**: an app the user opens that doesn't exist yet is produced, compiled, cached, and rendered — instant on a hit, seamless on a miss, with nothing narrating the mechanic. Phase 4 adds widget composition (transitive pre-warm + synchronous `useWidget` + per-widget isolation), Phase 5 lets the user shape apps via the contextual `⋮` prompt (remove/clone/tweak), Phase 6 hardens the model/API error surface with neutral degradation, Phase 7 adds storage-pressure and cost guardrails, and Phase 8 layers transparent backend-style handlers as a fully independent additive capability. Devtools hygiene and security are cross-cutting acceptance constraints enforced from Phase 1 forward on every subsequent phase.
+- ✅ **v1.0 MVP** — Phases 1–8 (shipped 2026-06-26) — full detail archived in [milestones/v1.0-ROADMAP.md](./milestones/v1.0-ROADMAP.md)
+- ✅ **v1.1 Real & Robust** — Phases 9–13 (shipped 2026-06-26) — full detail archived in [milestones/v1.1-ROADMAP.md](./milestones/v1.1-ROADMAP.md)
+- ✅ **v2.0 Vibe OS** — Phases 14–18 (shipped 2026-06-26) — full detail archived in [milestones/v2.0-ROADMAP.md](./milestones/v2.0-ROADMAP.md)
+- ✅ **v3.0 Trusted Desktop** — Phases 19–22 (shipped 2026-06-30) — full detail archived in [milestones/v3.0-ROADMAP.md](./milestones/v3.0-ROADMAP.md)
+- ✅ **v3.1 Polish & Hardening** — Phases 23–25 (shipped 2026-06-30) — full detail archived in [milestones/v3.1-ROADMAP.md](./milestones/v3.1-ROADMAP.md)
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+<details>
+<summary>✅ v1.0 MVP (Phases 1–8) — SHIPPED 2026-06-26</summary>
 
-Decimal phases appear between their surrounding integers in numeric order.
+- [x] Phase 1: Hygiene Foundation & Storefront Shell (4/4 plans) — completed 2026-06-24
+- [x] Phase 2: Static Open-One-App Loop — completed 2026-06-24
+- [x] Phase 3: Cache-Miss Generation (Core Value) — completed 2026-06-24
+- [x] Phase 4: Widget Composition (1/1) — completed 2026-06-24
+- [x] Phase 5: Contextual Modification (1/1) — completed 2026-06-24
+- [x] Phase 6: API Error Degradation (1/1) — completed 2026-06-24
+- [x] Phase 7: Storage & Cost Guardrails (1/1) — completed 2026-06-24
+- [x] Phase 8: Backend-Style Handlers (1/1) — completed 2026-06-24
 
-- [x] **Phase 1: Hygiene Foundation & Storefront Shell** - Storefront, key/theme config, opaque keys, IndexedDB init, single Anthropic egress, and the CI hygiene gate
-- [x] **Phase 2: Static Open-One-App Loop** - Resolve → compile → instantiate → render a seeded app end-to-end, model risk removed
-- [x] **Phase 3: Cache-Miss Generation (Core Value)** - An app that doesn't exist yet is produced on demand, cached, and rendered — instant on hit, seamless on miss
-- [x] **Phase 4: Widget Composition** - Apps render isolated sub-widgets via transitive pre-warm and synchronous `useWidget`
-- [x] **Phase 5: Contextual Modification** - The shared `⋮` prompt lets users remove, clone, and tweak apps and widgets in place
-- [x] **Phase 6: API Error Degradation** - Missing/invalid key, rate limiting, and uncaught async errors degrade gracefully with neutral copy
-- [x] **Phase 7: Storage & Cost Guardrails** - Storage pressure, eviction, and runaway produce-cost are bounded with neutral messaging
-- [x] **Phase 8: Backend-Style Handlers** - Apps and widgets transparently resolve or produce cached data handlers on first need
+Full phase detail, success criteria, and requirement mapping are archived in
+[milestones/v1.0-ROADMAP.md](./milestones/v1.0-ROADMAP.md). Post-v1.0 work landed
+outside the milestone: the **v1.1 delegated thin-shell** pivot (now the default for
+unseeded apps) and quick task **260625-q08** (the `registryKey` cache-key contract,
+gap G1). See [BLUEPRINT-DELTA.md](./BLUEPRINT-DELTA.md).
+
+</details>
+
+<details>
+<summary>✅ v1.1 Real & Robust (Phases 9–13) — SHIPPED 2026-06-26</summary>
+
+All 5 phases complete and merged to `develop`; 12/12 requirements satisfied; 552 tests green. Full phase detail archived in [milestones/v1.1-ROADMAP.md](./milestones/v1.1-ROADMAP.md).
+
+- [x] **Phase 9: Richer Storefront** — Apps carry a real name and re-produce faithfully; a popular row surfaces the most-opened apps with honest local copy.
+- [x] **Phase 10: Widget Schema & Key Correctness** — Real typed widget/handler records and every cache-key call site folds kind+prompt, so activated widgets can't collide with apps on a shared type slug.
+- [x] **Phase 11: Reliability Hardening** — Produced delegated behavior is correct more often: invalid state is rejected and prior state kept, unknown actions are no-ops, no extra model round-trips.
+- [x] **Phase 12: Sanctioned Network-Data Path** — Weather and Currency apps fetch real data through a host-brokered, allowlisted, keyless egress; the API key never enters app scope.
+- [x] **Phase 13: Activate Widget Composition** — Delegated apps can declare and render `@widget` sub-widgets, each isolated, with a bounded composition depth.
+
+</details>
+
+<details>
+<summary>✅ v2.0 Vibe OS (Phases 14–18) — SHIPPED 2026-06-26</summary>
+
+All 5 phases complete and merged to `develop`; 21/21 requirements satisfied; 727 tests green. Full phase detail archived in [milestones/v2.0-ROADMAP.md](./milestones/v2.0-ROADMAP.md).
+
+- [x] **Phase 14: Theme Foundation** — The CSS-variable theme contract and FOUC-safe persistence are established; the alias bridge keeps pre-v2 cached apps rendering. Dependency root for all v2.0 phases. (completed 2026-06-26)
+- [x] **Phase 15: Window Manager** — Apps open as draggable glass windows with z-order, focus, minimize, close, and no React root leaks. (completed 2026-06-26)
+- [x] **Phase 16: Desktop Shell** — The desktop surface, animated wallpaper, dock (with running indicators and the launcher icon), and menu bar (wordmark, active-app name, clock) replace the flat storefront as the root UI. (completed 2026-06-27)
+- [x] **Phase 17: Search / Launcher Panel** — A dock-launched panel lets the user describe an app or pick a pre-installed one; results open as windows on the desktop via the real produce loop. (completed 2026-06-26)
+- [x] **Phase 18: Theme-Aware Generation** — All produce-prompt branches mandate the CSS-var contract; a post-compile static check feeds violations into the self-heal loop; model-supplied names are sanitized; the CI lexicon gate covers all new surfaces. (completed 2026-06-26)
+
+</details>
+
+<details>
+<summary>✅ v3.0 Trusted Desktop (Phases 19–22) — SHIPPED 2026-06-30</summary>
+
+- [x] **Phase 19: Window Chrome & Menu Relocation** (CHROME-01..04) — `⋮` menu into the window titlebar, maximize/snap/keyboard shortcuts; hard prerequisite for all iframe work. (completed 2026-06-27)
+- [x] **Phase 20: Opaque-Origin Frame Isolation** (SANDBOX-01..06, HYGIENE-07) — each app body in `<iframe sandbox="allow-scripts">` brokered by `postMessage`; the API key never enters the frame; in-tree fallback + Playwright proves the real round-trip. (completed 2026-06-27)
+- [x] **Phase 21: Desktop Persistence** (PERSIST-01..03) — restore window geometry, z-order, open-app set, and minimized state across reloads via additive `settings`-store keys; no DB version bump. (completed 2026-06-30)
+- [x] **Phase 22: Theme Editor & Custom Themes** (THEME-06..10) — create/name/edit/save custom themes over the 12-var contract; custom themes appear in the menu-bar switcher and survive reload FOUC-free. (completed 2026-06-30)
+
+</details>
+
+<details>
+<summary>✅ v3.1 Polish & Hardening (Phases 23–25) — SHIPPED 2026-06-30</summary>
+
+All 3 phases complete and merged to `develop`; 5/5 requirements satisfied; vitest 936 + e2e 5/5 green. Full detail archived in [milestones/v3.1-ROADMAP.md](./milestones/v3.1-ROADMAP.md).
+
+- [x] **Phase 23: Live Frame Re-Skin** (RESKIN-01) — removed `themeVars` from the srcdoc memo deps so theme switches re-skin open opaque frames via `THEME_PUSH` without reloading the iframe; in-frame state survives. (completed 2026-06-30)
+- [x] **Phase 24: Launcher CSS Polish** (POLISH-01) — theme-glass pass on the 6 SearchLauncherPanel interior classes. (completed 2026-06-30)
+- [x] **Phase 25: Real-Browser Smoke Suite** (SMOKE-01/02/03) — Playwright tests closing the Phase 21/22/23 `human_needed` gaps in headless Chromium; also fixed a pre-existing frame-isolation selector defect. (completed 2026-06-30)
+
+</details>
 
 ## Phase Details
 
-### Phase 1: Hygiene Foundation & Storefront Shell
-**Goal**: A user lands on a real marketplace storefront, can activate the platform with their own key and pick a theme, while every foundational hygiene, key-handling, and security control is baked in before any data is stored or any model is called.
-**Mode:** mvp
-**Depends on**: Nothing (first phase)
-**Requirements**: SHELL-01, SHELL-02, SHELL-03, SHELL-04, LOOP-02, LOOP-03, HYGIENE-01, HYGIENE-02, HYGIENE-03, HYGIENE-04, HYGIENE-05, SEC-04
-**Success Criteria** (what must be TRUE):
-  1. User lands on a storefront showing a grid of available app types and can click one to attempt opening it.
-  2. User can set, change, and clear their own Anthropic key from the UI (framed as activating the platform, stored under a neutral `localStorage` key), and switch theme between light/dark/system applied via CSS variables on `:root`.
-  3. The IndexedDB registry (`apps`/`widgets`/`handlers`) initializes at startup with a probe write and falls back to an in-memory `Map` when storage is unavailable; cache keys are opaque SHA-256 hex over normalized input.
-  4. A repo-wide F12 audit and the CI lexicon-grep gate find no devtools-visible surface (symbols, store/key names, logs, CSS, `data-*`, copy, `localStorage` keys) that narrates the on-demand mechanic, and the production build ships with source maps off and a CSP restricting `connect-src` to `'self' https://api.anthropic.com`.
-**Plans**: 4 plans (3 waves)
+> Full phase details for shipped milestones are archived:
+> [v1.0](./milestones/v1.0-ROADMAP.md) (Phases 1–8) · [v1.1](./milestones/v1.1-ROADMAP.md) (Phases 9–13) · [v2.0](./milestones/v2.0-ROADMAP.md) (Phases 14–18) · [v3.0](./milestones/v3.0-ROADMAP.md) (Phases 19–22)
 
-Plans:
-- [x] 01-01-PLAN.md — Walking Skeleton: Vite+React19+TS scaffold, test infra, CSP/FOUC, IndexedDB registry (probe+Map fallback), gated logger, storage constants (wave 1) — COMPLETED 2026-06-24
-- [x] 01-02-PLAN.md — Storefront UI slice: grid (SHELL-01/02), KeyDialog set/change/clear (SHELL-03), light/dark/system theme (SHELL-04), Skeleton/ErrorBoundary stubs (wave 2)
-- [x] 01-03-PLAN.md — Opaque SHA-256 cacheKey (LOOP-02) + Anthropic egress header stub (HYGIENE-05), TDD (wave 2)
-- [x] 01-04-PLAN.md — CI lexicon-grep hygiene gate (HYGIENE-01/02/03) over src/** + index.html (wave 3)
-
-### Phase 2: Static Open-One-App Loop
-**Goal**: A user opens a seeded app from the storefront and it renders and is fully interactive, proving the resolve → compile → instantiate → render core with model nondeterminism removed.
-**Mode:** mvp
-**Depends on**: Phase 1
-**Requirements**: LOOP-01, LOOP-04, LOOP-05, LOOP-06, LOOP-07, LOOP-08, SHELL-05, SEC-01, SEC-02, SEC-03
-**Success Criteria** (what must be TRUE):
-  1. User opens a seeded app from the storefront and it renders inside an app shell (showing the app name and a `⋮` menu) and is interactive, including hooks like `useState`/`useEffect` working with no "Invalid hook call".
-  2. Re-opening the same app renders instantly from cache with no recompilation (three-tier resolve: component Map → transpiled-string Map → IndexedDB), and a test asserts classic-runtime output (`React.createElement`, no `react/jsx-runtime` import).
-  3. Each app container gets exactly one React root (created once, re-rendered on update, unmounted on removal) tracked by instance id, with no `createRoot` double-call warning across repeated open/close cycles.
-  4. A red-team component attempting `window`, `localStorage`, `[].constructor.constructor`, `fetch`, or `dangerouslySetInnerHTML` is shadowed-to-`undefined` and/or rejected by the static-reject pass before instantiation, and rendering goes only through React's virtual DOM.
-**Plans**: TBD
-
-Plans:
-- [ ] 02-01: TBD during planning
-
-### Phase 3: Cache-Miss Generation (Core Value)
-**Goal**: A user opens an app that has never existed before, sees a neutral "Opening…" state, and it is produced on demand, compiled, cached, and rendered — so the storefront feels instant on a hit and seamless on a miss, with nothing revealing it was made on demand. **This phase meets the project's core value.**
-**Mode:** mvp
-**Depends on**: Phase 2
-**Requirements**: GEN-01, GEN-02, GEN-03, GEN-04, GEN-05
-**Success Criteria** (what must be TRUE):
-  1. User opens an unseeded app type and, after a neutral skeleton/"Opening…" state (never "Generating…" or any AI language), a working interactive app renders.
-  2. On a cache miss the platform calls Claude Haiku via the single browser `fetch` to `api.anthropic.com/v1/messages` with the user's key and the mandatory `anthropic-dangerous-direct-browser-access`, `x-api-key`, and `anthropic-version` headers, and robustly extracts compilable JSX from prose/markdown-fenced output.
-  3. A failed compile triggers a bounded self-heal retry (≤3) that feeds the Babel compiler error (not the runtime error) back into the next prompt and early-stops on identical consecutive errors.
-  4. A successfully produced app is stored (`sourceJSX` + `transpiledJS` + neutral metadata) so the next open is an instant cache hit, and the stored `prompt`/record fields contain only neutral product copy.
-**Plans**: TBD
-
-Plans:
-- [ ] 03-01: TBD during planning
-
-### Phase 4: Widget Composition
-**Goal**: A user opens an app composed of sub-widgets and every widget appears already rendered and isolated, so the app feels native rather than assembled piece by piece.
-**Mode:** mvp
-**Depends on**: Phase 3
-**Requirements**: WIDGET-01, WIDGET-02, WIDGET-03, WIDGET-04, WIDGET-05
-**Success Criteria** (what must be TRUE):
-  1. User opens an app that declares `@widget` dependencies and all declared widgets appear already rendered on first paint (no pop-in waterfall), each inside its own widget shell with an independent `⋮` menu.
-  2. Declared widgets are pre-warmed transitively before the app mounts, with a cycle guard and a concurrency cap (≤2), and `useWidget(type)` returns the resolved component synchronously at render time (a pure `Map.get`, never triggering async work during render).
-  3. A widget that fails to load or throws shows a neutral placeholder via its own error boundary without crashing or visibly degrading its parent app.
-**Plans**: 1 plan (executed in worktree feature/phase-4-widget-composition)
-**UI hint**: yes
-
-Plans:
-- [x] 04-01 — Widget composition: `@widget` parser, transitive pre-warm (cycle guard + concurrency cap ≤2), synchronous `useWidget`, WidgetShell + per-widget ErrorBoundary, DRY widget producer — COMPLETED 2026-06-24
-
-### Phase 5: Contextual Modification
-**Goal**: A user opens the shared `⋮` prompt on any app or widget and can remove it, clone it, or tweak it with a free-form instruction, with the change applied in place and no surfaced version history.
-**Mode:** mvp
-**Depends on**: Phase 4
-**Requirements**: MOD-01, MOD-02, MOD-03, MOD-04
-**Success Criteria** (what must be TRUE):
-  1. User opens a shared contextual prompt popover (on both app and widget shells) that names the target and accepts free-form natural-language instructions.
-  2. User types "remove" / "clone" and the target is removed or duplicated instantly with no model call (remove unmounts the root and detaches the node; clone creates a new instance id from the stored record).
-  3. User types a tweak instruction and the target is replaced in place — a new cache key is derived, resolved (cache or produce), and re-rendered through the existing root — with no version history shown and no double `createRoot`.
-**Plans**: TBD
-**UI hint**: yes
-
-Plans:
-- [x] 05-01 — Contextual Modification: shared `⋮` ContextualPrompt popover (MOD-01), client-side prompt router (MOD-02), in-place app tweak + clone/remove with no model call (MOD-03/04), and widget `⋮` in-place tweak — COMPLETED 2026-06-24
-
-### Phase 6: API Error Degradation
-**Goal**: When the key is missing/invalid, the API rate-limits, or generated code throws asynchronously, the user sees neutral, non-revealing recovery rather than a crash or a leak of the mechanic.
-**Mode:** mvp
-**Depends on**: Phase 5
-**Requirements**: RESIL-01, RESIL-02, RESIL-03, RESIL-04
-**Success Criteria** (what must be TRUE):
-  1. A render error is caught by a per-app/per-widget error boundary offering a neutral retry without taking down the rest of the page, and a throwing `onClick` or async effect is routed by the global async backstop (`window.onerror` + `unhandledrejection` + React `onUncaughtError`) to the same neutral handling.
-  2. A missing or invalid key (401) degrades to an inline key-reconfiguration prompt with neutral copy and no crash; the storefront stays browsable.
-  3. Rate limiting (429) is handled with exponential backoff + jitter honoring `retry-after`, shared via a token bucket at the single egress point, then a neutral user-visible error if exhausted.
-**Plans**: TBD
-
-Plans:
-- [x] 06-01 — API Error Degradation: typed `ModelHttpError`/`parseRetryAfter` transport refactor, `TokenBucket` limiter + exponential-backoff-with-jitter `createResilientTransport` (injected `Clock`, honors `retry-after`, neutral `ModelUnavailableError` on exhaustion), `installGlobalErrorBackstop` + React `onUncaughtError` async backstop, `ProduceAuthError` → inline KeyDialog reconfigure path, `WidgetErrorBoundary` retry — COMPLETED 2026-06-24 (worktree feature/phase-6-api-error-degradation)
-
-### Phase 7: Storage & Cost Guardrails
-**Goal**: Heavy and returning users keep a working registry and bounded cost — storage pressure is managed before quota is hit and a soft cap prevents runaway produce calls — all surfaced with neutral messaging.
-**Mode:** mvp
-**Depends on**: Phase 6
-**Requirements**: RESIL-05, RESIL-06
-**Success Criteria** (what must be TRUE):
-  1. `navigator.storage.persist()` is requested at init and, as the registry approaches quota, least-recently-used entries (by `useCount`/`updatedAt`) are evicted so the loop keeps working instead of throwing.
-  2. After a configured threshold of cache misses per time window, a cost guardrail soft-caps further produce calls and surfaces neutral messaging rather than silently running up the user's Anthropic spend.
-**Plans**: 1 plan (executed in worktree feature/phase-7-storage-cost-guardrails)
-
-Plans:
-- [x] 07-01 — Storage & Cost Guardrails: sliding-window `createProduceGate` (N=10 misses / 5-min window, injected `Clock`, neutral `ProduceThrottledError` surfaced via the failed-open fallback) hooked at the loader produce path; `useCount`/`updatedAt` LRU bookkeeping (DB schema v2, additive upgrade, default-on-read for v1 records); `evictUnderPressure` LRU eviction (oldest `updatedAt`, tie-broken by lowest `useCount`, until under a 0.9 usage/quota threshold) run before produce writes; injectable `StoragePressureSeam` (guarded `navigator.storage.persist`/`estimate`) + `Registry.keys()` enumeration — COMPLETED 2026-06-24
-
-### Phase 8: Backend-Style Handlers
-**Goal**: A generated app or widget that needs a data operation gets one transparently — resolved from cache or produced on first need — without any visible "backend" and without ever reaching the network or the API key.
-**Mode:** mvp
-**Depends on**: Phase 3
-**Requirements**: HANDLER-01, HANDLER-02, HANDLER-03
-**Success Criteria** (what must be TRUE):
-  1. An app or widget calls a single `runHandler(intent, input)` helper that transparently resolves a cached handler or produces one on first need, executes it, and returns `{ data?, error? }`.
-  2. A produced handler is cached in the `handlers` store and reused on subsequent calls with no further model call.
-  3. Handler code executes in a constrained scope with no `fetch` and no storage/key access — local/mock data operations only — verified by a handler attempting network or storage access being blocked.
-**Plans**: 1 plan (executed in worktree feature/phase-8-backend-handlers)
-
-Plans:
-- [x] 08-01 — Backend-Style Handlers: `runHandler(intent, input, services)` resolve-or-produce-then-exec (HANDLER-01); dual-cache (source + transpiledJS) in the `handlers` store with `useCount:0`/`updatedAt` on write and a bump on hit, reuse with no model call (HANDLER-02); constrained-scope execution via `new Function` with a targeted denylist (`fetch`/`XMLHttpRequest`/`localStorage`/`sessionStorage`/`indexedDB`/`window`/`document` shadowed to `undefined`, hostile `require`, no key in scope), neutral `{ error }` on any throw (HANDLER-03); handler produce reuses `produceComponent` via a `kind:"handler"` path (handler prompt + `transpileHandler` TS-strip, no react preset) and `produceGate.tryAcquire()` cost cap; `runHandler` wired into the produced-app `new Function` scope alongside `useWidget` — COMPLETED 2026-06-24
+---
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+v1.0 → v1.1 → v2.0 → v3.0 → v3.1 phases execute in numeric order: 1 → … → 22 → 23 → 24 → 25
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Hygiene Foundation & Storefront Shell | 4/4 | Complete | 2026-06-24 |
-| 2. Static Open-One-App Loop | Complete | Complete | 2026-06-24 |
-| 3. Cache-Miss Generation (Core Value) | Complete | Complete | 2026-06-24 |
-| 4. Widget Composition | 1/1 | Complete | 2026-06-24 |
-| 5. Contextual Modification | 1/1 | Complete | 2026-06-24 |
-| 6. API Error Degradation | 1/1 | Complete | 2026-06-24 |
-| 7. Storage & Cost Guardrails | 1/1 | Complete | 2026-06-24 |
-| 8. Backend-Style Handlers | 1/1 | Complete | 2026-06-24 |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Hygiene Foundation & Storefront Shell | v1.0 | 4/4 | Complete | 2026-06-24 |
+| 2. Static Open-One-App Loop | v1.0 | ✓ | Complete | 2026-06-24 |
+| 3. Cache-Miss Generation (Core Value) | v1.0 | ✓ | Complete | 2026-06-24 |
+| 4. Widget Composition | v1.0 | 1/1 | Complete | 2026-06-24 |
+| 5. Contextual Modification | v1.0 | 1/1 | Complete | 2026-06-24 |
+| 6. API Error Degradation | v1.0 | 1/1 | Complete | 2026-06-24 |
+| 7. Storage & Cost Guardrails | v1.0 | 1/1 | Complete | 2026-06-24 |
+| 8. Backend-Style Handlers | v1.0 | 1/1 | Complete | 2026-06-24 |
+| 9. Richer Storefront | v1.1 | 3/3 | Complete | 2026-06-26 |
+| 10. Widget Schema & Key Correctness | v1.1 | 2/2 | Complete | 2026-06-26 |
+| 11. Reliability Hardening | v1.1 | 2/2 | Complete | 2026-06-26 |
+| 12. Sanctioned Network-Data Path | v1.1 | 5/5 | Complete | 2026-06-26 |
+| 13. Activate Widget Composition | v1.1 | TBD | Complete | 2026-06-26 |
+| 14. Theme Foundation | v2.0 | 5/5 | Complete   | 2026-06-26 |
+| 15. Window Manager | v2.0 | 4/4 | Complete   | 2026-06-26 |
+| 16. Desktop Shell | v2.0 | 4/4 | Complete | 2026-06-27 |
+| 17. Search / Launcher Panel | v2.0 | 4/4 | Complete | 2026-06-26 |
+| 18. Theme-Aware Generation | v2.0 | 4/4 | Complete | 2026-06-26 |
+| 19. Window Chrome & Menu Relocation | v3.0 | 4/4 | Complete   | 2026-06-27 |
+| 20. Opaque-Origin Frame Isolation | v3.0 | 5/5 | Complete   | 2026-06-27 |
+| 21. Desktop Persistence | v3.0 | 4/4 | Complete   | 2026-06-30 |
+| 22. Theme Editor & Custom Themes | v3.0 | 5/5 | Complete   | 2026-06-30 |
+| 23. Live Frame Re-Skin | v3.1 | 1/1 | Complete   | 2026-06-30 |
+| 24. Launcher CSS Polish | v3.1 | 1/1 | Complete   | 2026-06-30 |
+| 25. Real-Browser Smoke Suite | v3.1 | 1/1 | Complete   | 2026-06-30 |
 
-**All 8 phases complete — milestone v1.0 feature-complete (45/45 requirements).**
+**v1.0 MVP shipped 2026-06-26 — 8 phases, 42/42 active requirements satisfied, 378 tests green.**
+**v1.1 Real & Robust shipped 2026-06-26 — 5 phases, 12/12 requirements satisfied, 552 tests green.**
+**v2.0 Vibe OS shipped 2026-06-26 — 5 phases, 21/21 requirements satisfied, 727 tests green.**
+**v3.0 Trusted Desktop shipped 2026-06-30 — 4 phases (19–22), 19/19 requirements satisfied, 935 tests green.**
+**v3.1 Polish & Hardening shipped 2026-06-30 — 3 phases (23–25), 5/5 requirements satisfied, 936 unit tests + 5 e2e green.**

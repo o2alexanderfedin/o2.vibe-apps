@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: feature-complete
-stopped_at: Phase 8 (Backend-Style Handlers) completed — milestone v1.0 feature-complete
-last_updated: "2026-06-24T00:00:00.000Z"
-last_activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed; milestone v1.0 feature-complete (45/45 requirements, all 8 phases)
+milestone: v3.1
+milestone_name: Polish & Hardening
+status: Awaiting next milestone
+stopped_at: Roadmap written; ready for Phase 23 planning.
+last_updated: "2026-06-30T18:08:37.103Z"
+last_activity: 2026-06-30 — Milestone v3.1 completed and archived
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 6
-  completed_plans: 5
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
   percent: 100
 ---
 
@@ -18,125 +18,67 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-24)
+See: .planning/PROJECT.md (updated 2026-06-30 after v3.0)
 
 **Core value:** A user opens an app from the storefront and it renders and works — instantly on a cache hit, seamlessly produced on a cache miss — and nothing visible ever reveals that the app was made on demand.
-**Current focus:** Milestone v1.0 — FEATURE-COMPLETE. All 8 phases done; 45/45 requirements implemented.
+**Current focus:** Phase 25 — Real-Browser Smoke Suite
 
 ## Current Position
 
-Phase: 08 (Backend-Style Handlers) — COMPLETE
-Status: Phases 1–8 complete — milestone v1.0 feature-complete. Phase 8 layered
-transparent backend-style data handlers (HANDLER-01..03) as a fully additive
-capability that never reaches the network or the API key.
+Phase: Milestone v3.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-30 — Milestone v3.1 completed and archived
 
-HANDLER-01..03 — Backend-Style Handlers: `runHandler(intent, input, services)`
-(`src/execution/handler.ts`) is resolve-or-produce-then-exec. It hashes the intent
-into an opaque key (`cacheKey("handler\n" + intent)`), reads the `handlers` store;
-a HIT reuses the stored transpiledJS (no model call) and bumps `useCount`/refreshes
-`updatedAt` (consistent with the loader's apps path, RESIL-06). A MISS calls
-`services.produceGate.tryAcquire()` (the SAME sliding-window cost cap as apps,
-RESIL-05) BEFORE producing via the SHARED `produceComponent` machinery on a new
-`kind:"handler"` path — handler prompt (hygiene-safe, asks for a plain
-`handler(input)` returning `{data}`/`{error}`) + `transpileHandler` (TS-strip only,
-NO react preset / NO JSX) — then dual-caches source + transpiledJS with
-`useCount:0`/`updatedAt:now`. So produced handlers participate in LRU eviction
-for free (`evictUnderPressure` already sweeps `handlers`).
+### v3.1 Phase Map
 
-HANDLER-03 constrained scope: the handler runs via `new Function(<denied…>, "input",
-body)` with the denylist `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage,
-sessionStorage, indexedDB, window, document]` SHADOWED TO `undefined` in the
-parameter list (each reference binds the undefined parameter, never the real
-global), a HOSTILE `require` (throws on any specifier), and NO key parameter in
-scope. Pure language built-ins (Math/JSON/Date/…) stay reachable for local compute.
-Any throw (produce/compile/throttle/exec) maps to a neutral `{ error: "This
-operation could not be completed." }` — the mechanic is never revealed.
+| Phase | Name | Requirements | Dependencies |
+|-------|------|--------------|--------------|
+| 23 | Live Frame Re-Skin | RESKIN-01 | Phase 22 (THEME_PUSH infrastructure) |
+| 24 | Launcher CSS Polish | POLISH-01 | Phase 14 (CSS-var contract); independent of 23 and 25 |
+| 25 | Real-Browser Smoke Suite | SMOKE-01, SMOKE-02, SMOKE-03 | Phase 23 (SMOKE-03 verifies RESKIN-01 in a real browser) |
 
-Wiring: `runHandler` is injected into the produced-app `new Function` scope
-alongside `useWidget` (`instantiate.ts` adds a `runHandler` param; the loader's
-`instantiateWithWidgets` binds it to the app's services as a 2-arg
-`runHandler(intent, input)`). Apps never see registry/transport/key. Apps that
-never call it pay nothing.
+### v3.1 Requirement Coverage
 
-DI: every dep injected via `Services` (transport, registry, getApiKey,
-produceGate). Tests substitute a canned transport (handler source, no network), an
-in-memory registry (no IndexedDB), a fixed key getter (no localStorage), and a real
-produce gate + stub clock for the cost cap (no real waits). Real captured Haiku
-handler fixtures (`src/test/fixtures/handler-{filter-tasks,summarize-list}.{raw,code}.txt`)
-prove the path against real output: filter-tasks → `{data}`; summarize-list (which
-reached for an external module) → blocked → `{error}`.
+All 5 v3.1 requirements mapped — 5/5 (100%):
 
-tsc 0 errors, build OK (no .map in dist), 333/333 tests pass (295 baseline + 38 new:
-handler DI/unit + constrained-scope denylist + cost-gate + real-fixture, transpileHandler,
-producer handler-kind, and the produced-app wiring integration), hygiene gate green.
-Last activity: 2026-06-24 -- Phase 8 (Backend-Style Handlers) completed on branch
-feature/phase-8-backend-handlers; milestone v1.0 feature-complete.
+| Requirement | Phase |
+|-------------|-------|
+| RESKIN-01 | Phase 23 |
+| POLISH-01 | Phase 24 |
+| SMOKE-01 | Phase 25 |
+| SMOKE-02 | Phase 25 |
+| SMOKE-03 | Phase 25 |
 
-Progress: [██████████] 100% (8 of 8 phases)
+### Prior milestones — all DONE (archived)
 
-## Prior Position (Phase 7)
+**v3.0 Trusted Desktop** — Phases 19–22 COMPLETE (shipped 2026-06-30)
 
-Phase: 07 (Storage & Cost Guardrails) — COMPLETE
-Status: Phase 7 bounded runaway produce-cost (RESIL-05) and storage pressure
-(RESIL-06) with neutral messaging.
+- Phase 19 Window Chrome & Menu Relocation (CHROME-01..04) — merged
+- Phase 20 Opaque-Origin Frame Isolation (SANDBOX-01..06, HYGIENE-07) — merged
+- Phase 21 Desktop Persistence (PERSIST-01..03) — merged
+- Phase 22 Theme Editor & Custom Themes (THEME-06..10) — merged
 
-RESIL-05 — Cost guardrail: `createProduceGate` (`src/host/produceGate.ts`) is a
-sliding-window soft cap (N=10 produce misses per 5-min window; named constants
-`DEFAULT_PRODUCE_CAP`/`DEFAULT_PRODUCE_WINDOW_MS`, overridable). It keeps a list of
-recent produce timestamps, prunes those outside the window on each `tryAcquire()`,
-and either records `now` (under cap) or throws the neutral `ProduceThrottledError`
-("You're opening a lot of apps quickly — give it a moment."). It is injected via
-`Services.produceGate` and called in the loader IMMEDIATELY before the
-`produceComponent` model call — i.e. only on a cache MISS. Cache hits (tier 1/2/3)
-never reach it, so browsing already-opened apps is never throttled, and the window
-slides so the cap recovers automatically. The `Clock` is injected (real wall clock
-in prod, `createStubClock` in tests) so window/recovery is verified INSTANTLY.
-Marketplace catches `ProduceThrottledError` and renders the softer "give it a
-moment" copy in the SAME neutral failed-open region (storefront stays browsable).
-
-RESIL-06 — Storage pressure: records now carry `useCount`/`updatedAt` (LRU
-bookkeeping). DB bumped to schema v2 (`REGISTRY_DB_VERSION`); the upgrade is purely
-ADDITIVE and the registry/LRU layer defaults the two fields to 0 on read, so v1
-data keeps working. Cache hits bump `useCount` + refresh `updatedAt` (loader
-`touchRecord`); writes set `useCount:0`/`updatedAt:now`. `evictUnderPressure`
-(`src/registry/storagePressure.ts`) runs before every produce write: when the
-injected `estimate()` reports usage/quota over a 0.9 threshold
-(`DEFAULT_EVICTION_THRESHOLD`), it evicts least-recently-used entries (oldest
-`updatedAt`, tie-broken by lowest `useCount`) across apps/widgets/handlers until
-back under threshold (or nothing left). Storage access goes through an injectable
-`StoragePressureSeam` (`src/host/storageEstimate.ts`): `navigatorStorageSeam`
-guards `navigator.storage.persist`/`estimate` (degrade to false/null, never throw);
-init's persist request now routes through it. `Registry` gained `keys(store)`
-enumeration for victim listing. The in-memory fallback path is intact (keys() works
-there too). Tests inject a stub `estimate()` + in-memory registry — NO real
-IndexedDB/navigator.storage in unit scope.
-
-tsc 0 errors, build OK (no .map in dist), 295/295 tests pass (253 baseline + 42 new:
-8 produce-gate unit, 10 LRU unit, 12 storage-seam guard, 7 loader DI, 3 UI RTL, plus
-registry/injection additions), hygiene gate green.
-Last activity: 2026-06-24 -- Phase 7 (Storage & Cost Guardrails) completed on branch
-feature/phase-7-storage-cost-guardrails
-
-Progress: [█████████░] 88% (7 of 8 phases)
+**v2.0 Vibe OS** — Phases 14–18 COMPLETE
+**v1.1 Real & Robust** — Phases 9–13 DONE (archived)
+**v1.0 MVP** — Phases 1–8 DONE (archived)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 1
-- Average duration: 7 min
-- Total execution time: 0.1 hours
+- Total plans completed (v3.0): 18 plans across 4 phases
+- Average duration: —
+- Total execution time: —
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 01 | 1/4 | 7 min | 7 min |
-
-**Recent Trend:**
-
-- Last 5 plans: 7 min
-- Trend: —
+| Phase 19 | 4/4 | — | — |
+| Phase 20 | 5/5 | — | — |
+| Phase 21 | 4/4 | — | — |
+| Phase 22 | 5/5 | — | — |
 
 *Updated after each plan completion*
 
@@ -147,40 +89,61 @@ Progress: [█████████░] 88% (7 of 8 phases)
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap]: Vertical-MVP structure — each phase ships an end-to-end working slice; core value is met at Phase 3 (cache-miss generation).
-- [Roadmap]: Devtools hygiene (HYGIENE-01..05) and CSP/source-maps-off (SEC-04) are owned by Phase 1 but enforced as cross-cutting acceptance constraints on every later phase.
-- [Roadmap]: Static loop (Phase 2) precedes live generation (Phase 3) to de-risk `new Function` + classic-Babel + `createRoot` before adding model nondeterminism.
-- [Plan 01-01]: @babel/standalone@^7.26 pinned as runtime dep (not devDep); v7 keeps classic-runtime default that Phase 2 depends on.
-- [Plan 01-01]: jsdom is explicit devDep required by Vitest 4 (dropped auto-install); set as environment:jsdom in vite.config.ts test block.
-- [Plan 01-01]: navigator.storage.persist() guarded with typeof check — jsdom lacks navigator.storage; guard required for tests.
-- [Plan 01-01]: sourcemap:false in vite.config.ts is the master devtools-hygiene switch; must never be toggled true in CI.
+- [Roadmap v3.1]: 3-phase structure (23–25) derived from the 5 requirements. Phase 23 (RESKIN-01) is the dependency root for Phase 25 (SMOKE-03 verifies the re-skin fix in a real browser). Phase 24 (POLISH-01) is fully independent — CSS-only, can be planned or executed in parallel with Phase 23 if desired.
+- [Roadmap v3.1]: RESKIN-01 fix is a focused, low-risk change: remove `themeVars` from the `useMemo` dependency array in `SandboxFrame` (or equivalent memoization site). `broadcastTheme(vars)` already exists from Phase 20; making it the live path requires only this dep removal. A JSDOM unit test can assert the dep array without a real browser.
+- [Roadmap v3.1]: SMOKE-01/02/03 extend the existing Playwright suite from Phase 20 (plan 20-05). No new Playwright setup required; Playwright is already a devDependency. The smoke tests are purely additive to the test suite — they do not replace or modify any existing Vitest tests.
+- [Roadmap v3.1]: Phase 24 POLISH-01 is CSS-only. The 12-var CSS contract is fixed; the fix applies the existing vars to the 6 partially-styled `.launcher__*` classes. No new variables, no JS changes expected.
+- [Roadmap v3.1]: Zero new runtime dependencies confirmed. All three phases operate on existing infrastructure: `SandboxFrame`/`broadcastTheme` (Phase 20), `settings` store (Phase 21), FOUC script (Phase 22), existing Playwright suite (Phase 20), CSS-var contract (Phase 14).
+- [Roadmap v3.0]: 4-phase structure (19–22) derived from the dependency-enforced build order independently confirmed by all four research streams. CHROME → SANDBOX → PERSIST/THEME-editor is a hard constraint, not advisory.
+- [Roadmap v3.0]: HARD ordering constraint — CHROME-01 (`⋮` to titlebar) must complete and its MOD-01..04 gate must be confirmed before any iframe work begins. `createPortal` cannot cross an opaque-origin boundary without `allow-same-origin`, which must never be set.
+- [Roadmap v3.0]: Schema decision SETTLED — additive keys (`"windowLayout"`, `"customTheme:<name>"`) in the existing `settings` store; no DB version bump, no migration.
+- [Roadmap v3.0]: Zero new npm runtime dependencies confirmed for all four pillars. Playwright is permitted as a devDependency for SANDBOX-05 (the Playwright integration test is a new test category not in the 727-test baseline).
+- [Roadmap v3.0]: HYGIENE-07 anchored to Phase 20 (the largest new devtools-visible surface: frameBridge/SandboxFrame/srcdoc). The extended lexicon gate must cover the words "iframe", "sandbox", "isolation" in addition to the existing banned token family — these words must not appear in any user-visible copy, error message, or devtools-visible surface.
+- [Roadmap v3.0]: `postMessage` to opaque-origin frames must use `"*"` as targetOrigin (sending to the string `"null"` does not work — the browser blocks it). Frame-to-parent messages use the injected `parentOrigin` (real host origin).
+- [Roadmap v3.0]: React 19 has no UMD builds. Inline React CJS from node_modules as IIFEs assigning `window.React` / `window.ReactDOM`. Total per-frame srcdoc string ~553KB. Store as a module-level constant built once and reused.
+- [Roadmap v3.0]: FOUC for custom themes — mirror custom theme vars to `localStorage["vibe.customTheme.<name>"]` at save time; extend the FOUC script to apply custom theme on first paint. Any FOUC script change requires `csp.test.ts` SHA-256 hash recompute in the same commit (the Phase 14 invariant stays in force).
+- [Roadmap v2.0]: All v1.0/v1.1/v2.0 cross-cutting constraints (HYGIENE-01..06, single Anthropic egress, sourcemaps-off, CSP allowlist, IoC/DI, additive IDB only, FOUC/CSP hash invariant) remain acceptance criteria on every v3.0 and v3.1 phase — not separate phases.
+
+### Key Research Flags
+
+- **Phase 23 (RESKIN-01):** Locate the exact memoization site in `SandboxFrame` (or `WindowFrame`) where `themeVars` is a dep. Confirm that `broadcastTheme(vars)` is already called on theme switch — if yes, the fix is purely additive dep removal. Verify the fix does not break the initial theme injection on frame mount (the first `THEME_PUSH` after `READY`).
+- **Phase 25 (Smoke tests):** Locate the existing Phase 20 Playwright suite file. Confirm Playwright config (headless, CI mode). SMOKE-02 requires setting a custom theme in `localStorage` before load — use Playwright's `storageState` or a `page.addInitScript` to seed the state.
 
 ### Pending Todos
 
-[From .planning/todos/pending/ — ideas captured during sessions]
-
-None yet.
+- Confirm location of `themeVars` dep in srcdoc memo before Phase 23 planning.
+- Confirm existing Playwright suite file path before Phase 25 planning.
+- Decide Phase 23 vs Phase 24 execution order (both have no hard dependency on each other; suggest Phase 23 first as it is the blocking fix for Phase 25).
 
 ### Blockers/Concerns
 
-[Issues that affect future work]
+None at roadmap creation.
 
-- [Phase 4 — RESOLVED]: Static widgets only (declared via `@widget`); no dynamic/undeclared widgets. `useWidget` is fully synchronous (a pure `Map.get`). Decided + implemented in Phase 4.
-- [Phase 7 — RESOLVED]: The cost soft-cap hooks the PRODUCE PATH (loader, immediately before `produceComponent`), not the transport wrapper. Rationale: the requirement caps cache MISSES specifically, and a single hook at the produce call sidesteps having to distinguish app vs widget vs tweak traffic inside the shared `createResilientTransport`. The injected `Clock` (`createStubClock`) drove the window/recovery tests with zero real waits as planned.
-- [Phase 7 — RESOLVED]: Threshold decided — N=10 produce misses per 5-minute sliding window (named, configurable constants in `src/host/produceGate.ts`).
-- [Phase 8 — RESOLVED]: Handler denylist decided and implemented as `DENIED_GLOBALS = [fetch, XMLHttpRequest, localStorage, sessionStorage, indexedDB, window, document]`, shadowed to `undefined` in the handler's `new Function` parameter list, plus a hostile `require` (throws) and no key in scope. It is intentionally a TARGETED denylist (handlers need local compute) — NOT the full app/widget lockdown, and NOT general sandboxing (HARD-01 iframe deferred to v2). `runHandler` reuses `Services.produceGate.tryAcquire()` on a produce miss and writes `useCount:0`/`updatedAt:Date.now()`, consistent with the apps path; produced handlers participate in `evictUnderPressure` (which already sweeps `handlers`) for free.
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260625-q08 | Fix G1 cacheKey contract (fold kind+prompt) + reconcile blueprint doc | 2026-06-25 | 0f9a7d4 | [260625-q08-cachekey-contract-doc-reconcile](./quick/260625-q08-cachekey-contract-doc-reconcile/) |
+
+Last activity: 2026-06-30 — v3.1 Polish & Hardening roadmap created (Phases 23–25); 5/5 requirements mapped.
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close:
+Items acknowledged and carried forward:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Security | `<iframe sandbox>` isolation of generated code (HARD-01) — v1 mount seam designed to swap to it | Deferred to v2 | Requirements |
-| Polish | Implicit "popular on the platform" storefront row from `useCount` (POP-01) | Deferred to v2 | Requirements |
+| Window UX | CHROME-F1: Snap to quarter (corner drag) | Deferred to v3.1+ | v3.0 Requirements |
+| Window UX | CHROME-F2: Keyboard window cycle (Cmd+`) | Deferred to v3.1+ | v3.0 Requirements |
+| Theme | THEME-F1: Theme export / import (JSON) | Deferred to v3.1+ | v3.0 Requirements |
+| Refactor | G2 unified `Intent` contract — internal refactor, no user-facing value | Deferred beyond v3.1 | v2.0 Requirements |
 
 ## Session Continuity
 
-Last session: 2026-06-24T22:39:41Z
-Stopped at: Plan 01-01 completed (Scaffold + Walking Skeleton)
-Resume file: .planning/phases/01-hygiene-foundation-storefront-shell/01-02-PLAN.md
+Last session: 2026-06-30 — v3.1 roadmap created
+Stopped at: Roadmap written; ready for Phase 23 planning.
+Resume with: `/gsd-plan-phase 23` to plan Live Frame Re-Skin.
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

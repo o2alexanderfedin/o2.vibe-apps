@@ -3,16 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Marketplace</title>
+    <title>Vibe OS</title>
     <!-- Content Security Policy: restricts origins for security containment.
          connect-src locks outbound fetch to this origin and the platform API endpoint only.
          script-src includes unsafe-eval reserved for the runtime compile path arriving in a later phase.
-         The sha256-... source authorizes the inline first-paint theme script below by the
+         The first sha256-... source authorizes the inline first-paint theme script below by the
          exact hash of its text content (NOT 'unsafe-inline', which would defeat the posture
-         once new Function arrives). src/csp.test.ts guards that this hash stays in sync. -->
+         once new Function arrives). A test guards that this hash stays in sync.
+         The second sha256-... source authorizes the opaque-origin frame's inline bootstrap
+         script: a srcdoc frame INHERITS this host policy, so the frame body cannot boot unless
+         its byte-stable bootstrap is hash-allowed here. frameCsp.test.ts keeps this hash in sync
+         with buildSrcdoc's output (it fails CI on any bootstrap edit or React re-embed). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-eval' 'sha256-N+v/OMOSGIWhW6MiaeKgpUrhYfTwftAJZBpsRoTejkc='; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.anthropic.com; img-src 'self' data:; font-src 'self';"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' 'sha256-8Bk+Rf26odMnPYZdW1mOxS01ZIGzT+3Bfq5SfwHxtl0=' 'sha256-9zmfBaDiPxLfoBYY7cQq+dgKP3xCifoa/z5T3EQToFY='; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.anthropic.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://api.frankfurter.dev; img-src 'self' data:; font-src 'self';"
     />
     <script>
       (function () {
@@ -20,6 +24,91 @@
         var theme = stored === 'light' || stored === 'dark' ? stored
           : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         document.documentElement.setAttribute('data-theme', theme);
+
+        // Named theme — apply CSS custom properties synchronously to avoid flash.
+        var VIBE_THEMES = {
+          aurora: {
+            '--text': '#f3f1ff',
+            '--wall': 'radial-gradient(130% 110% at 18% 8%, #1b1636 0%, #0c0a18 62%)',
+            '--b1': '#7c5cff',
+            '--b2': '#22d3ee',
+            '--b3': '#ff6ec4',
+            '--b4': '#34d399',
+            '--glass': 'rgba(255,255,255,0.10)',
+            '--glass2': 'rgba(255,255,255,0.035)',
+            '--bord': 'rgba(255,255,255,0.22)',
+            '--hi': 'rgba(255,255,255,0.5)',
+            '--accentA': '#9b7cff',
+            '--accentB': '#36d6f0'
+          },
+          aero: {
+            '--text': '#eef6ff',
+            '--wall': 'radial-gradient(130% 120% at 50% -20%, #15406e 0%, #0a1f3a 55%, #06101f 100%)',
+            '--b1': '#4aa3ff',
+            '--b2': '#6ad0ff',
+            '--b3': '#67e8f9',
+            '--b4': '#3b82f6',
+            '--glass': 'rgba(180,220,255,0.16)',
+            '--glass2': 'rgba(120,180,255,0.05)',
+            '--bord': 'rgba(180,220,255,0.34)',
+            '--hi': 'rgba(255,255,255,0.6)',
+            '--accentA': '#4aa3ff',
+            '--accentB': '#67e8f9'
+          },
+          aqua: {
+            '--text': '#f4f8ff',
+            '--wall': 'radial-gradient(120% 110% at 30% 0%, #2a6fd6 0%, #1855b0 45%, #0e3a86 100%)',
+            '--b1': '#5ea9ff',
+            '--b2': '#8fd0ff',
+            '--b3': '#c9e6ff',
+            '--b4': '#3b82f6',
+            '--glass': 'rgba(255,255,255,0.22)',
+            '--glass2': 'rgba(255,255,255,0.08)',
+            '--bord': 'rgba(255,255,255,0.45)',
+            '--hi': 'rgba(255,255,255,0.75)',
+            '--accentA': '#2a7fff',
+            '--accentB': '#5ec8ff'
+          },
+          noir: {
+            '--text': '#f5eeff',
+            '--wall': 'radial-gradient(120% 110% at 70% 10%, #160a1f 0%, #07060b 60%)',
+            '--b1': '#e040fb',
+            '--b2': '#18ffe0',
+            '--b3': '#7c4dff',
+            '--b4': '#ff2d78',
+            '--glass': 'rgba(255,255,255,0.055)',
+            '--glass2': 'rgba(255,255,255,0.02)',
+            '--bord': 'rgba(255,255,255,0.16)',
+            '--hi': 'rgba(255,255,255,0.28)',
+            '--accentA': '#c451ff',
+            '--accentB': '#18ffe0'
+          }
+        };
+        var vibeStored = localStorage.getItem('marketplace.osTheme');
+        if (vibeStored && vibeStored.indexOf('custom:') === 0) {
+          var customName = vibeStored.slice(7);
+          try {
+            var raw = localStorage.getItem('vibe.customTheme.' + customName);
+            var customVars = raw ? JSON.parse(raw) : null;
+            if (customVars && typeof customVars === 'object') {
+              for (var k in customVars) {
+                document.documentElement.style.setProperty(k, customVars[k]);
+              }
+            } else {
+              var aurora = VIBE_THEMES['aurora'];
+              for (var k in aurora) { document.documentElement.style.setProperty(k, aurora[k]); }
+            }
+          } catch (_) {
+            var aurora = VIBE_THEMES['aurora'];
+            for (var k in aurora) { document.documentElement.style.setProperty(k, aurora[k]); }
+          }
+        } else {
+          var vibeTheme = VIBE_THEMES[vibeStored] ? vibeStored : 'aurora';
+          var vars = VIBE_THEMES[vibeTheme];
+          for (var k in vars) {
+            document.documentElement.style.setProperty(k, vars[k]);
+          }
+        }
       })();
     </script>
   </head>

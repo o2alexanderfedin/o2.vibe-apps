@@ -1,0 +1,84 @@
+const initialState = {
+  display: "0",
+  expr: "",
+};
+
+function view(state) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem", padding: "1rem", backgroundColor: "var(--color-surface)", color: "var(--color-text)", fontFamily: "monospace" }}>
+      <div style={{ fontSize: "2rem", textAlign: "right", padding: "0.5rem", backgroundColor: "var(--color-surface)", border: "1px solid var(--color-text)", borderRadius: "0.25rem", minHeight: "2rem" }}>
+        {state.display}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem" }}>
+        <button data-action="clear" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          C
+        </button>
+        <button data-action="delete" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          DEL
+        </button>
+        <button data-action="divide" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          ÷
+        </button>
+        <button data-action="multiply" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          ×
+        </button>
+        <button data-action="7" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          7
+        </button>
+        <button data-action="8" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          8
+        </button>
+        <button data-action="9" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          9
+        </button>
+        <button data-action="subtract" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          −
+        </button>
+        <button data-action="4" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          4
+        </button>
+        <button data-action="5" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          5
+        </button>
+        <button data-action="6" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          6
+        </button>
+        <button data-action="add" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          +
+        </button>
+        <button data-action="1" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          1
+        </button>
+        <button data-action="2" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          2
+        </button>
+        <button data-action="3" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          3
+        </button>
+        <button data-action="decimal" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem" }}>
+          .
+        </button>
+        <button data-action="0" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem", gridColumn: "span 2" }}>
+          0
+        </button>
+        <button data-action="equals" style={{ padding: "1rem", backgroundColor: "var(--color-accent)", color: "var(--color-text)", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontSize: "1rem", gridColumn: "span 2" }}>
+          =
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const actionSpec = `
+State shape: { display: string, expr: string }
+
+Actions:
+- "clear": Set display to "0" and expr to "".
+- "delete": Remove the last character from expr. If expr becomes empty, set display to "0". Otherwise, set display to expr.
+- "0"–"9": If expr is empty or the last action was equals, start a new number. Append digit to expr and set display to expr.
+- "add", "subtract", "multiply", "divide": Append the operator symbol (+, −, ×, ÷) to expr and set display to expr.
+- "decimal": If expr does not contain a decimal point, append "." to expr and set display to expr.
+- "equals": Evaluate expr as a mathematical expression (supporting +, −, ×, ÷). Set display to the result (rounded to 10 decimal places) and expr to the result stringified.
+`;
+
+export { initialState, view, actionSpec };

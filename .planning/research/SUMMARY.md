@@ -1,17 +1,19 @@
-# Project Research Summary
+# Research Summary — v3.0 Trusted Desktop
 
 **Project:** Vibe App Store
-**Domain:** Client-side generative-UI app marketplace (browser-only, BYOK, runtime-compiled React)
-**Researched:** 2026-06-24
-**Confidence:** HIGH
+**Domain:** Client-only generative app marketplace — security hardening, persistence, personalization
+**Researched:** 2026-06-26
+**Confidence:** HIGH (all four capability areas verified against MDN, browser spec, HTML spec, OWASP, first-party codebase inspection, and prior CONSULT artifacts)
+
+---
 
 ## Executive Summary
 
-The Vibe App Store is a novel product that inverts the standard generative-UI pattern: instead of exposing an AI prompt surface, it hides the generation mechanic entirely so that apps appear to simply "exist" on the platform. React components are produced on demand by Claude Haiku via direct browser fetch using the user's own API key, compiled in-browser with `@babel/standalone`, instantiated via `new Function()`, and cached in IndexedDB. The result is a marketplace where clicking an app opens it instantly on a cache hit or seamlessly on a cache miss — with nothing in devtools narrating that the app was manufactured. There is no comparable shipped product combining all three constraints (generative UI + marketplace framing + hard "no visible AI" rule), so this research draws from adjacent products (v0, Claude Artifacts, websim) and verified technical foundations.
+The v3.0 "Trusted Desktop" milestone converts the Vibe OS from containment-by-convention (a `new Function` scope) to genuine opaque-origin isolation (an `<iframe sandbox="allow-scripts">` per app body), while adding desktop persistence and a custom theme editor. All four research streams independently confirmed the same dependency-driven build order: window chrome refactoring first, iframe isolation second, desktop persistence third, theme editor fourth. This ordering is not a preference — it is a hard constraint. Once an app body moves into an opaque frame, no mechanism exists to inject host-owned chrome from outside; the contextual `⋮` menu must be relocated to the host titlebar before any iframe work begins. Violating this order creates an insoluble UX problem.
 
-The recommended approach is a layered pipeline — Intent Resolver → Registry (IndexedDB + in-memory caches) → Generation (Haiku fetch + Babel transpile) → Execution (new Function + ReactDOM) — built as a series of vertical slices where each slice delivers an end-to-end working capability rather than a horizontal layer. The critical cross-cutting constraint is that classic JSX runtime (`runtime: "classic"`) must be pinned in Babel so the transpiler emits `React.createElement`, which resolves to the host-injected `React` argument in the `new Function` scope. Automatic runtime (Babel 8 default) emits an unresolvable `import`, breaking every generated component. Three other load-bearing invariants: the `anthropic-dangerous-direct-browser-access: true` header is mandatory for browser CORS; cache keys must use SHA-256 rather than `btoa` (Unicode-safe, collision-resistant, opaque); and source maps must never ship to production (they are the master switch that exposes every internal symbol and comment).
+The iframe security work (HARD-01) is the highest-risk and highest-value pillar. All four researchers independently flagged the same set of critical failure modes: adding `allow-same-origin` to the sandbox (which silently destroys the opaque-origin guarantee and lets the frame script remove its own sandbox), leaking the API key through the srcdoc template or `postMessage` payloads, skipping `event.source` checks alongside `event.origin` checks, and failing to push CSS custom properties into each frame on theme switch (CSS vars do not cross iframe document boundaries). Every one of these is a "looks done but isn't" failure mode — the product appears to work while the security guarantee is gone. The prevention strategy is type-enforcement plus dedicated CI tests at each gate, not code review alone.
 
-The principal risks are: (1) the "no visible AI" illusion breaking via any of 15 enumerated devtools vectors — enforced by CI lint from Slice 0, not audited retrospectively; (2) `new Function` is not a sandbox — global-shadowing denylist and static rejection are v1 mitigations, with `<iframe sandbox>` as the deferred production end-state behind a single swappable seam designed in Slice 1; (3) error boundaries do not catch async/event-handler throws — a global `window.onerror` + React 19 `onUncaughtError` backstop is required to prevent revealing messages from reaching the user. These risks are well-understood and have concrete mitigations; none blocks v1 if the mitigations are applied in the right slice.
+The remaining two pillars (persistence, theme editor) are lower-risk and build on existing infrastructure: both use the IDB `settings` store already at v3. The schema question — whether to bump to DB v4 with a dedicated `windowLayout` store (STACK.md proposal) or store `WindowLayoutRecord[]` and `customThemes[]` as new keys in the existing `settings` object store (ARCHITECTURE.md proposal) — is **resolved in favor of the additive-keys approach** (ARCHITECTURE.md). The `settings` store already uses an open-ended key-value pattern; adding `writeRaw` / `readRaw` for new keys requires zero migration, zero version bump, and zero risk to existing `apps`, `widgets`, `handlers`, and `settings` data. A dedicated store is the fallback only if querying complexity grows beyond a flat key-value lookup, which the v3.0 scope does not require.
 
 ---
 
@@ -19,185 +21,276 @@ The principal risks are: (1) the "no visible AI" illusion breaking via any of 15
 
 ### Recommended Stack
 
-See `.planning/research/STACK.md` for full detail. The host app is a Vite 6+ SPA with React 19 and TypeScript 5.7+. Generated code relies on the same React instance (injected by reference, never re-imported) and on `@babel/standalone` for in-browser JSX-to-JS transpilation. IndexedDB is managed via `idb@8`. All Anthropic calls use raw `fetch` (not the SDK) to minimize bundle weight and devtools fingerprint.
+The existing stack (Vite 8, React 19.2, `@babel/standalone` 7.29.7 classic-runtime, `idb` 8, Claude Haiku `claude-haiku-4-5-20251001`) requires **zero new npm dependencies** for all four v3.0 pillars. All four researchers confirmed this independently. Every capability is achievable with platform primitives, hand-rolled typed helpers, or existing library features already in use.
 
-**Core technologies:**
+**Core new technical facts (verified, load-bearing for implementation):**
 
-- **React 19.2.x + react-dom 19.2.x** — renders apps, widgets, and the shell; supplies hooks to all generated code via a single shared instance injected by reference into every `new Function` scope. Must be version-locked to each other; a second React copy triggers "Invalid hook call" on every generated component.
-- **@babel/standalone pinned to `^7.26`** (or `8.x` with explicit `runtime: "classic"`) — in-browser JSX transpiler; superior error messages feed the self-heal loop. Load eagerly at init. Config: `presets: [["react", { runtime: "classic" }]]` — non-negotiable; classic runtime is what makes the `new Function` scope model work.
-- **idb@8** — typed promise wrapper over IndexedDB; eliminates a large class of transaction bugs for ~1 KB gzip. Store only `transpiledJS` strings, never compiled functions.
-- **Vite 6+** — host app build only; `build.sourcemap: false` in production is mandatory. Never touches generated code (two separate compile paths).
-- **Raw `fetch` to `api.anthropic.com/v1/messages`** — required headers: `x-api-key`, `anthropic-version: 2023-06-01`, `content-type: application/json`, `anthropic-dangerous-direct-browser-access: true`. Model: `claude-haiku-4-5-20251001` (dated id preferred over alias for cache-key stability). Non-streaming only: partial JSX cannot be compiled.
-- **Sucrase 3.35.x** — post-v1 upgrade path for the transpiler (~20x faster, far smaller); keep Babel behind a `generation/transpile.ts` seam so the swap is one module.
+- **React 19 has no UMD builds.** `node_modules/react@19.2.7/` contains only CJS. To ship React into the sandboxed frame's srcdoc, inline `react.production.js` (17KB raw) and `react-dom-client.production.js` (536KB raw) as CJS wrapping IIFEs that assign `window.React` / `window.ReactDOM`. Total per-frame DOM string: ~553KB. Store the template as a module-level constant so it is built once and reused across all frame instances.
 
-**What not to use:** `@babel/standalone@8` with default presets (automatic runtime breaks instantiation); the Anthropic SDK in the hot path; streaming for code generation; Next.js or any SSR framework; production source maps.
+- **`srcdoc` over `blob:` for frame injection.** `srcdoc` frames inherit the parent's CSP (no new directives), require no `URL.createObjectURL` cleanup, and carry no new `frame-src` entry. `blob:` URLs require adding `blob:` to `frame-src`, cascading to a `csp.test.ts` hash change. `data:` URIs are same-origin with the parent (defeating isolation).
+
+- **`postMessage` to opaque-origin frames must use `"*"` as targetOrigin.** Sending to the string `"null"` does not work — the browser blocks it. Use `"*"` for parent-to-frame messages and strictly audit that no parent-to-frame payload contains key-adjacent data. Frame-to-parent messages must use the injected `parentOrigin` (the real host origin), not `"*"`.
+
+- **`contrast-color()` is Baseline Newly Available as of April 2026** (Chrome 147, Firefox 146, Safari 26). Use as CSS enhancement only; the TypeScript WCAG luminance calculation (20 lines, no dep) is the functional fallback for the editor's contrast warning.
+
+- **CSS custom properties do not cross iframe document boundaries.** The frame has its own `:root`. Push theme vars at frame init via srcdoc `<style>` block and on every theme switch via `postMessage({ type: 'THEME_PUSH', vars })` to all live frame `contentWindow` references.
+
+**Zero-new-dependency table (full capability coverage):**
+
+| Capability | Mechanism | New Dep? |
+|------------|-----------|----------|
+| `<iframe sandbox>` isolation | Platform `sandbox="allow-scripts" srcdoc` | NO |
+| React in frame | Inline CJS from node_modules at build time | NO |
+| Theme re-injection | `postMessage THEME_PUSH` to all frame refs | NO |
+| postMessage RPC | Hand-rolled typed envelope (~80 lines, `frameBridge.ts`) | NO |
+| Window persistence | Existing `idb@8` + new keys in `settings` store | NO |
+| Restore path | Re-uses existing `resolveComponent` + cache-hit path | NO |
+| `⋮` titlebar move | Pure React refactor within `WindowFrame.tsx` | NO |
+| Maximize / snap | CSS class toggle + `WindowEntry` state fields | NO |
+| Keyboard shortcuts | `KeyboardEvent` listener in `DesktopShell` | NO |
+| Color input | `<input type="color">` platform primitive | NO |
+| Contrast check | 20-line hand-rolled WCAG luminance calculation | NO |
+| Custom theme persist | Existing `settings` IDB store + new `customThemeStore.ts` | NO |
+
+---
 
 ### Expected Features
 
-See `.planning/research/FEATURES.md` for full detail. The distinguishing insight: every comparable product (v0, Artifacts, websim) makes the AI mechanic the headline. This product is the inverse. Competitor UX chrome (prompt boxes, "Generate" buttons, model pickers, streaming code, version history) is the exact set of anti-features.
+#### Must-Have — v3.0 Launch Criteria (P1)
 
-**Must have (table stakes — v1):**
+| Feature | Complexity | Dependency |
+|---------|------------|------------|
+| `⋮` menu relocated to titlebar (right-aligned) | LOW | **Hard prerequisite for all iframe work** |
+| Maximize / unmaximize (zoom to work area, NOT full-screen) | LOW | useWindowManager |
+| Snap to left / right half (drag to edge + keyboard) | MEDIUM | useDrag, maximize geometry model |
+| Cmd+W close / Cmd+M minimize (with `preventDefault`) | LOW | useWindowManager, active window tracking |
+| `<iframe sandbox="allow-scripts">` isolation per app | HIGH | Titlebar `⋮` must complete first |
+| Theme CSS vars re-injected per frame | MEDIUM | iframe isolation |
+| Window geometry + open-app-set persistence across reloads | MEDIUM | IDB settings store (existing) |
+| Theme name + save + duplicate-from-built-in + delete | LOW | IDB settings store |
+| Live preview while editing (mutate `:root` vars in real time) | LOW | VibeThemeProvider, 12-var contract |
 
-- Open-and-render loop (resolve → cache → produce → compile → render) — the product itself
-- IndexedDB registry (`apps`/`widgets`/`handlers`) with stable SHA-256 cache keys and prompt normalization
-- Instant re-open on cache hit (session in-memory transpiled cache; compile once per session)
-- Skeleton / "Opening…" neutral loading state on cache miss (never "Generating…")
-- App shell with contextual `⋮` menu as the only NL surface
-- Contextual natural-language tweak, clone (client-side, no model call), remove
-- Error boundary + self-heal retry (<=3, Babel compiler error fed back, not runtime error)
-- API-key onboarding framed as "activation" not "paste your AI key"
-- Graceful degradation: 401 → reconfigure inline; 429 → backoff + neutral error; no IndexedDB → in-memory Map fallback
-- Theming (light/dark/system) via CSS variables on `:root` — generated apps must look native
-- No-visible-AI hygiene applied as acceptance criterion on every feature above
+#### Anti-Features — Explicitly Excluded
 
-**Should have (competitive — v1.x after single-app loop proven):**
+| Feature | Reason to Exclude |
+|---------|------------------|
+| OS-level full-screen (hides dock + menu bar) | Destroys the desktop chrome that is the product identity; use zoom-to-work-area instead |
+| Snap Assist cascade (auto-fill other half) | Significant state complexity for marginal real-world use; manual drag is sufficient |
+| Color theory / HSL wheel / palette generation | Obscures the 12-var semantic contract; direct labeled pickers are more intuitive |
+| Community theme gallery | Requires a server; violates zero-infra constraint; JSON export/import is the sharing primitive |
+| Per-window theme | Global theme contract; per-frame overrides break OS aesthetic coherence |
+| Undo/redo in theme editor | High implementation cost for 12-var editor; duplicate-before-edit workflow substitutes |
+| True full-screen API | Anti-feature; permanent exclusion, not a deferral |
+| Persist in-app state (scroll, form values) | No stable serialization contract for generated apps; stale form state is confusing |
+| Any user-visible mechanic reference | Hard rule: "iframe", "sandbox", "isolation", "generate", "synthesize" must not appear in any UI copy, error message, or mechanic-revealing surface |
 
-- Widget composition: `@widget` dep parser, transitive pre-warm, `makeUseWidget` injection, per-widget shell + error boundary
-- Transparent backend handlers (`runHandler` resolve-or-produce-then-exec)
-- In-place tweak that replaces without surfacing history (the `root.render()` re-use model makes this natural)
+#### Defer to v3.1+
 
-**Defer (v2+):**
+- Snap to quarter (corner drag) — low delta cost after half-snap, but lower priority
+- Keyboard window cycle (Cmd+`) — moderate complexity in key capture
+- Theme export / import (JSON) — low complexity; IDB record is already a clean serializable object
 
-- `<iframe sandbox>` isolation — correct security end-state; design the mount seam now so the swap is one module
-- Implicit popularity row from `useCount` — cheap polish; needs enough usage to populate
-- Multi-user sync / sharing — needs infra and risks exposing the mechanic
-
-**Anti-features (deliberately not built):** Visible prompt box, "Generate" / "AI is thinking" language anywhere in UI, streaming code into view, server-side anything, real accounts/auth/billing, ratings/reviews, devtools-visible diagnostic attributes or log messages.
+---
 
 ### Architecture Approach
 
-See `.planning/research/ARCHITECTURE.md` for full detail. A six-layer pipeline with two defining boundaries: an async/sync boundary at the top of the Execution Engine (everything inside a React render must be synchronous — no `await`) and a single network boundary (`host/modelClient.ts`) that is the only place that constructs requests to Anthropic. State lives in exactly three places: `localStorage` (config), IndexedDB (durable registry), and session in-memory Maps (roots, transpiled strings, live components).
+The v3.0 architecture is an **evolution of the v2.0 in-tree model into a host-brokered frame model**. The execution seam (`WindowFrame` -> body content) is the pivot point: `WindowBody` (in-tree `<Component />`) is replaced by `SandboxFrame` (an `<iframe sandbox="allow-scripts">` that receives the `transpiledJS` string via `postMessage` and instantiates it inside the frame with its own React copy). The key invariant is that this swap is **contained behind the existing seam interface** — `SandboxFrame` accepts the same props that `WindowBody` previously did, and an `in-tree` fallback mode (injected via `ServicesProvider`, the existing IoC pattern) keeps all 727 existing RTL tests green without a real browser.
 
-**Major components:**
+**What stays in the parent (host):** API key, registry, `resolveComponent` pipeline, `transpile.ts`, `producer.ts`, `dataBroker` allowlist enforcement, `useWindowManager`, all chrome components (MenuBar, Dock, WindowFrame titlebar, ContextualPrompt), `VibeThemeProvider` as theme source-of-truth.
 
-1. **`host/modelClient.ts`** — single `fetch` to `api.anthropic.com`; all mandatory headers assembled here; the only place a prompt leaves the browser; gated logger lives here. Single-egress is both a hygiene chokepoint and a security control.
-2. **`registry/` (cacheKey.ts + registry.ts + caches.ts)** — opaque SHA-256 cache-key derivation; three-tier resolve (component Map → transpiledJS Map → IndexedDB → model); normalize prompt before hashing, identically on write and read.
-3. **`generation/` (transpile.ts + selfHeal.ts + app.ts + widget.ts)** — Babel classic-runtime wrapper; self-heal loop (<=3, Babel error fed back, early-stop on identical consecutive errors); `@widget` dep parser; prompt assembly. Fully async; never called from render.
-4. **`execution/` (instantiate.ts + mount.ts + prewarm.ts + useWidget.ts + ErrorBoundary.tsx)** — synchronous island; `new Function` scope injection with global-shadowing denylist; mounted-roots Map (create once, `root.render()` to update, `root.unmount()` to remove); transitive pre-warm before every mount; `useWidget` as a pure `Map.get`; per-shell ErrorBoundary; global async backstop via `window.onerror` + `onUncaughtError`.
-5. **`intent/` (resolver.ts + classifier.ts + router.ts)** — action-to-Intent mapping; keyword routing for remove/clone (no model call) vs mutate; static type map with optional Haiku classifier fallback (cache classifier results).
-6. **`ui/` (Marketplace.tsx + AppShell.tsx + WidgetShell.tsx + ContextualPrompt.tsx)** — shell rendering; the `⋮` popover is the only NL surface; AppShell owns the container `<div>` passed to `createRoot`.
+**What moves into the frame (untrusted generated code):** The compiled component string (instantiated via `new Function` inside the frame), `useWidget` and `runHandler` as postMessage stubs, `ResizeObserver` for height reporting, `window.onerror` for error reporting.
+
+**What never crosses the boundary:** The Anthropic API key, any `Function` object (structured clone prohibits it — `DataCloneError`), compiled `ComponentType` instances, the `services` graph, IDB references.
+
+**New files:**
+
+| File | Responsibility |
+|------|---------------|
+| `src/execution/frameBridge.ts` | Typed `RpcEnvelope`, `sendToFrame()`, `callParent()`, correlation-ID map |
+| `src/execution/frameMount.ts` | `Map<instanceId, HTMLIFrameElement>` for theme broadcast; `broadcastTheme()`, `registerFrame()`, `unregisterFrame()` |
+| `src/ui/SandboxFrame.tsx` | `<iframe>` React component; srcdoc generation with inline React CJS; `VIBE_BOOTSTRAP` send; `postMessage` handler for RUN_HANDLER / FETCH_DATA / MODIFY_REQUEST / FRAME_ERROR / FRAME_RESIZE |
+| `src/registry/customThemeStore.ts` | Custom theme CRUD over existing `settings` store |
+| `src/ui/ThemeEditor.tsx` | 12-var custom theme editor UI; `<input type="color">` grid; save / delete / preview |
+
+**Modified files:** `src/ui/WindowFrame.tsx` (add `⋮` to titlebar, replace `WindowBody` with `SandboxFrame`), `src/ui/AppShell.tsx` (remove `⋮` — becomes content-only wrapper or is retired), `src/ui/VibeThemeProvider.tsx` (load custom themes on mount, broadcast `THEME_PUSH` on switch), `src/registry/settingsStore.ts` (add `writeRaw` / `readRaw` for new keys), `src/ui/DesktopShell.tsx` (debounced persistence write + boot-time restore), `index.html` FOUC script (extend to read `localStorage["vibe.customThemes"]` for active custom theme), `src/csp.test.ts` (recompute SHA-256 hash after FOUC script change).
+
+**Files explicitly unchanged:** `src/execution/loader.ts`, `src/execution/instantiate.ts`, `src/execution/transpile.ts`, `src/execution/producer.ts`, all of `src/registry/` (except settingsStore), `src/host/`, `src/services/`, `src/data/dataBroker.ts`, `src/ui/Dock.tsx`, `src/ui/SearchLauncherPanel.tsx`.
+
+**Schema decision — SETTLED: additive keys in existing `settings` store, no DB version bump.**
+STACK.md proposed bumping `REGISTRY_DB_VERSION` to 4 and creating a dedicated `windows` object store. ARCHITECTURE.md proposed storing `WindowLayoutRecord[]` and `customThemes[]` as new keys (`"windowLayout"`, `"customThemes"`) in the existing `settings` object store. **Use the additive-keys approach.** The `settings` store at v3 already accepts arbitrary key-value records. Adding `writeRaw(key, value)` and `readRaw(key)` to `settingsStore.ts` costs one new method pair and zero migration risk. The dedicated-store option (DB v4 + `windows` store) is a valid fallback if querying needs grow beyond flat lookup — it is NOT needed for v3.0.
+
+---
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for full enumeration (7 critical pitfalls, 15 devtools-leak vectors, full recovery strategies).
+Ranked by severity. The first five are security-critical and map to the iframe phase:
 
-1. **Classic JSX runtime not pinned** — Babel 8 defaults to automatic runtime, emitting `import { jsx } from "react/jsx-runtime"` which is unresolvable inside `new Function`. Fix: `presets: [["react", { runtime: "classic" }]]` locked in `generation/transpile.ts`; unit test asserts `React.createElement` present in output and no `jsx-runtime` import.
+1. **`allow-same-origin` + `allow-scripts` together destroys the sandbox** — The frame's scripts can call `window.frameElement.removeAttribute('sandbox')`, escaping all isolation. Use exactly `sandbox="allow-scripts"` — no exceptions, ever. CI test: assert the mounted iframe `sandbox` attribute does not contain `"allow-same-origin"`. Browser probe test: confirm `localStorage` throws `SecurityError` from inside the frame.
 
-2. **`btoa`-based cache key** — throws on Unicode (emoji/CJK in any prompt), collides after slicing, leaks the type slug (hygiene violation). Fix: `crypto.subtle.digest("SHA-256", utf8Bytes(normalizedInput))` → hex; normalize (lowercase, trim, collapse whitespace, NFC) identically on write and read. Never acceptable; replace before first real use.
+2. **API key leaking into the frame** — Three vectors: (a) `srcdoc`-building function inadvertently receiving the `services` graph, (b) `postMessage` init payload including a config object built from the settings store, (c) error messages echoing raw handler `input` containing user-pasted key material. Prevention: type-enforce `buildSrcdoc(transpiledJS: string, themeVars: Record<string,string>, parentOrigin: string)` — no other parameters accepted. CI test: assert `iframeEl.getAttribute('srcdoc')` does not match `/sk-ant/`.
 
-3. **Production source maps shipped** — expose every internal symbol name and comment verbatim, defeating the entire devtools hygiene effort. Fix: `build.sourcemap: false` in Vite prod config (master switch behind 14 of 15 devtools-leak vectors); CI lexicon grep (`synthesize|generate|fake|mock|\bAI\b|llm` in identifiers, comments, CSS, `data-*`, prompt strings) gates every merge from Slice 0.
+3. **Missing `event.source` check on incoming `postMessage` events** — Checking `event.origin` alone is insufficient. The correct guard for opaque-origin frames is: `event.origin === "null" && event.source === knownIframeContentWindow`. Use `crypto.randomUUID()` for correlation IDs (not `Math.random()`). Namespace the pending-callback map by `[frameId, correlationId]`.
 
-4. **Error boundaries miss async/event-handler throws** — a throw in an `onClick` or async effect escapes the boundary, potentially surfacing a revealing message at `window.onerror`. Fix: global `window.addEventListener("error")` + `unhandledrejection` → neutral "couldn't load" UI; React 19 `createRoot(container, { onUncaughtError })` to route uncaught errors to neutral handling.
+4. **CSS custom properties do not cross the iframe boundary** — The frame has its own `:root`. Bake the 12 theme vars into the srcdoc `<style>` block at construction time. On every `setTheme()` call in `VibeThemeProvider`, call `broadcastTheme(vars)` to all registered frame `contentWindow` references via `postMessage({ type: 'THEME_PUSH', vars }, "*")`.
 
-5. **`new Function` is not a sandbox** — named parameters add bindings; they do not remove ambient globals. Generated code can reach `window`, `localStorage` (including the API key), `fetch`. Fix: shadow dangerous globals as `undefined` in `argNames` denylist (`window, document, globalThis, localStorage, sessionStorage, indexedDB, fetch, XMLHttpRequest, eval, Function, ...`); add static-reject pass on `transpiledJS` before instantiation; architect the mount seam as a single swappable module so `<iframe sandbox>` is a one-module swap in production.
+5. **`⋮` must be in the titlebar before any iframe work begins** — Once the body is an opaque frame, the parent cannot inject a button into the frame's DOM without compromising isolation. `createPortal` across the boundary requires `allow-same-origin`, which must not be set. Gate: existing MOD-01 through MOD-04 tests pass with the prompt triggered from the titlebar.
 
-6. **`anthropic-dangerous-direct-browser-access: true` missing** — CORS preflight rejects every request without it. Include on every call in `host/modelClient.ts`. The header reveals "this app talks to Anthropic from the browser" (which the user already knows since they supplied the key) but does not narrate the on-demand mechanic.
+6. **Stale `instanceId` on restore** — Persisted `instanceId` values are session-scoped UUIDs meaningless to the next session. On restore, always mint a fresh `instanceId` via `windowManager.open()` using the persisted `appType`. Serialize restores (cap concurrent restores at 1-2) to avoid simultaneous produce-gate hits. Evicted-app-on-restore opens as a placeholder with a retry button — not silent API spend.
 
-7. **IndexedDB private-mode / Safari eviction** — Safari private mode grants ~zero quota (first write throws); Safari ITP evicts IndexedDB after 7 days of no interaction. Fix: probe write at startup; on failure degrade to in-memory Map; `navigator.storage.persist()` at init; LRU eviction using `useCount`/`updatedAt` before quota is hit.
+7. **FOUC for custom themes** — The `index.html` FOUC script has a hard-coded `VIBE_THEMES` object (built-ins only). Mirror custom theme vars to `localStorage["vibe.customTheme.<name>"]` at write time; extend the FOUC script to check `localStorage` for the active custom theme if not found in the built-in block. Any FOUC script change requires a `csp.test.ts` SHA-256 hash recompute.
+
+8. **Infinite-loop inside a frame cannot be `terminate()`d (known v3.0 limitation)** — A generated app that enters an infinite loop inside the frame cannot be killed via `Worker.terminate()` (no Worker is involved). Document this explicitly. Mitigation: add an unresponsive-app ping/timeout/force-close overlay. Do not pretend to solve the infinite-loop problem itself.
 
 ---
 
 ## Implications for Roadmap
 
-The build order below is the Vertical-MVP framing converged on independently by the architecture and pitfalls researchers. Each slice delivers a working, end-to-end user-visible capability. Do not flatten into horizontal "build all of layer N" phases.
+### Prescribed Build Order (dependency-enforced)
 
-**The "no-visible-AI illusion" is a cross-cutting NFR, not a phase.** It is an acceptance criterion attached to every feature's definition of done, enforced by CI lint from Slice 0 forward.
+All four researchers independently arrived at the same four-phase order. The dependency chain is hard, not advisory:
 
-### Slice 0: Hygiene Shell (Foundation)
+```
+[Phase 1: Window Chrome & ⋮ Relocation]
+  -> hard prerequisite for ->
+[Phase 2: iframe Sandbox Isolation (HARD-01)]
+  -> enables ->
+[Phase 3: Desktop Persistence]    <- independent of Phase 2 at data-model level
+[Phase 4: Theme Editor]           <- independent of Phase 2 at data-model level
+```
 
-**Rationale:** Devtools hygiene constraints (opaque keys, neutral naming, gated logger, source-map-off build config, CORS header) are cheaper to bake in than to retrofit once data and modules exist.
+Phases 3 and 4 are independent of each other and of Phase 2 at the data-model level (both use the existing `settings` IDB store without a version bump). They can be developed in parallel with or immediately after Phase 2. Both should build on the Phase 1 `WindowFrame` structure, so Phase 1 is the practical start gate for all work.
 
-**Delivers:** Marketplace shell renders; AppBar with API-key config + theme toggle; neutral CSS variables on `:root`; gated logger (off by default, `localStorage.debug` gate, neutral copy only); opaque `cacheKey()` (SHA-256, normalized input); `host/modelClient.ts` stub (header assembly including `anthropic-dangerous-direct-browser-access: true`); IndexedDB init with probe write + in-memory fallback; `navigator.storage.persist()` call; CI lexicon grep gate; `build.sourcemap: false` in Vite prod config.
+---
 
-**Avoids:** Key leak via log/header (Pitfall 2), IndexedDB private-mode failure (Pitfall 4), all 15 devtools hygiene vectors (Pitfall 5), btoa cache-key trap (Pitfall 4).
+### Phase 1: Window Chrome — `⋮` Relocation + Maximize / Snap / Keyboard
 
-**Research flags:** Standard patterns — no additional research needed.
+**Rationale:** Hard prerequisite for all iframe work. Once the body is an opaque frame, the parent cannot inject chrome from outside. This phase also delivers table-stakes window management features independently.
 
-### Slice 1: Open One Static App End to End (The Loop, Minus the Model)
+**Delivers:**
+- `⋮` button moved to `WindowFrame` titlebar (right-aligned), `ContextualPrompt` rendered from `WindowFrame`
+- `AppShell` reduced to content-only wrapper or retired (removes its header entirely)
+- Maximize toggle (fills work area between menu bar and dock — NOT OS full-screen; double-click on titlebar = same)
+- Snap to left / right half (drag-to-edge with translucent drop-zone preview + `Ctrl+Left` / `Ctrl+Right`)
+- `Cmd+W` / `Ctrl+W` close, `Cmd+M` / `Ctrl+M` minimize (both with `preventDefault`)
 
-**Rationale:** Prove the resolve → compile → instantiate → render core with model risk removed. De-risks the novel runtime mechanics (Babel classic, `new Function` scope, `createRoot` map) before adding nondeterminism.
+**Addresses (FEATURES.md):** All P1 window chrome table stakes
 
-**Delivers:** IndexedDB `apps` store; Intent Resolver (static type map); three-tier registry resolve (component Map → transpiledJS Map → IndexedDB); Babel classic-runtime transpile; `new Function` instantiation with global-shadowing denylist + static-reject pass; mounted-roots Map (`createRoot` once, `root.render()` to update, `root.unmount()` to remove); AppShell with per-app ErrorBoundary; global async backstop (`window.onerror` + `onUncaughtError`); one seeded app's `sourceJSX` (no model call yet); `<iframe sandbox>` seam designed (not yet wired).
+**Avoids (PITFALLS.md):** Pitfalls 5 and 6 (portal and React-in-iframe problems pre-empted by completing this phase first)
 
-**Uses:** React 19, `@babel/standalone` (classic), `idb@8`.
+**Gate:** MOD-01 through MOD-04 tests pass with `ContextualPrompt` triggered from titlebar. `AppShell` no longer renders `ContextualPrompt`. Maximize fills work area (not OS full-screen). Keyboard shortcuts do not close the browser tab.
 
-**Avoids:** Babel footguns — classic runtime, single React, no stored functions (Pitfall 3); double `createRoot`, cleanup leaks, async error gap (Pitfall 7); untrusted code escaping `new Function` scope (Pitfall 1).
+**Research flag:** No deeper research needed. Pure React refactor + CSS class toggling. Well-documented patterns.
 
-**Research flags:** Well-documented React/Babel mechanics — no additional research needed.
+---
 
-### Slice 2: Cache-Miss Generation (The Real On-Demand Loop)
+### Phase 2: `<iframe sandbox>` Isolation (HARD-01)
 
-**Rationale:** Turns the static loop of Slice 1 into the real product. Core value ("opens an app and it works, instant on hit, seamless on miss") is met at the end of this slice.
+**Rationale:** The core security milestone. Highest risk, highest value. All key-leak pitfalls concentrate here. Must follow Phase 1. The existing execution seam makes this a contained swap.
 
-**Delivers:** Widget-less app generation via `host.modelClient`; robust JSX extraction (largest balanced code region, not just fence-stripping); self-heal loop (<=3 attempts, Babel compiler error fed back, early-stop on identical consecutive errors); store `{sourceJSX, transpiledJS}` to `apps`; skeleton/"Opening…" loading state. An app the user opens that is not seeded gets produced, compiled, cached, rendered.
+**Delivers:**
+- `src/ui/SandboxFrame.tsx` — `<iframe sandbox="allow-scripts" srcdoc=...>` rendering app body in opaque origin
+- `src/execution/frameBridge.ts` — typed `RpcEnvelope`, correlation-ID map (using `crypto.randomUUID()`), `callParent()` / `sendToFrame()` helpers
+- `src/execution/frameMount.ts` — `Map<instanceId, HTMLIFrameElement>`, `broadcastTheme()`, `registerFrame()` / `unregisterFrame()`
+- srcdoc template: inline React CJS (17KB react + 536KB react-dom-client), in-frame `new Function` instantiation, `VIBE_BOOTSTRAP` bootstrap message handler, `window.onerror` / `ResizeObserver` reporting
+- `postMessage` RPC broker in `SandboxFrame`: `RUN_HANDLER`, `FETCH_DATA` (dataBroker allowlist enforced in parent), `MODIFY_REQUEST`, `FRAME_ERROR`, `FRAME_RESIZE`, `THEME_PUSH`
+- `VibeThemeProvider` extended: calls `broadcastTheme(vars)` on every `setTheme()` call
+- `in-tree` fallback mode via `ServicesProvider` flag — all 727 existing RTL tests remain green
+- CI tests: `sandbox` attribute assertion (no `allow-same-origin`), srcdoc key-pattern assertion (no `/sk-ant/`), forged-message drop test, theme-in-frame round-trip test
+- Unresponsive-app ping/timeout/force-close overlay (documents the known infinite-loop limitation)
 
-**Avoids:** Generation unreliability — prose/fences, non-compiling JSX, wasteful self-heal, 429s (Pitfall 6). Feed Babel error, not runtime error.
+**Addresses (FEATURES.md):** HARD-01 security isolation, theme re-injection per frame, `⋮` menu working across frame boundary (host-owned, so no coordination needed)
 
-**Research flags:** Standard Haiku generation loop patterns — no additional research needed. Confirm: neutral `prompt` copy stored in the IndexedDB record (devtools vector #9).
+**Avoids (PITFALLS.md):** Pitfalls 1-7 (all critical iframe pitfalls)
 
-### Slice 3: Widget Composition + Pre-Warm + Sync `useWidget`
+**Testing note:** Existing RTL / JSDOM tests use the `in-tree` fallback path. The full iframe round-trip (READY -> MOUNT -> render -> FRAME_RESIZE -> THEME_PUSH) requires a real browser. At least one Playwright / browser-native integration test is required. This is a new test category not in the 727-test baseline.
 
-**Rationale:** The three hard concerns (sync `useWidget`, transitive pre-warm, per-widget isolation) are meaningless individually and must ship together. This is what separates "feels native" from "feels generated."
+**Research flag:** High-risk phase; full verification checklist in PITFALLS.md "Looks Done But Isn't" section. Security review at gate recommended.
 
-**Delivers:** `widgets` IndexedDB store; `@widget` dep parser; transitive `prewarm()` (recurse with cycle guard, `Promise.all` for siblings, concurrency cap <=2 to avoid 429 storms); `makeUseWidget` injection (pure `Map.get`, synchronous); WidgetShell with its own ErrorBoundary and `⋮` menu.
+---
 
-**Avoids:** Uncapped parallel pre-warm → 429 storms (Pitfall 6); render waterfall (pre-warm-before-mount); one bad widget crashing the parent app (Pitfall 7).
+### Phase 3: Desktop Persistence
 
-**Research flags:** Confirm whether dynamic (undeclared) widgets are needed. If yes, `useWidget` needs a skeleton-then-async fallback path; if no (all widgets statically declared), the implementation is fully sync. This is a product decision with a concrete implementation fork.
+**Rationale:** Independent of Phase 2 at the data-model level. Uses the existing `settings` IDB store at v3 — no version bump, no migration. Low risk; the `settingsStore.ts` pattern and `resolveComponent` restore path are already established.
 
-### Slice 4: Contextual Modification (Remove / Clone / Tweak)
+**Delivers:**
+- `settingsStore.ts` gains `writeRaw(key: string, value: unknown)` / `readRaw(key: string): Promise<unknown>`
+- `DesktopShell` gains debounced `useEffect` (300ms trailing) writing `"windowLayout": WindowLayoutRecord[]` on any window geometry change
+- Boot-time restore: reads `"windowLayout"` from settings on mount; for each record mints a fresh `instanceId`; restores geometry; calls `resolveComponent` (cache hit for previously opened apps)
+- Serialized restore queue: cap concurrent restores at 2 to avoid simultaneous produce-gate hits
+- Evicted-app-on-restore: opens as placeholder with retry button (not silent API spend)
+- Persisted record shape: `{ appType, title, icon, x, y, z, minimized }` only — no `instanceId`, no `transpiledJS`, no `prompt`, no `Component`
 
-**Rationale:** Needs live instances (Slices 1–3) and the mounted-roots Map to act on. First slice where the user shapes apps, not just opens them.
+**Schema:** No DB version bump. New keys `"windowLayout"` and `"openSet"` in existing `settings` store via `writeRaw` / `readRaw`.
 
-**Delivers:** ContextualPrompt popover (shared by app + widget shells); keyword router (remove/clone client-side with no model call, mutate → new cache key → resolve → `root.render(newTree)` reusing the existing root); correct `root.unmount()` on remove followed by DOM detach; clone as new instance id with same cache key (no model call).
+**Addresses (FEATURES.md):** Window geometry + open-app-set persistence (P1 table stakes)
 
-**Avoids:** Unmount-before-DOM-detach; root reuse on tweak prevents double `createRoot` (Pitfall 7).
+**Avoids (PITFALLS.md):** Pitfall 8 (stale instanceId), Pitfall 9 (IDB migration risk — eliminated by additive-keys decision), Pitfall 10 (persisting secrets), Pitfall 15 (IDB quota from frequent layout writes)
 
-**Research flags:** Standard patterns — no additional research needed.
+**Gate:** Close 3+ windows -> reload -> all windows restore at saved geometry without produce-gate throttle errors. IDB `settings` record for `"windowLayout"` has exactly `{ appType, title, icon, x, y, z, minimized }` per entry. Drag a window 50+ times -> IDB shows 1 record update (debounce working).
 
-### Slice 5: Resilience + Graceful Degradation
+**Research flag:** No deeper research needed. Follows v2.0 `settingsStore` precedent exactly.
 
-**Rationale:** Can only harden paths that exist. Dedicated slice forces a neutral-copy hygiene review across the full error surface at once.
+---
 
-**Delivers:** 401 → inline API-key reconfiguration prompt; 429 → exponential backoff with jitter + `retry-after` header, shared token-bucket at the single egress chokepoint; neutral error copy audit across all 15 devtools vectors; cost guardrail (soft-cap with neutral messaging after N cache misses per time window); `navigator.storage.estimate()` + LRU eviction by `useCount`/`updatedAt`.
+### Phase 4: Theme Editor / Custom Themes
 
-**Avoids:** 429 backoff, cost blowup, pre-warm concurrency (Pitfall 6); IndexedDB quota eviction (Pitfall 4).
+**Rationale:** Independent of all other phases at the data-model level. The IDB `settings` store and `VibeThemeProvider` are the only dependencies, both at the correct state. Can be developed in parallel with Phase 3 or immediately after.
 
-**Research flags:** Define concrete cost-guardrail threshold (N misses per time window) before shipping this slice. No external research needed.
+**Delivers:**
+- `src/registry/customThemeStore.ts` — `save(name, vars)`, `loadAll()`, `remove(name)` over existing `settings` store with `"customTheme:<name>"` key namespace
+- `src/ui/ThemeEditor.tsx` — 9 color pickers (`<input type="color">`) for opaque vars, 2 alpha-color inputs (range + color) for `--glass` / `--glass2`, 1 text field for `--wall` gradient; name field; save / duplicate-from-built-in / delete; live preview; `CSS.supports` validation gate before any IDB write; inline WCAG contrast warning (non-blocking)
+- `VibeThemeProvider` extended: loads custom themes from IDB on mount; merges into runtime registry as `custom:<name>` namespace; broadcasts `THEME_PUSH` to all open frames on custom theme switch
+- `MenuBar` gains "+" trigger for `ThemeEditor`; renders custom theme pills alongside built-ins
+- FOUC script extended: if `vibeStored` starts with `"custom:"`, reads `localStorage["vibe.customTheme.<name>"]` (mirrored at save time) and applies vars synchronously; falls back to Aurora only if that key is also absent
+- `csp.test.ts` SHA-256 hash updated after FOUC script change
 
-### Slice 6: Backend-Style Handlers (Optional Additive Layer)
+**Theme name rules:** Custom themes namespaced `custom:<name>` — cannot collide with built-in names. User-supplied theme names sanitized through `sanitizeDisplayName` before any DOM render or IDB storage. Delete is guarded: if the active theme is being deleted, auto-switch to Aurora first. Built-in four themes remain permanently read-only.
 
-**Rationale:** Fully independent of the UI loop; reuses the resolve-or-produce engine wholesale. Nothing above depends on it.
+**Addresses (FEATURES.md):** Theme name + save + duplicate-from-built-in + delete (P1), live preview (P1); theme export/import JSON deferred to v3.1 (IDB record is already a clean serializable object)
 
-**Delivers:** `handlers` IndexedDB store; `runHandler(intent, input)` resolve-or-produce-then-exec; handler prompt template. Handlers run mock/local logic only — no `fetch` or `localStorage` in handler scope.
+**Avoids (PITFALLS.md):** Pitfall 11 (invalid color value), Pitfall 12 (custom theme name collision / banned token), Pitfall 13 (FOUC for custom themes), Pitfall 16 (low-contrast custom theme — inline warning)
 
-**Avoids:** Handlers constructing their own Anthropic requests or reaching the API key (Pitfall 2).
+**Gate:** Create custom theme -> appears in MenuBar -> selecting re-skins desktop + all open frames live -> persists across hard reload -> FOUC script applies custom theme on first paint (no Aurora flash). Create theme named `"aurora"` -> rejected or auto-namespaced to `"custom:aurora"`, built-in Aurora still accessible. Theme editor copy passes CI lexicon gate.
 
-**Research flags:** Confirm exact allowed globals in handler scope — handlers need enough capability for local data operations (sort, filter, compute) without any network or storage access. The denylist for handlers may differ from the app/widget denylist.
+**Research flag:** No deeper research needed. Standard IDB key-value pattern; `<input type="color">` is well-documented.
+
+---
 
 ### Phase Ordering Rationale
 
-- **Hygiene scaffolding (Slice 0) before any model call or stored key** — opaque keys and the mandatory CORS header are painful to retrofit once data exists.
-- **Static loop (Slice 1) before live generation (Slice 2)** — de-risks the novel `new Function` + Babel + `createRoot` mechanics before adding model nondeterminism.
-- **Generation (Slice 2) before composition (Slice 3)** — widgets are produced the same way apps are; composition cannot exist until the generation engine does.
-- **Composition (Slice 3) before modification (Slice 4)** — tweak/clone/remove operate on live composed instances and the roots Map; WidgetShells with `⋮` menus are delivered in Slice 3.
-- **Resilience (Slice 5) after happy paths exist** — you can only harden error paths that exist.
-- **Handlers (Slice 6) last** — isolated additive layer; core value is met at Slice 2.
+- **Phase 1 before Phase 2 (hard constraint):** `createPortal` cannot cross an opaque iframe boundary without `allow-same-origin`, which must not be set. The `⋮` menu must be host-owned chrome before any frame isolation. All four researchers confirmed this independently.
+
+- **Phases 3 and 4 are independent and can be parallelized:** Both use the existing `settings` IDB store at v3 with no version bump. Neither depends on Phase 2 completion for their data model. Phase 1 is the practical start gate for all work (because `WindowFrame` structure is shared).
+
+- **Additive-keys schema eliminates the migration risk** that would have serialized Phases 3 and 4 (no DB version bump = no migration window = no blocking dependency between these phases).
+
+- **Custom theme FOUC is a known design-time constraint.** The localStorage-mirror strategy (write custom vars to both IDB and localStorage at save time) is the correct pattern, already used for the active-theme preference.
+
+---
+
+### Cross-Cutting Constraints (Every Phase)
+
+| Constraint | Scope | Enforcement |
+|-----------|-------|-------------|
+| Devtools hygiene lexicon gate | `src/**`, `index.html`, srcdoc template strings, `postMessage` payload field names, IDB store/key names | `hygiene.test.ts` — extend to scan `frameBridge.ts`, `SandboxFrame.tsx`, `ThemeEditor.tsx`, srcdoc template constant |
+| Zero new npm dependencies | All four pillars | Confirmed by all four researchers; devDependencies for Playwright are out of scope of this constraint |
+| IoC / DI with captured-Haiku fixtures | All execution paths | `in-tree` fallback mode via `ServicesProvider` flag for all new components |
+| `build.sourcemap: false` + minify in prod | Vite prod config | Prevents source map exposure of srcdoc template strings, variable names, comments |
+| CSP allowlist — `connect-src: 'self' api.anthropic.com` | Any new fetch call site | Frame never calls Anthropic directly; dataBroker allowlist enforced in parent |
+| Key never enters frame | All postMessage payloads, srcdoc template | Type-enforced `buildSrcdoc` signature; CI test on srcdoc attribute |
+| Never name the mechanic | All user-visible surfaces, error messages, devtools-visible IDB keys | Sanitizer applied to model-supplied names and user-supplied theme names; banned token set extended to cover new surfaces |
+
+---
 
 ### Research Flags
 
-**Phases needing deeper research during planning:**
+**Needs Playwright / browser-native tests:**
+- **Phase 2 (HARD-01):** The full iframe round-trip (READY -> MOUNT -> render -> FRAME_RESIZE -> THEME_PUSH) cannot be tested in JSDOM. At least one Playwright integration test is required to prove: (a) the frame renders correctly, (b) theme vars are applied inside the frame, (c) `localStorage` is inaccessible from inside the frame (`SecurityError`), (d) a forged `postMessage` from an unknown source is dropped.
 
-- **Slice 3 (Composition):** Confirm whether dynamic (undeclared) widgets are needed. Product decision with a concrete implementation fork in `useWidget`.
-- **Slice 6 (Handlers):** Confirm exact allowed globals in handler scope. Handler denylist may differ from app/widget denylist.
-
-**Phases with well-established patterns (skip research-phase):**
-
-- **Slice 0:** Pure build config + CSS + key storage — standard Vite + localStorage patterns.
-- **Slice 1:** React `createRoot` + Babel standalone + `new Function` — all verified against official docs in STACK.md and ARCHITECTURE.md.
-- **Slice 2:** Haiku generation + self-heal loop — pattern is well-documented; Babel error feedback is the key insight, already verified.
-- **Slice 4:** Contextual modification — client-side operations on a roots Map; standard React patterns.
-- **Slice 5:** Error handling + backoff — standard patterns with verified `retry-after` header support.
+**Standard patterns (skip deeper research):**
+- **Phase 1 (Window Chrome):** Pure React state + CSS class toggling. No novel patterns.
+- **Phase 3 (Persistence):** Established `settingsStore.ts` key-value pattern. Additive; no migration.
+- **Phase 4 (Theme Editor):** `<input type="color">` + `CSS.supports` validation + `localStorage` mirror. All standard.
 
 ---
 
@@ -205,19 +298,22 @@ The build order below is the Vertical-MVP framing converged on independently by 
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All versions verified against npm registry (2026-06-24); Anthropic headers verified against platform.claude.com/docs and simonwillison.net; Babel 8 automatic-runtime trap verified against babeljs.io migration docs |
-| Features | MEDIUM-HIGH | HIGH on comparable-product landscape and illusion UX research. MEDIUM on exact table-stakes line for this specific product combination (no exact competitor); categorization reasoned from blueprint + analogous products |
-| Architecture | HIGH | Runtime/React/Babel/Anthropic mechanics verified against current docs; build order and devtools-hygiene trade-offs reasoned from verified constraints |
-| Pitfalls | HIGH | Key time-sensitive claims verified: CORS header (simonwillison.net + GitHub issues), multiple-React-instance trap (react.dev), `createRoot` double-call (react.dev), error-boundary async gap (react.dev), Safari ITP eviction (webkit.org blog) |
+| Stack | HIGH | All versions verified against npm registry live; React 19 UMD absence confirmed by node_modules inspection; CSP inheritance by srcdoc confirmed against HTML spec; Babel CJS sizes measured directly |
+| Features | HIGH | Apple HIG, macOS keyboard shortcuts, Windows 11 snap behavior, shadcn/tweakcn theme editor patterns — all verified against primary sources; dependency graph independently confirmed by all four researchers |
+| Architecture | HIGH | Direct source inspection of all named files (WindowFrame.tsx, AppShell.tsx, useWindowManager.tsx, DesktopShell.tsx, VibeThemeProvider.tsx, instantiate.ts, mount.ts, loader.ts, db.ts, settingsStore.ts, hygiene.test.ts, index.html); prior CONSULT-sandboxing-execution.md cross-referenced |
+| Pitfalls | HIGH | Verified against MDN, OWASP, HTML spec (WHATWG), Chromium issue tracker, React hook call invariant docs, and first-party codebase; prior v2.0 pitfalls cross-referenced for continuity |
 
-**Overall confidence:** HIGH
+**Overall confidence: HIGH**
 
-### Gaps to Address
+### Gaps to Address During Implementation
 
-- **Dynamic widget fallback scope:** Research is silent on whether the product needs widgets declared at render-time vs statically in source. This is a product decision (Slice 3 planning) with a concrete implementation fork in `useWidget`.
-- **IndexedDB record hygiene — `prompt`/`sourceJSX` fields:** Both are fully inspectable in the Storage tab (devtools vector #9). Decision required before Slice 1 stores the first record. Recommendation: keep `sourceJSX` (it looks like ordinary React source); store only a neutral, product-framed version of the prompt — never raw user text that contains anything narrating the mechanic.
-- **Haiku classifier fallback caching:** The Intent Resolver static type map has an optional Haiku classifier fallback for ambiguous intents. Classifier results should themselves be cached by input string to avoid repeated model calls for the same phrasing. Implied by the architecture but not explicitly designed.
-- **Cost guardrail threshold:** PITFALLS.md recommends a soft-cap "after N generations in a short window" without defining N. A concrete number (e.g., 10 cache misses per 5-minute window) must be decided before Slice 5 ships.
+| Gap | How to Handle |
+|-----|--------------|
+| Playwright / browser-native test infrastructure | Phase 2 planning must include a decision on whether to add Playwright as a devDependency (separate from the zero-new-runtime-dep bias) or use an alternative browser-native approach |
+| srcdoc hygiene gate extension | `hygiene.test.ts` currently scans `src/**` + `index.html` only. Extend to scan the srcdoc template constant in `frameMount.ts` / `SandboxFrame.tsx` |
+| `loader.ts` transpiled-string accessor | The iframe path needs `transpiledJS` as a string. Recommended accessor: `export function getTranspiledJS(cacheKey: string): string | undefined` — verify against session-tier `transpiledCache` structure before Phase 2 planning commits |
+| Multi-tab IDB conflict on restore | Two tabs open during reload may write conflicting `"windowLayout"` values. Last-write-wins via IDB transaction ordering. Acceptable for v3.0; document as known multi-tab behavior |
+| Alpha-color input UX for `--glass` / `--glass2` | `<input type="color">` returns only `#rrggbb` hex. Decide during Phase 4 planning: accept text-field input for alpha vars, or implement a dual range+color picker pattern |
 
 ---
 
@@ -225,28 +321,35 @@ The build order below is the Vertical-MVP framing converged on independently by 
 
 ### Primary (HIGH confidence)
 
-- npm registry (verified 2026-06-24) — current versions: React/react-dom 19.2.7, @babel/standalone 8.0.2, idb 8.0.3, sucrase 3.35.1, @anthropic-ai/sdk 0.106.0, vite 8.1.0, typescript 6.0.3
-- platform.claude.com/docs — Haiku model id `claude-haiku-4-5-20251001`, context window, pricing, required headers, `anthropic-version: 2023-06-01`
-- simonwillison.net/2024/Aug/23/anthropic-dangerous-direct-browser-access — `anthropic-dangerous-direct-browser-access: true` header requirement; BYOK browser pattern; "nasty anti-pattern" key-in-browser warning
-- babeljs.io/docs/babel-preset-react — Babel 8 automatic-runtime default; classic runtime config; `@babel/standalone` browser transform API
-- react.dev/reference/react-dom/client/createRoot — create-once/render-to-update/unmount contract; double-call warning; `onUncaughtError` root option
-- react.dev/warnings/invalid-hook-call-warning — single React instance requirement; dispatcher mismatch
-- webkit.org/blog/14403/updates-to-storage-policy — Safari ITP 7-day IndexedDB eviction; private-mode zero quota
-- MDN Web Docs — Storage quotas, `navigator.storage.persist()`, `navigator.storage.estimate()`, `QuotaExceededError`
-- Project blueprint: `docs/vibeappstore.md`; `.planning/PROJECT.md`
+- MDN `HTMLIFrameElement.srcdoc` — srcdoc opaque origin behavior, sandbox rules, CSP inheritance
+- MDN `Window.postMessage` + Structured Clone Algorithm — Functions throw `DataCloneError`; opaque origin is string `"null"`
+- HTML spec (WHATWG) — section 9.3 Cross-document messaging; origin-at-send-time semantics
+- OWASP / SecureFlag — `event.source` check requirement alongside `event.origin`
+- React 19 UMD removal — confirmed by `node_modules/react@19.2.7` inspection (no `umd/` directory)
+- MDN CSS Custom Properties — cascade is per-document; vars do not inherit across iframe document boundaries
+- MDN `<iframe> sandbox` — `allow-scripts + allow-same-origin` defeats opaque origin; `window.frameElement.removeAttribute('sandbox')` bypass documented
+- `contrast-color()` — Baseline Newly Available April 2026; caniuse coverage 74%
+- React docs — Invalid Hook Call Warning — two React copies cause hook context mismatch
+- npm registry (verified 2026-06-26) — `react`/`react-dom` 19.2.7, `idb` 8.0.3
+- platform.claude.com/docs — `claude-haiku-4-5-20251001` confirmed current
+- Direct first-party source inspection (2026-06-26): `src/ui/WindowFrame.tsx`, `src/ui/AppShell.tsx`, `src/ui/useWindowManager.tsx`, `src/ui/DesktopShell.tsx`, `src/ui/VibeThemeProvider.tsx`, `src/execution/instantiate.ts`, `src/execution/mount.ts`, `src/execution/loader.ts`, `src/registry/db.ts`, `src/registry/settingsStore.ts`, `src/hygiene.test.ts`, `index.html`
+- `.planning/research/CONSULT-sandboxing-execution.md` — prior iframe research, allowlist pattern, infinite-loop limitation
 
-### Secondary (MEDIUM-HIGH confidence)
+### Secondary (MEDIUM confidence)
 
-- github.com/alangpierce/sucrase — ~20x faster JSX transform, `jsxRuntime: "classic"` config, browser-build caveat
-- iws.io/2022/invalid-hook-multiple-react-instances — hooks + multiple React instances in `new Function` context
-- blog.logrocket.com — skeleton screen UX: 3s skeleton perceived ≈ 1.5s spinner; neutral-motion-mirror-shape guidelines
-- rilna.net/blog — BYOK onboarding UX; why raw key-paste framing is "usually fatal for consumer apps"
-- aiqnahub.com — determinism-at-the-interface: caching first success vs temperature=0 non-determinism
+- Anvil Engineering blog — `MessageChannel` vs `window.postMessage` per-call port isolation
+- postmessage.dev — wildcard `targetOrigin` data leak patterns
+- simonwillison.net/2024/Aug/23/anthropic-dangerous-direct-browser-access — CORS header requirement
+- Apple HIG — context menu placement conventions
+- Microsoft Support — Snap layouts and keyboard shortcuts (Windows 11)
+- shadcn/tweakcn — theme editor live-preview reference patterns
 
-### Tertiary (MEDIUM confidence)
+### Tertiary (LOW confidence — patterns only, verify during implementation)
 
-- Competitor product surveys (v0, Claude Artifacts, websim, 21st.dev, Shopify) — feature landscape and anti-feature identification; no direct technical specs
+- Google web.dev IDB best practices — quota behavior, `QuotaExceededError` handling
+- Dev.to — IndexedDB upgrade version conflict handling patterns
 
 ---
-*Research completed: 2026-06-24*
+
+*Research completed: 2026-06-26*
 *Ready for roadmap: yes*

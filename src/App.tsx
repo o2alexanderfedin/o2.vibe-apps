@@ -1,19 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { dbReady } from "./registry/registry";
 import { logger } from "./lib/logger";
 import { ThemeProvider } from "./ui/ThemeProvider";
+import { VibeThemeProvider } from "./ui/VibeThemeProvider";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
-import { AppBar } from "./ui/AppBar";
-import { Marketplace } from "./ui/Marketplace";
-import { KeyDialog } from "./ui/KeyDialog";
+import { DesktopShell } from "./ui/DesktopShell";
 
-// Full storefront shell (Phase 1, Plan 02): ThemeProvider wraps an
-// ErrorBoundary around the AppBar + Marketplace tree. The KeyDialog is owned
-// here so the AppBar Account button can open it. Registry init from Plan 01 is
-// preserved.
+// Root shell. ThemeProvider (light/dark/system via data-theme) wraps
+// VibeThemeProvider (the named-theme CSS-variable contract) wraps an
+// ErrorBoundary around the DesktopShell.
+//
+// Phase 16 (WIN-08): the flat storefront (AppBar + Marketplace grid) is replaced
+// by the DesktopShell root — a themed wallpaper + animated blobs behind the
+// windows, with the dock + menu bar + minimal launcher over them. DesktopShell
+// owns its OWN WindowManagerProvider and KeyDialog, so App no longer mounts an
+// outer WindowManagerProvider or App-level key-dialog state.
+//
+// ServicesProvider lives in main.tsx (the composition root, wrapping <App/>), so
+// DesktopShell's useServices() resolves without App re-providing it. The
+// registry init effect from Plan 01 is preserved.
 export default function App() {
-  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
-
   useEffect(() => {
     void dbReady.then(() => {
       logger.info("Registry initialized");
@@ -22,15 +28,11 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <ErrorBoundary>
-        <AppBar onOpenAccount={() => setKeyDialogOpen(true)} />
-        <main>
-          <Marketplace />
-        </main>
-        {keyDialogOpen && (
-          <KeyDialog onClose={() => setKeyDialogOpen(false)} />
-        )}
-      </ErrorBoundary>
+      <VibeThemeProvider>
+        <ErrorBoundary>
+          <DesktopShell />
+        </ErrorBoundary>
+      </VibeThemeProvider>
     </ThemeProvider>
   );
 }

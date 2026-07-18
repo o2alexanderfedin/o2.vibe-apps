@@ -23,6 +23,7 @@
 // getter without touching the network or the browser.
 
 import { transpile, transpileHandler, TranspileError } from "./transpile";
+import { checkForHardcodedColors } from "./colorCheck";
 import {
   callModel,
   isTruncated,
@@ -54,7 +55,7 @@ const MAX_ATTEMPTS = 3;
  * `kind === "handler"`; EVERYTHING else is shared verbatim, so the handler path
  * does not duplicate the (carefully tuned) produce/self-heal machinery.
  */
-export type ProduceKind = "app" | "widget" | "handler";
+export type ProduceKind = "app" | "widget" | "handler" | "shell" | "delegated";
 
 /**
  * An optional free-form instruction that shapes the produced component (Phase 5,
@@ -95,14 +96,67 @@ export function buildPrompt(
     // mechanic-revealing tokens. "local sample data" stands in for the usual
     // throwaway-data phrasing, which would otherwise have tripped the word gate.
     return (
-      `Build a JavaScript async function \`handler(input)\` that handles: ${type}.\n` +
+      `Build a TypeScript async function \`handler(input)\` that handles: ${type}.\n` +
       `Requirements:\n` +
-      `- Return \`{ data }\` on success or \`{ error }\` on failure (a plain object literal)\n` +
-      `- Use realistic local sample data computed in-process — no external services\n` +
-      `- No imports, no network, no storage — local data operations only\n` +
+      `- CRITICAL: this runs OFFLINE in a tiny scope with NO modules. Write NO import and NO require — there is no SDK, no package, no network, no model, no storage. Do the work yourself with plain TypeScript (Math, String, Array, JSON, Date). Any import makes the handler fail.\n` +
+      `- Write TypeScript with EXPLICIT types: annotate the \`input\` parameter and the return type, and declare \`interface\`/\`type\` aliases for the input and output shapes — these types ARE the contract (stripped before running, so they cost nothing at runtime).\n` +
+      `- Return \`{ data }\` on success or \`{ error }\` on failure (a plain object literal that matches the declared return type)\n` +
       `- Under 150 lines\n` +
       mutationLine(userPrompt) +
-      `Return ONLY the function code, no explanation.`
+      `Return ONLY the TypeScript function code, no explanation.`
+    );
+  }
+  if (kind === "shell") {
+    // THIN-SHELL mode (the user's "minimal control + on-demand behavior" direction).
+    // The produced component is structure + state ONLY — every interaction is routed
+    // through the in-scope `runHandler`, which resolves-or-produces the real behavior
+    // on demand and caches it. So a big monolithic app collapses into a tiny shell
+    // (reliable to produce) plus per-action handlers that are each small, sandboxed,
+    // and cached. Drift across independently produced handlers is contained by making
+    // the SHELL the single source of truth: it owns the full state shape and embeds
+    // that shape into every (stable) intent, and it merges/keeps-prior on the result
+    // (see .planning/research/CONSULT-thin-shell-on-demand-handlers.md). Phrasing is
+    // hygiene-safe (HYGIENE-03); the `"${type}" app` substring is preserved.
+    return (
+      `Build a MINIMAL React TSX control for a "${type}" app — structure and state ONLY, with NO business logic.\n` +
+      `Requirements:\n` +
+      `- Default export named App (function App() { ... })\n` +
+      `- No imports — React is injected as a global; never write the word import\n` +
+      `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
+      `- Hold the COMPLETE app state in ONE React.useState with an explicit, named initial shape (keep it small, e.g. { display: "0", expr: "" }) and a separate React.useState(false) "busy" flag.\n` +
+      `- Define ONE async function dispatch(action, payload) — the ONLY place behavior happens — that:\n` +
+      `    1. sets busy true;\n` +
+      `    2. const res = await runHandler(intent, { state, payload });\n` +
+      `    3. if (res && res.data && res.data.state) setState(prev => ({ ...prev, ...res.data.state }));\n` +
+      `    4. sets busy false.\n` +
+      `  Do NOT compute any result yourself — runHandler returns the next state.\n` +
+      `- The intent MUST be a STABLE string (NEVER embed live state values, so it is the same on every press) that fully specifies the behavior so it can be built on its own. It MUST include: the app name and action, the EXACT state shape, that input is { state, payload } where payload is a STRING, and that it must return { data: { state } } with the SAME shape. Be UNAMBIGUOUS — spell out the EXACT change THIS one action makes to the state; do NOT rely on the handler inferring behavior or expecting a structured payload. For example:\n` +
+      `    const intent = "${type} action '" + action + "': state is exactly { display: string, expr: string }; input is { state, payload } where payload is the single-character string '" + action + "'; for a digit/operator append payload to expr and set display to expr; for '=' evaluate expr and set display and expr to the result; return { data: { state } } with the same shape and always a valid state";\n` +
+      `- Render the control's minimal markup (a display reading from state, and buttons). Each interactive element calls dispatch("<action>", <payload>). Show a small busy hint (e.g. disable the buttons) while busy.\n` +
+      `- Functional control markup, no placeholders, but ZERO arithmetic or business logic in this file.\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the TSX code block, no explanation.`
+    );
+  }
+  if (kind === "delegated") {
+    // DELEGATED mode (the productized "minimal control + on-demand behavior" path).
+    // The produced module is BEHAVIOR-FREE: it exports the state SSOT, a markup-only
+    // view, and a precise action spec. The permanent runtime (DelegatedShell) owns
+    // state, the container event delegate, on-demand behavior (runHandler) and the
+    // merge — so this module contains no handlers and never wires events itself.
+    // Phrasing is hygiene-safe; the `"${type}" app` substring is preserved.
+    return (
+      `Build a React TSX module for a "${type}" app as a BEHAVIOR-FREE view plus a small spec — it exports exactly three names and contains NO behavior.\n` +
+      `EVERYTHING must fit a "${type}" specifically: the state fields, the controls, the data-action ids, and the actionSpec must all be what a "${type}" actually needs. The examples below are from a DIFFERENT app (a calculator) and show only the SHAPE to follow — do not copy their content.\n` +
+      `Requirements:\n` +
+      `- No imports — React is injected as a global; never write the word import. NO event handlers, NO onClick, and do NOT wire any actions — behavior is added elsewhere.\n` +
+      `- export const initialState = { ... } : the COMPLETE state of a "${type}" as ONE object with named fields and sensible initial values. (Shape example, for a calculator: { display: "0", expr: "" }.)\n` +
+      `- export function view(state) { return ( ...markup... ); } : a PURE function that renders a "${type}" from state. Every interactive element MUST carry a data-action="<id>" attribute named for what it does in a "${type}" (shape example, calculator: data-action="7", data-action="equals") and have NO onClick or other handler. Read all dynamic text from state.\n` +
+      `- STYLING (important): there is NO external stylesheet and NO CSS framework — className / Tailwind classes will NOT apply, and you do NOT need a <style> tag. Style EVERYTHING with inline style={{ ... }} objects, and lay the controls out properly (e.g. a button keypad as style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem" }} with sensible padding, a constrained maxWidth, and centered). Theme using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
+      `- export const actionSpec = "..." : ONE precise description of the EXACT "${type}" state shape and what EACH data-action does to it — unambiguous, since this is the contract the behavior follows. (Shape example, for a calculator: "state is { display: string, expr: string }; for a digit/operator append it to expr and set display to expr; for 'equals' evaluate expr and set display and expr to the result".)\n` +
+      `- Finish with: export { initialState, view, actionSpec };\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the TSX code block, no explanation.`
     );
   }
   if (kind === "widget") {
@@ -112,21 +166,40 @@ export function buildPrompt(
       `- Default export named App (function App(props) { ... })\n` +
       `- Accepts props { data?, config?, onAction? } — all optional, render sensible defaults when absent\n` +
       `- Uses React.useState / React.useEffect (React is available as a global)\n` +
-      `- Uses CSS variables for theming: var(--color-surface), var(--color-text), var(--color-accent)\n` +
+      `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
       `- Compact, fully functional, no placeholders\n` +
       `- No imports — React is injected; no import statements at all\n` +
       mutationLine(userPrompt) +
       `Return ONLY the TSX code block, no explanation.`
     );
   }
+  // App prompt. Beyond the base contract it now surfaces TWO optional, in-scope
+  // helpers so a produced app can compose sub-widgets and run backend-style data
+  // operations — the capabilities the runtime already injects into the component
+  // scope (`useWidget`, `runHandler`) but that earlier prompts never mentioned, so
+  // real apps never used them. Design follows the recorded research consult
+  // (.planning/research/CONSULT-activating-widgets-handlers.md):
+  //   - the `// @widget <type>` declaration doubles as a chain-of-thought anchor
+  //     that primes the matching `useWidget(...)` call (so the declaration form is
+  //     kept verbatim — it is what `parseWidgetDeps` pre-warms);
+  //   - helpers are framed as GLOBALS (small models fail at injection patterns);
+  //   - explicit NO-OP / negative constraints + a two-widget cap keep simple apps
+  //     self-contained, protecting the resilience budget and first-paint latency
+  //     (every declared widget is an eager pre-warm produce on a cache miss).
+  // Phrasing stays hygiene-safe (HYGIENE-03) — none of the banned lexicon. The
+  // `"${type}" app` substring is load-bearing (the widget/app routing seam matches
+  // it); the app prompt deliberately never contains the widget-only `of type "…"`.
   return (
-    `Build a self-contained React TSX component for a "${type}" app.\n` +
+    `Build a React TSX component for a "${type}" app.\n` +
     `Requirements:\n` +
     `- Default export named App (function App() { ... })\n` +
     `- Uses React.useState / React.useEffect (React is available as a global)\n` +
-    `- Uses CSS variables for theming: var(--color-surface), var(--color-text), var(--color-accent)\n` +
+    `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
     `- Fully functional, no placeholders\n` +
     `- No imports — React is injected; no import statements at all\n` +
+    `Two optional helpers are in scope as globals — reach for them when the app naturally calls for them (a simple single-purpose app can stay one self-contained component):\n` +
+    `- Sub-widgets: when the app has a distinct reusable part (a chart, a stat card, a list section), declare it at the very top as a line comment like "// @widget chart" (at most two), then in render write const Chart = useWidget("chart") and place {Chart ? <Chart data={myData} /> : null}. A sub-widget accepts optional props { data?, config?, onAction? }. Prefer this when the app shows more than one distinct kind of content.\n` +
+    `- Data helper: when the app filters, summarizes, or derives values, do that work by calling await runHandler("describe the operation", input) inside React.useEffect or an event handler; it resolves to { data } or { error } — store { data } in state and render it.\n` +
     mutationLine(userPrompt) +
     `Return ONLY the TSX code block, no explanation.`
   );
@@ -146,15 +219,29 @@ export function buildRepairPrompt(
   if (kind === "handler") {
     // Repair a plain handler function — same self-heal contract, no React framing.
     return (
-      `Fix the JavaScript async function \`handler(input)\` that handles: ${type}.\n` +
+      `Fix the TypeScript async function \`handler(input)\` that handles: ${type}.\n` +
       `The following code has a compile error:\n` +
-      `\`\`\`js\n${previousCode}\n\`\`\`\n` +
+      `\`\`\`ts\n${previousCode}\n\`\`\`\n` +
       `Babel error: ${babelError}\n\n` +
       `Requirements:\n` +
-      `- An async function \`handler(input)\` returning \`{ data }\` or \`{ error }\`\n` +
+      `- A TypeScript async function \`handler(input)\` with explicit input/return types, returning \`{ data }\` or \`{ error }\`\n` +
       `- No imports, no network, no storage — local data operations only\n` +
       mutationLine(userPrompt) +
-      `Return ONLY the corrected function code, no explanation.`
+      `Return ONLY the corrected TypeScript function code, no explanation.`
+    );
+  }
+  if (kind === "delegated") {
+    return (
+      `Fix the React TSX module for a "${type}" app (a behavior-free view module).\n` +
+      `The following code has a compile error:\n` +
+      `\`\`\`tsx\n${previousCode}\n\`\`\`\n` +
+      `Babel error: ${babelError}\n\n` +
+      `Requirements:\n` +
+      `- export const initialState (one object), export function view(state) returning markup whose interactive elements carry data-action="..." and have NO handlers, and export const actionSpec (a string), then export { initialState, view, actionSpec }\n` +
+      `- No imports — React is injected as a global; no event handlers in this module\n` +
+      `- Style EVERYTHING with inline style={{ ... }} and the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the corrected TSX code block, no explanation.`
     );
   }
   const subject = kind === "widget" ? `widget of type "${type}"` : `component for a "${type}" app`;
@@ -166,7 +253,7 @@ export function buildRepairPrompt(
     `Requirements:\n` +
     `- Default export named App (function App(${kind === "widget" ? "props" : ""}) { ... })\n` +
     `- No imports — React is injected as a global, no import statements\n` +
-    `- Uses CSS variables: var(--color-surface), var(--color-text), var(--color-accent)\n` +
+    `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors (gradients: var(--accentA) → var(--accentB)), var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
     mutationLine(userPrompt) +
     `Return ONLY the corrected TSX code block, no explanation.`
   );
@@ -184,13 +271,25 @@ export function buildLengthPrompt(
 ): string {
   if (kind === "handler") {
     return (
-      `Build a compact JavaScript async function \`handler(input)\` that handles: ${type}.\n` +
+      `Build a compact TypeScript async function \`handler(input)\` that handles: ${type}.\n` +
       `Keep it concise so the full function fits in one response.\n` +
       `Requirements:\n` +
-      `- An async function \`handler(input)\` returning \`{ data }\` or \`{ error }\`\n` +
+      `- A TypeScript async function \`handler(input)\` with explicit input/return types, returning \`{ data }\` or \`{ error }\`\n` +
       `- Use realistic local sample data — no network, no storage, no imports\n` +
       mutationLine(userPrompt) +
-      `Return ONLY the complete function code, no explanation.`
+      `Return ONLY the complete TypeScript function code, no explanation.`
+    );
+  }
+  if (kind === "delegated") {
+    return (
+      `Build a compact React TSX module for a "${type}" app — a behavior-free view.\n` +
+      `Keep it concise so the full module fits in one response.\n` +
+      `Requirements:\n` +
+      `- export const initialState (one object), export function view(state) returning compact markup whose interactive elements carry data-action="..." and have NO handlers, and export const actionSpec (a short string), then export { initialState, view, actionSpec }\n` +
+      `- No imports — React is injected as a global; no behavior in this module\n` +
+      `- Style with inline style={{ ... }} and the host CSS variables: var(--accentA) and var(--accentB) for brand colors, var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
+      mutationLine(userPrompt) +
+      `Return ONLY the complete TSX code block, no explanation.`
     );
   }
   const subject = kind === "widget" ? `widget of type "${type}"` : `component for a "${type}" app`;
@@ -202,6 +301,7 @@ export function buildLengthPrompt(
     `- Uses React.useState / React.useEffect (React is available as a global)\n` +
     `- No imports — React is injected; no import statements at all\n` +
     `- Fully functional, no placeholders, minimal inline styling\n` +
+    `- Style using the host CSS variables: var(--accentA) and var(--accentB) for brand colors, var(--text) for text, var(--glass) and var(--glass2) for surfaces, var(--bord) for borders, var(--hi) for highlights. For shadows/overlays rgba(0,0,0,α) and rgba(255,255,255,α) are allowed — do NOT use hardcoded hex or rgb brand colors.\n` +
     mutationLine(userPrompt) +
     `Return ONLY the complete TSX code block, no explanation.`
   );
@@ -227,13 +327,17 @@ export function extractCode(responseText: string): string {
     return fenceMatch[1].trim();
   }
 
-  // No fence — look for the start of a component OR handler definition. Matches
-  // an export, a (possibly async) `function App`/`function handler` declaration,
-  // or a `const App`/`const handler` binding. Broadened in Phase 8 so a fence-less
-  // handler (`async function handler(input) { ... }`) is found the same way an app
-  // (`function App() { ... }`) is — one extractor for every produce kind (DRY).
+  // No fence — slice from the FIRST top-level code construct, dropping any prose
+  // preamble while KEEPING every leading definition. The match set covers all
+  // produce kinds: a component/handler (`function`/`const`), a typed handler's
+  // leading `interface`/`type`, an `import`/`export`, a leading comment, and a
+  // delegated MODULE that opens with a bare `const`/`function` (e.g.
+  // `const React = window.React`) and exports its names in a trailing
+  // `export { ... }`. The earlier App/handler-only regex matched that TRAILING
+  // export instead and sliced the whole module body away — this anchors on the
+  // first construct so leading definitions survive.
   const firstToken = responseText.search(
-    /^(?:export\s+default\s+|export\s+|(?:async\s+)?function\s+(?:App|handler)|const\s+(?:App|handler))/m,
+    /^(?:import\s|export\b|interface\s|type\s+\w|(?:async\s+)?function\s|const\s|let\s|var\s|\/\/|\/\*)/m,
   );
   if (firstToken !== -1) {
     return responseText.slice(firstToken).trim();
@@ -361,6 +465,25 @@ export async function produceComponent(
         kind === "handler"
           ? transpileHandler(code, { filename: type + ".ts" })
           : transpile(code, { filename: type + ".tsx" });
+      // Handler purity guard: a handler must be self-contained local computation, but
+      // the model sometimes reaches for an external module (e.g. an SDK) "to be
+      // helpful". The CJS transform turns any such import into a `require(...)` that
+      // the constrained scope's hostile require would throw on at runtime (a silent
+      // no-op to the user). Reject it at PRODUCE time so the self-heal loop gets an
+      // actionable error and retries for a pure handler instead. A clean handler
+      // imports nothing, so any `require(` is a definitive illegal-import signal.
+      if (kind === "handler" && /\brequire\s*\(/.test(transpiledJS)) {
+        throw new TranspileError(
+          "Handler must not import or require any module — no SDK, library, package, network, or model is available in this scope. Compute the result with plain local TypeScript only (Math, String, Array, JSON, Date).",
+          null,
+        );
+      }
+      // TGEN-02: post-compile saturated color check (skipped for handlers — no React/CSS).
+      // A TranspileError thrown here is caught by the existing catch below, feeding the
+      // self-heal loop (≤3 attempts) with no new retry infrastructure.
+      if (kind !== "handler") {
+        checkForHardcodedColors(transpiledJS);
+      }
       logger.info(`Producer: compiled successfully on attempt ${attempt}`);
       return { source: code, transpiledJS };
     } catch (err) {

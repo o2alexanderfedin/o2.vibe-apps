@@ -15,39 +15,12 @@
 // Test doubles are named "canned"/"stub"/"testTransport" (never banned tokens).
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import {
-  createTestServices,
-  cannedTransport,
-  type TestServicesOverrides,
-} from "../services/testServices";
+import { cleanup, screen, within, waitFor } from "@testing-library/react";
+import { cannedTransport } from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
 import { rawFixture } from "../test/fixtures/load";
-
-function renderMarketplace(overrides: TestServicesOverrides = {}) {
-  const services = createTestServices(overrides);
-  const user = userEvent.setup();
-  render(
-    <ServicesProvider services={services}>
-      <Marketplace />
-    </ServicesProvider>,
-  );
-  return { services, user };
-}
-
-async function openApp(
-  user: ReturnType<typeof userEvent.setup>,
-  displayName: string,
-): Promise<void> {
-  const card = screen.getByRole("button", {
-    name: new RegExp("^" + displayName + " —"),
-  });
-  await user.click(card);
-}
+import { renderDesktopShell as renderMarketplace, openApp } from "./desktopShellTestKit";
 
 beforeEach(() => {
   _clearCachesForTesting();
@@ -59,23 +32,23 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// 1. The shipped regression: the REAL weather fixture renders in the region.
+// 1. The shipped regression: the REAL calculator fixture renders in the region.
 // ---------------------------------------------------------------------------
 
-describe("Marketplace — real weather fixture renders in the open region", () => {
-  it("opens Weather (canned transport → REAL weather fixture) and its DOM appears", async () => {
-    // Weather is unseeded → routes through the transport. The canned transport
+describe("Marketplace — real calculator fixture renders in the open region", () => {
+  it("opens Calculator (canned transport → REAL calculator fixture) and its DOM appears", async () => {
+    // Calculator is unseeded → routes through the transport. The canned transport
     // returns the full real raw response (fences + `export default` + JSX
     // fragments). Before the token-budget fix this was truncated and the app
     // was silently dropped; here the component must actually mount.
     const { user } = renderMarketplace({
-      transport: cannedTransport(rawFixture("weather")),
+      transport: cannedTransport(rawFixture("calculator")),
     });
 
-    await openApp(user, "Weather");
+    await openApp(user, "Calculator");
 
-    const region = await screen.findByRole("region", { name: "Weather" });
-    // The real weather component renders an interactive control surface — assert
+    const region = await screen.findByRole("region", { name: "Calculator" });
+    // The real calculator component renders an interactive control surface — assert
     // *something* from the produced component is present and the region is not
     // the failure fallback.
     expect(
@@ -86,13 +59,13 @@ describe("Marketplace — real weather fixture renders in the open region", () =
     expect(content?.textContent?.length ?? 0).toBeGreaterThan(0);
   });
 
-  it("the produced weather component is interactive (has working inputs/buttons)", async () => {
+  it("the produced calculator component is interactive (has working inputs/buttons)", async () => {
     const { user } = renderMarketplace({
-      transport: cannedTransport(rawFixture("weather")),
+      transport: cannedTransport(rawFixture("calculator")),
     });
-    await openApp(user, "Weather");
-    const region = await screen.findByRole("region", { name: "Weather" });
-    // The real weather app exposes interactive elements (buttons/inputs). At
+    await openApp(user, "Calculator");
+    const region = await screen.findByRole("region", { name: "Calculator" });
+    // The real calculator app exposes interactive elements (buttons/inputs). At
     // least one interactive control exists inside the produced region.
     const interactive = within(region).queryAllByRole("button");
     const inputs = region.querySelectorAll("input, select, button");
@@ -116,7 +89,8 @@ describe("Marketplace — render-time error is contained by the ErrorBoundary", 
       transport: cannedTransport(THROWS_ON_MOUNT_TSX),
     });
 
-    await openApp(user, "Weather");
+    // Calculator is unseeded → routes through the transport (which returns a throwing component).
+    await openApp(user, "Calculator");
 
     // The neutral ErrorBoundary fallback appears (mechanic-free copy).
     const alert = await screen.findByRole("alert");
@@ -147,14 +121,15 @@ const garbageTransport: TransportFn = (_url, _init) =>
   });
 
 describe("Marketplace — produce failure shows a neutral fallback (not silent)", () => {
-  it("a TRUNCATED response surfaces the neutral 'couldn’t load' fallback in a region", async () => {
+  it("a TRUNCATED response surfaces the neutral ‘couldn’t load’ fallback in a region", async () => {
     const { user } = renderMarketplace({ transport: truncatedTransport });
 
-    await openApp(user, "Weather");
+    // Calculator is unseeded → routes through transport (which returns truncated output).
+    await openApp(user, "Calculator");
 
     // The failure is VISIBLE (a region appears) — the regression was that it
     // was silent. The neutral copy shows; nothing crashed.
-    const region = await screen.findByRole("region", { name: "Weather" });
+    const region = await screen.findByRole("region", { name: "Calculator" });
     expect(
       within(region).getByText("This app couldn’t load. Try again."),
     ).toBeInTheDocument();
@@ -187,7 +162,14 @@ describe("Marketplace — produce failure shows a neutral fallback (not silent)"
         messages: Array<{ content: string }>;
       };
       const content = body.messages[0]?.content ?? "";
-      const isInitialPrompt = content.includes("Build a self-contained");
+      // Detect the INITIAL produce prompt (not the repair "Fix …" or the length
+      // "Build a compact …" prompt) so the self-heal retries inside the first open
+      // all stay on the failing branch. Unseeded apps now produce in DELEGATED mode,
+      // whose initial prompt opens with "Build a React TSX module for" (the length
+      // prompt opens with "Build a compact …", so this substring is unique to the
+      // first attempt). The canned monolith below isn't a delegated module, so the
+      // loader's instantiate gracefully falls back to mounting it as a component.
+      const isInitialPrompt = content.includes("Build a React TSX module for");
       if (isInitialPrompt) opens += 1;
       const text =
         opens === 1
@@ -201,8 +183,9 @@ describe("Marketplace — produce failure shows a neutral fallback (not silent)"
 
     const { user } = renderMarketplace({ transport: flakyTransport });
 
-    await openApp(user, "Weather");
-    const region = await screen.findByRole("region", { name: "Weather" });
+    // Calculator is unseeded → routes through transport (flakyTransport).
+    await openApp(user, "Calculator");
+    const region = await screen.findByRole("region", { name: "Calculator" });
     const retry = within(region).getByRole("button", { name: "Try again" });
 
     await user.click(retry);

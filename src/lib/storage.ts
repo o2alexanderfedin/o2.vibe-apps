@@ -2,3 +2,4 @@
 // No other logic here; these constants are imported by all modules that read/write localStorage.
 export const STORAGE_KEY_API = "marketplace.apiKey";
 export const STORAGE_KEY_THEME = "marketplace.theme";
+export const STORAGE_KEY_OS_THEME = "marketplace.osTheme";

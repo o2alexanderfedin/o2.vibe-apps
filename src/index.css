@@ -25,6 +25,13 @@
   --color-destructive:          #FF6B6B;
 }
 
+/* Backward-compat alias bridge — keeps pre-v2.0 cached apps rendering; maps prior style variables to the current theme contract (THEME-05) */
+:root {
+  --color-surface: var(--glass);
+  --color-text: var(--text);
+  --color-accent: var(--accentA);
+}
+
 /* Base styles — font stack and body defaults */
 :root {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -105,6 +112,49 @@ body {
   color: var(--color-accent-primary);
 }
 
+/* Inline row of named-theme pills. Temporary AppBar home (Phase 16 restyles
+   and relocates it). Kept minimal; the active pill is visually distinguished. */
+.theme-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.theme-selector__pill {
+  padding: 4px 10px;
+  /* --bord is set at runtime by the named-theme engine; fall back to the
+     statically-defined border var so the pill keeps a border if those vars
+     are ever absent (e.g. the inline first-paint script is blocked). */
+  border: 1px solid var(--bord, var(--color-border-secondary));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.theme-selector__pill:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-primary);
+}
+
+.theme-selector__pill:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 2px;
+}
+
+/* Active pill marks the current theme selection. */
+.theme-selector__pill--active {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-primary);
+  background: var(--color-background-tertiary);
+}
+
 /* ─────────────────────── Storefront grid (UI-SPEC §1) ─────────────────── */
 .storefront-grid {
   display: grid;
@@ -177,12 +227,6 @@ body {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
-}
-
-.app-card__opening {
-  margin-top: 12px;
-  font-size: 14px;
-  color: var(--color-text-tertiary);
 }
 
 /* ───────────────────────── KeyDialog (UI-SPEC §3) ─────────────────────── */
@@ -632,4 +676,554 @@ body {
 .contextual-prompt__apply:focus-visible {
   outline: 2px solid var(--color-accent-primary);
   outline-offset: 2px;
+}
+
+/* --- Desktop + window chrome (Phase 15) ------------------------------------ */
+
+.desktop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  isolation: isolate;
+  pointer-events: none;
+}
+
+.window-chrome {
+  pointer-events: auto;
+  position: absolute;
+  /* Box origin pinned to the desktop's top-left (0,0). Position is supplied
+     purely by transform: translate() (set by React via inline style and,
+     during a drag, imperatively by useDrag). The desktop is position:fixed
+     inset:0, so these translate values are absolute viewport coordinates. */
+  top: 0;
+  left: 0;
+  min-width: 320px;
+  min-height: 240px;
+  background: var(--glass, var(--color-background-secondary));
+  border: 1px solid var(--bord, var(--color-border-secondary));
+  border-radius: 12px;
+  backdrop-filter: blur(32px) saturate(195%);
+  overflow: hidden;
+  will-change: transform;
+}
+
+.window-chrome--minimized {
+  display: none;
+}
+
+.window-chrome__titlebar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.window-chrome__titlebar:active {
+  cursor: grabbing;
+}
+
+.window-chrome__traffic-lights {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.window-chrome__traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.window-chrome__traffic-light--close {
+  background: #ff5f57;
+}
+
+.window-chrome__traffic-light--min {
+  background: #ffbd2e;
+}
+
+.window-chrome__traffic-light--max {
+  background: #28c840;
+}
+
+.window-chrome__title-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.window-chrome__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, var(--color-text-primary));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-chrome__icon {
+  flex-shrink: 0;
+}
+
+.window-chrome__body {
+  height: calc(100% - 36px);
+  overflow: auto;
+}
+
+.desktop--dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ===========================================================================
+   Desktop shell — themed wallpaper + animated blob layers (Phase 16, plan 16-03)
+   The wallpaper binds to the active theme's --wall; four soft, screen-blended
+   blobs (var(--b1..--b4)) drift behind the windows on a slow, staggered loop.
+   Z-LAYERING (Pitfall 3): blobs sit at z 0; the .desktop window container above
+   keeps z-index:100 + isolation:isolate and carries NO transform/filter; the
+   dock + menu bar sit at z 9000 above everything. NO transition is declared on
+   :root / custom properties here — a theme switch must not cascade-restyle
+   (Pitfall 7; the reduced-motion + transition strategy lands in plan 16-04).
+   All class names are neutral.
+   ======================================================================== */
+
+.desktop-shell {
+  position: fixed;
+  inset: 0;
+  background: var(--wall);
+  overflow: hidden;
+}
+
+/* Slow drift loop shared by all four blobs (staggered per blob below). The
+   keyframes only translate/scale the blob — they never touch the wallpaper. */
+@keyframes vibeFloat {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(7%, -9%) scale(1.14);
+  }
+  66% {
+    transform: translate(-8%, 6%) scale(0.92);
+  }
+}
+
+/* Base blob: a blurred, screen-blended radial disc that never intercepts
+   pointer events and always sits behind the windows (z 0). */
+.desktop-shell__blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.6;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Per-blob position / size / brand color (var(--b1..--b4)) + staggered timing,
+   matching the design reference's blob layout. */
+.desktop-shell__blob--1 {
+  top: -12%;
+  left: -8%;
+  width: 46vw;
+  height: 46vw;
+  background: radial-gradient(circle, var(--b1) 0%, transparent 68%);
+  animation: vibeFloat 16s ease-in-out infinite 0s;
+}
+.desktop-shell__blob--2 {
+  top: 6%;
+  left: 58%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, var(--b2) 0%, transparent 68%);
+  animation: vibeFloat 20s ease-in-out infinite -3s;
+}
+.desktop-shell__blob--3 {
+  top: 52%;
+  left: 4%;
+  width: 44vw;
+  height: 44vw;
+  background: radial-gradient(circle, var(--b3) 0%, transparent 68%);
+  animation: vibeFloat 24s ease-in-out infinite -6s;
+}
+.desktop-shell__blob--4 {
+  top: 46%;
+  left: 62%;
+  width: 48vw;
+  height: 48vw;
+  background: radial-gradient(circle, var(--b4) 0%, transparent 68%);
+  animation: vibeFloat 28s ease-in-out infinite -9s;
+}
+
+/* PERF-01 degrade (Pitfall 4): under the OS prefers-reduced-motion preference,
+   stop the per-frame blob animation outright and widen the blur so the ambient
+   look survives without animated compositing pressure. This is the primary,
+   JS-free degrade — it applies on its own via the media query, independent of
+   the matchMedia-driven marker DesktopShell sets for tests/future JS hooks. The
+   .desktop-shell--reduced-motion class (set by that JS seam) is also covered so
+   the degrade holds whether the root carries the marker or not. */
+@media (prefers-reduced-motion: reduce) {
+  .desktop-shell__blob,
+  .desktop-shell--reduced-motion .desktop-shell__blob {
+    animation: none !important;
+    filter: blur(80px);
+  }
+}
+
+/* Snap drop-zone preview (Phase 19, plan 19-03, CHROME-03). Shown while a window
+   is dragged to the left/right screen edge — a translucent overlay marks the
+   work-area HALF the window will snap to on release. Decorative + pointer-
+   transparent so it never intercepts the drag. Sits within the work area (below
+   the 40px menu bar, above the dock reserve) and below the dock/menu-bar chrome
+   (z 9000) but above the window stack. Theme-aware via --glass / --hi. */
+.desktop-snap-preview {
+  position: fixed;
+  top: 40px;
+  bottom: 88px;
+  width: 50vw;
+  z-index: 8000;
+  pointer-events: none;
+  border-radius: 16px;
+  background: var(--glass, rgba(255, 255, 255, 0.14));
+  border: 2px solid var(--hi, rgba(255, 255, 255, 0.5));
+  backdrop-filter: blur(8px) saturate(160%);
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  opacity: 0.75;
+}
+
+.desktop-snap-preview--left {
+  left: 0;
+}
+
+.desktop-snap-preview--right {
+  right: 0;
+}
+
+/* ===========================================================================
+   Desktop chrome — menu bar, dock, launcher (Phase 16, plan 16-02)
+   Glass surfaces reference the active theme vars (--glass / --bord / --text /
+   --hi) so the chrome re-skins live when the theme switches. All class names
+   are neutral.
+   ======================================================================== */
+
+/* --- Menu bar (top) — design ref VibeOS.dc.html line 34 ------------------- */
+.menu-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 9000;
+  background: var(
+    --glass,
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.03)
+    )
+  );
+  backdrop-filter: blur(26px) saturate(180%);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  border-bottom: 1px solid var(--bord, rgba(255, 255, 255, 0.14));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: var(--text);
+}
+
+.menu-bar__left,
+.menu-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.menu-bar__wordmark {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.menu-bar__active-app {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.78;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40vw;
+}
+
+.menu-bar__clock {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  min-width: 5ch;
+  text-align: right;
+}
+
+/* --- Dock (bottom-center) — design ref line 134 -------------------------- */
+.dock {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9000;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 9px 13px;
+  border-radius: 22px;
+  background: var(
+    --glass,
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.16),
+      rgba(255, 255, 255, 0.05)
+    )
+  );
+  backdrop-filter: blur(30px) saturate(190%);
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  border: 1px solid var(--bord, rgba(255, 255, 255, 0.2));
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.dock__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  position: relative;
+  padding-bottom: 9px;
+  color: var(--text);
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: bottom;
+}
+
+.dock__icon:hover {
+  transform: scale(1.22) translateY(-7px);
+}
+
+.dock__icon:focus-visible {
+  outline: 2px solid var(--hi, var(--color-accent-primary));
+  outline-offset: 2px;
+}
+
+.dock__running-dot {
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text);
+  opacity: 0.7;
+}
+
+/* --- Launcher overlay + panel -------------------------------------------- */
+.launcher-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.launcher {
+  position: relative;
+  width: min(680px, 90vw);
+  max-height: 80vh;
+  overflow: auto;
+  padding: 28px;
+  border-radius: 20px;
+  background: var(--glass, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--bord, rgba(255, 255, 255, 0.22));
+  backdrop-filter: blur(32px) saturate(195%);
+  -webkit-backdrop-filter: blur(32px) saturate(195%);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  color: var(--text);
+}
+
+.launcher__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  color: var(--text);
+}
+
+.launcher__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.launcher__app-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 10px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.launcher__app-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--bord, rgba(255, 255, 255, 0.22));
+  transform: translateY(-2px);
+}
+
+.launcher__app-btn:focus-visible {
+  outline: 2px solid var(--hi, var(--color-accent-primary));
+  outline-offset: 2px;
+}
+
+/* Search row: describe-an-app input + Open button (Phase 17, CREATE-01/02). */
+.launcher__search {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+  margin-bottom: 14px;
+}
+
+.launcher__input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 1px solid var(--bord, rgba(255, 255, 255, 0.22));
+  background: var(--glass2);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.launcher__input::placeholder {
+  color: var(--text);
+  opacity: 0.5;
+}
+
+.launcher__input:focus {
+  border-color: var(--accentB, var(--color-accent-primary));
+  box-shadow: 0 0 0 3px var(--hi);
+}
+
+.launcher__open-btn {
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 14px;
+  border: none;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  cursor: pointer;
+  background: linear-gradient(
+    135deg,
+    var(--accentA, var(--color-accent-primary)),
+    var(--accentB, var(--color-accent-primary))
+  );
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 var(--hi);
+  transition:
+    filter 0.15s ease,
+    transform 0.1s ease;
+}
+
+.launcher__open-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.launcher__open-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.launcher__open-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.launcher__working {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+/* Example prompt chips. */
+.launcher__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.launcher__chip {
+  padding: 8px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--bord, rgba(255, 255, 255, 0.22));
+  background: var(--glass2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.launcher__chip:hover:not(:disabled) {
+  background: var(--glass);
+}
+
+.launcher__chip:focus-visible {
+  outline: 2px solid var(--hi, var(--color-accent-primary));
+  outline-offset: 2px;
+}
+
+.launcher__chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

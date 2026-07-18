@@ -75,7 +75,12 @@ const REPO_ROOT = process.cwd();
 const SRC_DIR = resolve(REPO_ROOT, "src");
 const SCANNABLE = /\.(ts|tsx|css|html)$/;
 const EXCLUDED_DIRS = new Set(["node_modules", "dist", ".git"]);
-const SELF = "hygiene.test.ts";
+// SELF exclusion: anchor on the FULL repo-relative path, not the bare filename.
+// A filename-only compare ("hygiene.test.ts") would silently exempt ANY file
+// named hygiene.test.ts in any subdirectory (e.g. src/ui/hygiene.test.ts) from
+// the scan — a latent escape hatch. Only THIS exact file may carry the gate's
+// own regex literals (Pitfall 6).
+const SELF_PATH = "src/hygiene.test.ts";
 
 function walk(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -83,8 +88,9 @@ function walk(dir: string, acc: string[] = []): string[] {
     const st = statSync(full);
     if (st.isDirectory()) {
       if (!EXCLUDED_DIRS.has(entry)) walk(full, acc);
-    } else if (SCANNABLE.test(entry) && entry !== SELF) {
-      acc.push(full);
+    } else if (SCANNABLE.test(entry)) {
+      const relPath = relative(REPO_ROOT, full).split(sep).join("/");
+      if (relPath !== SELF_PATH) acc.push(full);
     }
   }
   return acc;
@@ -147,5 +153,201 @@ describe("lexicon hygiene gate (HYGIENE-03)", () => {
     // Guards against a silently-empty scan (e.g. a path regression that walks nothing).
     const fileCount = walk(SRC_DIR).length;
     expect(fileCount).toBeGreaterThan(5);
+  });
+
+  it("explicitly covers the Phase-16, Phase-17, Phase-18, and Phase-20 source files (Pitfall 11 — new surfaces stay gated)", () => {
+    // Pitfall 11: v2.0 added new devtools-visible surfaces (the desktop shell,
+    // dock, menu bar, search/launcher panel, app icons, window frame, and window
+    // manager). Phase 18 added colorCheck and sanitizeDisplayName as new source
+    // files. Phase 20 added the opaque-origin frame layer (bridge, mount/srcdoc
+    // builder, and the frame host component). The walk is recursive so these are
+    // covered automatically — but a future path/layout regression could stop
+    // scanning them silently. Assert the scanned set still contains each file by
+    // name so that regression fails loudly here.
+    //
+    // NOTE: the React CJS embed lives OUTSIDE src/ (embed/reactEmbed.ts) on
+    // purpose — the scanner must not walk React's vendored source (it carries a
+    // "Fake" identifier and process.env, which would trip the gate). So there is
+    // deliberately no embed/reactEmbed.generated.ts entry here; the embed is not
+    // part of the authored, gated src/** surface.
+    const scanned = new Set(
+      walk(SRC_DIR).map((f) => relative(REPO_ROOT, f).split(sep).join("/")),
+    );
+    for (const file of [
+      "src/ui/DesktopShell.tsx",
+      "src/ui/Dock.tsx",
+      "src/ui/MenuBar.tsx",
+      "src/ui/SearchLauncherPanel.tsx",   // Phase 17 — the search/launcher surface
+      "src/ui/iconForApp.tsx",
+      "src/ui/WindowFrame.tsx",            // Phase 15 — window chrome surface
+      "src/ui/useWindowManager.tsx",       // Phase 15 — window manager open() boundary
+      "src/ui/VibeThemeProvider.tsx",      // Phase 14 — theme provider surface
+      "src/execution/colorCheck.ts",       // Phase 18 — post-compile color check
+      "src/ui/sanitizeDisplayName.ts",     // Phase 18 — display name sanitizer
+      "src/execution/frameBridge.ts",      // Phase 20 — typed postMessage bridge
+      "src/execution/frameMount.ts",       // Phase 20 — frame registry + srcdoc builder
+      "src/ui/SandboxFrame.tsx",           // Phase 20 — opaque-origin frame host
+    ]) {
+      expect(scanned, `hygiene gate must scan ${file}`).toContain(file);
+    }
+  });
+});
+
+describe("sanitize boundary: model-supplied names cannot leak banned tokens to visible surfaces (TGEN-03)", () => {
+  // Import sanitizeDisplayName from the source under test.
+  // This is NOT a hygiene-gate test — it is a behavioral proof that the
+  // sanitization boundary works, placed here to keep all lexicon-safety
+  // proofs in one file.
+  // NOTE: hygiene.test.ts is excluded from the hygiene scan (SELF exclusion),
+  // so it is safe to use dynamic imports that reference the sanitizer here.
+
+  it("strips banned two-letter acronym from a model-supplied display name", async () => {
+    const { sanitizeDisplayName } = await import("./ui/sanitizeDisplayName");
+    // Construct the input at runtime so the hygiene gate does not flag this line.
+    const banned = ["A", "I"].join(""); // "AI"
+    expect(sanitizeDisplayName(`${banned} Weather`)).toBe("Weather");
+  });
+
+  it("strips banned g*nerate family token from a model-supplied display name", async () => {
+    const { sanitizeDisplayName } = await import("./ui/sanitizeDisplayName");
+    const banned = ["Gen", "erat", "ed"].join(""); // "Generated"
+    expect(sanitizeDisplayName(`${banned} Notes`)).toBe("Notes");
+  });
+
+  it("returns neutral fallback 'App' when the entire name is a banned token", async () => {
+    const { sanitizeDisplayName } = await import("./ui/sanitizeDisplayName");
+    const banned = ["A", "I"].join(""); // "AI"
+    expect(sanitizeDisplayName(banned)).toBe("App");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HYGIENE-07: the words "iframe" / "sandbox" / "isolation" must never reach a
+// USER-VISIBLE surface in the opaque-origin frame layer.
+//
+// These three words are NOT in the repo-wide BANNED set (they are legitimate
+// internal vocabulary: a JSX <iframe> element, the sandbox="allow-scripts"
+// attribute, an identifier like SandboxFrame, and architecture comments). What
+// the product premise forbids is narrating the isolation MECHANIC in copy a user
+// could read — an overlay message, a title, a console string, a class name —
+// just as the broader lexicon gate forbids "synthesize"/"AI"/etc.
+//
+// The carve-out that makes this precise: only inspect QUOTED STRING LITERALS
+// (single/double/backtick), since user-visible copy is always a string literal,
+// while internal identifiers (SandboxFrame, buildSrcdoc) and JSX tag/attribute
+// NAMES are never inside quotes. Two literal kinds are explicitly allowed:
+//   - the exact HTML attribute value "allow-scripts" (the sandbox token itself),
+//   - import path / module specifier literals (lines with `import` or `from "`).
+// Everything else is tested against /\b(iframe|sandbox|isolation)\b/i.
+// ---------------------------------------------------------------------------
+
+// The Phase 20 source files whose user-visible copy this gate protects.
+// Extended in Phase 22 (plan 22-05) to cover ThemeEditor.tsx.
+const PHASE20_FILES = [
+  "src/execution/frameBridge.ts",
+  "src/execution/frameMount.ts",
+  "src/ui/SandboxFrame.tsx",
+  "src/ui/SandboxFrame.css",
+  "src/ui/ThemeEditor.tsx",
+];
+
+const ISOLATION_WORDS = /\b(iframe|sandbox|isolation)\b/i;
+
+// Extract single-quoted, double-quoted, and backtick-quoted string literals from
+// a single source line. Deliberately simple (line-scoped, no cross-line template
+// handling): user-visible copy lives on one line, and this gate only needs to
+// distinguish "inside a quoted string" from "a bare identifier / JSX name".
+function extractQuotedLiterals(line: string): string[] {
+  const out: string[] = [];
+  const re = /"([^"]*)"|'([^']*)'|`([^`]*)`/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    out.push(m[1] ?? m[2] ?? m[3] ?? "");
+  }
+  return out;
+}
+
+// Decide whether a single source line carries a USER-VISIBLE occurrence of an
+// isolation word. Returns the offending literal, or null if the line is clean.
+// Exported shape kept local so the scanner can be unit-tested directly below.
+function isolationViolationInLine(line: string): string | null {
+  // Import / module-specifier lines carry path literals like "./SandboxFrame.css"
+  // — those are build wiring, never user copy. Skip the whole line.
+  if (/\bimport\b/.test(line) || /\bfrom\s+["']/.test(line)) return null;
+  for (const literal of extractQuotedLiterals(line)) {
+    if (literal === "allow-scripts") continue; // the sandbox attribute value
+    if (ISOLATION_WORDS.test(literal)) return literal;
+  }
+  return null;
+}
+
+interface CopyViolation {
+  file: string;
+  line: number;
+  literal: string;
+}
+
+function scanIsolationCopy(): CopyViolation[] {
+  const violations: CopyViolation[] = [];
+  for (const rel of PHASE20_FILES) {
+    const full = resolve(REPO_ROOT, rel);
+    if (!existsSync(full)) continue;
+    const lines = readFileSync(full, "utf8").split("\n");
+    lines.forEach((line, idx) => {
+      const hit = isolationViolationInLine(line);
+      if (hit !== null) {
+        violations.push({ file: rel, line: idx + 1, literal: hit });
+      }
+    });
+  }
+  return violations;
+}
+
+describe("HYGIENE-07: iframe/sandbox/isolation absent from user-visible copy", () => {
+  it("the Phase 20 files exist (so this gate is scanning real surfaces, not a no-op)", () => {
+    for (const rel of PHASE20_FILES) {
+      expect(existsSync(resolve(REPO_ROOT, rel)), `${rel} must exist`).toBe(true);
+    }
+  });
+
+  it("no Phase 20 file puts iframe/sandbox/isolation in a user-visible string literal", () => {
+    const violations = scanIsolationCopy();
+    const report = violations
+      .map((v) => `  ${v.file}:${v.line} quoted literal: ${v.literal}`)
+      .join("\n");
+    expect(
+      violations,
+      violations.length === 0
+        ? ""
+        : `Isolation-mechanic word(s) leaked into user-visible copy:\n${report}\n` +
+            `Use neutral product language; these words may only appear as ` +
+            `identifiers, JSX names, comments, or the allow-scripts attribute.`,
+    ).toEqual([]);
+  });
+
+  it("the carve-out distinguishes user-visible copy from the sandbox attribute and identifiers", () => {
+    // POSITIVE: a real overlay/copy string mentioning the mechanic IS flagged.
+    // (User-visible copy in this codebase is always a string literal — an
+    // overlay body, a title prop, a console string — so a quoted literal is the
+    // form the gate must catch.)
+    expect(
+      isolationViolationInLine('  <p className="x">{"This runs in a sandbox"}</p>'),
+    ).toBe("This runs in a sandbox");
+    expect(
+      isolationViolationInLine('  const msg = "iframe isolation active";'),
+    ).not.toBeNull();
+    expect(
+      isolationViolationInLine('  title="Open the isolation panel"'),
+    ).toBe("Open the isolation panel");
+
+    // NEGATIVE: the sandbox attribute VALUE is allowed.
+    expect(isolationViolationInLine('  sandbox="allow-scripts"')).toBeNull();
+    // NEGATIVE: a bare identifier / JSX name is not inside quotes → not matched.
+    expect(isolationViolationInLine("export function SandboxFrame() {")).toBeNull();
+    expect(isolationViolationInLine("      <iframe ref={iframeRef} />")).toBeNull();
+    // NEGATIVE: an import / module specifier path literal is skipped.
+    expect(
+      isolationViolationInLine('import "./SandboxFrame.css";'),
+    ).toBeNull();
   });
 });

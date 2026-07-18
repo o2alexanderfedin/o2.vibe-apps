@@ -1,0 +1,30 @@
+async function handler(input) {
+  try {
+    const { state, payload } = input;
+
+    if (!state || typeof state.display !== 'string' || typeof state.expr !== 'string') {
+      return { error: 'Invalid state shape' };
+    }
+
+    if (typeof payload !== 'string' || payload.length !== 1) {
+      return { error: 'Payload must be a single character' };
+    }
+
+    const key = payload;
+    const newExpr = state.expr + key;
+    const newDisplay = newExpr;
+
+    const newState = {
+      display: newDisplay,
+      expr: newExpr
+    };
+
+    return {
+      data: {
+        state: newState
+      }
+    };
+  } catch (err) {
+    return { error: err.message };
+  }
+}

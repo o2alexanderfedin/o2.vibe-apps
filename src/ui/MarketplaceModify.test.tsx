@@ -16,17 +16,11 @@
 //   6. A tweak that fails to resolve surfaces the existing neutral fallback.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within, waitFor } from "@testing-library/react";
+import { cleanup, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Marketplace } from "./Marketplace";
-import { ServicesProvider } from "../services/ServicesProvider";
-import {
-  createTestServices,
-  type TestServicesOverrides,
-} from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
-import type { Services } from "../services/services";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
+import { renderDesktopShell as renderMarketplace, openApp } from "./desktopShellTestKit";
 
 // A canned app component used as the FRESH tweak result so the replacement is
 // assertable (distinct text not present in any seed/original).
@@ -50,38 +44,20 @@ const APP_WITH_WIDGET = (
 const WIDGET_ORIGINAL = "```tsx\nfunction App(){ return React.createElement('div', null, 'Original Gauge'); }\n```";
 const WIDGET_TWEAKED = "```tsx\nfunction App(){ return React.createElement('div', null, 'Tweaked Gauge'); }\n```";
 
-function renderMarketplace(overrides: TestServicesOverrides = {}): {
-  services: Services;
-  user: ReturnType<typeof userEvent.setup>;
-} {
-  const services = createTestServices(overrides);
-  const user = userEvent.setup();
-  render(
-    <ServicesProvider services={services}>
-      <Marketplace />
-    </ServicesProvider>,
-  );
-  return { services, user };
-}
-
-async function openApp(
-  user: ReturnType<typeof userEvent.setup>,
-  displayName: string,
-): Promise<void> {
-  const card = screen.getByRole("button", {
-    name: new RegExp("^" + displayName + " —"),
-  });
-  await user.click(card);
-}
-
-/** Open the app's `⋮`, type the instruction, and click Apply. */
+/** Open the app's `⋮`, type the instruction, and click Apply.
+ *  Phase 19: the ⋮ button is in the WindowFrame titlebar, not in the app region.
+ */
 async function applyModification(
   user: ReturnType<typeof userEvent.setup>,
   region: HTMLElement,
   instruction: string,
 ): Promise<void> {
-  await user.click(within(region).getByRole("button", { name: "App options" }));
-  const dialog = within(region).getByRole("dialog");
+  // Locate the enclosing window-chrome frame, then the titlebar within it.
+  const frame = region.closest(".window-chrome") as HTMLElement;
+  const titlebar = frame.querySelector(".window-chrome__titlebar") as HTMLElement;
+  await user.click(within(titlebar).getByRole("button", { name: "App options" }));
+  // The ContextualPrompt dialog renders inside the frame (not inside the region).
+  const dialog = within(frame).getByRole("dialog");
   await user.type(within(dialog).getByRole("textbox"), instruction);
   await user.click(within(dialog).getByRole("button", { name: "Apply" }));
 }
@@ -105,8 +81,12 @@ describe("Marketplace — `⋮` opens the shared popover naming the target (MOD-
     await openApp(user, "Notes"); // seeded — no transport needed
     const region = await screen.findByRole("region", { name: "Notes" });
 
-    await user.click(within(region).getByRole("button", { name: "App options" }));
-    const dialog = within(region).getByRole("dialog");
+    // Phase 19: the ⋮ button is in the WindowFrame titlebar, not in the region.
+    const frame = region.closest(".window-chrome") as HTMLElement;
+    const titlebar = frame.querySelector(".window-chrome__titlebar") as HTMLElement;
+    await user.click(within(titlebar).getByRole("button", { name: "App options" }));
+    // The ContextualPrompt dialog renders inside the frame (not inside the region).
+    const dialog = within(frame).getByRole("dialog");
     expect(within(dialog).getByText("Modify: Notes")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Apply" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
@@ -252,8 +232,8 @@ describe("Marketplace — a widget `⋮` tweak re-resolves just that widget in p
     };
     const { user } = renderMarketplace({ transport });
 
-    await openApp(user, "Weather"); // unseeded → routes through transport
-    const region = await screen.findByRole("region", { name: "Weather" });
+    await openApp(user, "Calculator"); // unseeded → routes through transport
+    const region = await screen.findByRole("region", { name: "Calculator" });
     // The original widget rendered inside its own group.
     const group = await within(region).findByRole("group", { name: "gauge" });
     expect(await within(group).findByText("Original Gauge")).toBeInTheDocument();
@@ -270,6 +250,6 @@ describe("Marketplace — a widget `⋮` tweak re-resolves just that widget in p
     expect(await within(region).findByText("Tweaked Gauge")).toBeInTheDocument();
     expect(within(region).queryByText("Original Gauge")).not.toBeInTheDocument();
     expect(within(region).getByTestId("host-app")).toBeInTheDocument();
-    expect(screen.getAllByRole("region", { name: "Weather" })).toHaveLength(1);
+    expect(screen.getAllByRole("region", { name: "Calculator" })).toHaveLength(1);
   });
 });

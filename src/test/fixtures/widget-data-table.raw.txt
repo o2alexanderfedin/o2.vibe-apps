@@ -72,7 +72,7 @@ function App(props: { data?: Array<Record<string, any>>; config?: { columns?: Ar
         :root {
           --color-surface: #ffffff;
           --color-text: #1a1a1a;
-          --color-accent: #0066cc;
+          --color-accent: var(--accentA);
         }
       `}</style>
       <div style={styles.tableWrapper}>

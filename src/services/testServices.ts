@@ -11,6 +11,8 @@ import type { ApiKeyGetter, Services } from "./services";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
 import type { ProduceGate } from "../host/produceGate";
 import type { StoragePressureSeam } from "../host/storageEstimate";
+import type { DataFetchBroker } from "../data/dataBroker";
+import type { SettingsStore } from "../host/settingsStore";
 
 /** Build an in-memory Registry backed by a Map per store. */
 export function createInMemoryRegistry(): Registry {
@@ -51,6 +53,100 @@ export const noPressureStorageSeam: StoragePressureSeam = {
   estimate: () => Promise.resolve({ usage: 0, quota: 1_000_000 }),
 };
 
+/**
+ * An in-memory settings store that records every write — the test double for
+ * the IDB-backed `realSettingsStore`. It keeps the last written value in memory
+ * (so `read` round-trips) and exposes a `writes` log + `writeCount` so IoC tests
+ * can assert exactly how many times, and with what value, the provider mirrored
+ * the choice — all offline, with no real IndexedDB.
+ *
+ * Phase 21 (PERSIST-01) additions: `rawWrites` and `rawWriteCount(key)` track
+ * per-key writeRaw calls so the debounce test in Plan 21-04 can assert that
+ * exactly 1 writeRaw("windowLayout", ...) call fired during a drag session.
+ */
+export interface RecordingSettingsStore extends SettingsStore {
+  /** Every value passed to `write`, in call order. */
+  readonly writes: string[];
+  /** Convenience: number of `write` calls so far. */
+  readonly writeCount: number;
+  /**
+   * Ordered list of values written per raw key (Phase 21, PERSIST-01).
+   * The map key is the IDB settings key (e.g. "windowLayout"); the value is
+   * an ordered array of every string passed to writeRaw for that key.
+   */
+  readonly rawWrites: ReadonlyMap<string, readonly string[]>;
+  /**
+   * Convenience count of writeRaw calls for a specific key (Phase 21, PERSIST-01).
+   * Returns 0 for a key that has never been written.
+   */
+  rawWriteCount(key: string): number;
+  /**
+   * All keys passed to deleteRaw, in call order (array, preserving duplicates).
+   * Phase 22 (THEME-07): used to assert clean IDB teardown in custom-theme delete tests.
+   * Array (not Set) so tests can assert exact call counts, including double-deletes.
+   */
+  readonly rawDeletes: readonly string[];
+}
+
+export function createRecordingSettingsStore(): RecordingSettingsStore {
+  const writes: string[] = [];
+  let current: string | null = null;
+  const rawWritesMap = new Map<string, string[]>();
+  const rawCurrentMap = new Map<string, string>();
+  const rawDeletesList: string[] = [];
+  return {
+    write(value: string): Promise<void> {
+      writes.push(value);
+      current = value;
+      return Promise.resolve();
+    },
+    read(): Promise<string | null> {
+      return Promise.resolve(current);
+    },
+    writeRaw(key: string, value: string): Promise<void> {
+      const existing = rawWritesMap.get(key);
+      if (existing) {
+        existing.push(value);
+      } else {
+        rawWritesMap.set(key, [value]);
+      }
+      rawCurrentMap.set(key, value);
+      return Promise.resolve();
+    },
+    readRaw(key: string): Promise<string | null> {
+      return Promise.resolve(rawCurrentMap.get(key) ?? null);
+    },
+    get writes() {
+      return writes;
+    },
+    get writeCount() {
+      return writes.length;
+    },
+    get rawWrites(): ReadonlyMap<string, readonly string[]> {
+      // Return a snapshot with frozen value arrays so the ReadonlyMap contract
+      // is honest — callers cannot mutate the store's internal write history
+      // even with a cast (IN-01). Test-double only; no production impact.
+      return new Map(
+        [...rawWritesMap.entries()].map(([k, v]) => [k, Object.freeze([...v])]),
+      );
+    },
+    rawWriteCount(key: string): number {
+      return rawWritesMap.get(key)?.length ?? 0;
+    },
+    deleteRaw(key: string): Promise<void> {
+      rawCurrentMap.delete(key);
+      rawDeletesList.push(key);
+      return Promise.resolve();
+    },
+    get rawDeletes(): readonly string[] {
+      // Return an immutable snapshot so callers cannot observe future deletes
+      // through a previously captured ref. Array preserves duplicate calls,
+      // enabling exact-count assertions in tests.
+      return [...rawDeletesList];
+    },
+  };
+}
+
 /** A transport that returns the given component text on every call. */
 export function cannedTransport(text: string): TransportFn {
   return (_url, _init) =>
@@ -73,6 +169,12 @@ export interface TestServicesOverrides {
   produceGate?: ProduceGate;
   /** Inject a stub storage seam to exercise LRU eviction / pressure. */
   storage?: StoragePressureSeam;
+  /** Inject a canned broker for handler integration tests. */
+  fetchDataBroker?: DataFetchBroker;
+  /** Inject a recording settings store to assert the theme-mirror seam. */
+  settingsStore?: SettingsStore;
+  /** Override the app-body render mode; defaults to "in-tree" for the JSDOM suite. */
+  frameMode?: "iframe" | "in-tree";
 }
 
 /**
@@ -91,5 +193,31 @@ export function createTestServices(overrides: TestServicesOverrides = {}): Servi
     getApiKey,
     produceGate: overrides.produceGate ?? passthroughProduceGate,
     storage: overrides.storage ?? noPressureStorageSeam,
+    fetchDataBroker: overrides.fetchDataBroker,
+    settingsStore: overrides.settingsStore ?? createRecordingSettingsStore(),
+    frameMode: overrides.frameMode ?? "in-tree",
   };
 }
+
+/**
+ * A broker that returns a fixed response — for handler integration tests.
+ * Mirrors the cannedTransport pattern.
+ */
+export function cannedBroker(response: {
+  data?: unknown;
+  error?: string;
+}): DataFetchBroker {
+  return {
+    fetch: (_sourceId: string, _params: unknown) => Promise.resolve(response),
+  };
+}
+
+/**
+ * A broker that should never be called — mirrors unusedTransport.
+ * Use in tests that do not exercise the data-fetch path.
+ */
+export const unusedBroker: DataFetchBroker = {
+  fetch: () => {
+    throw new Error("DataFetchBroker was invoked unexpectedly");
+  },
+};

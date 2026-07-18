@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-07-01T22:24:30Z",
+  "phase": null,
+  "phase_name": "none (between milestones)",
+  "phase_dir": null,
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "context": "default",
+  "milestone": "v3.1 Polish & Hardening (complete, tagged, pushed)",
+  "head": "afa180a",
+  "branch": "develop",
+  "origin_sync": "0 ahead / 0 behind origin/develop",
+  "gates": { "tsc": 0, "vitest": 939, "e2e": 6, "sourcemaps": 0 },
+  "completed_tasks": [
+    {"id": 1, "name": "v3.0 Trusted Desktop autonomous (Phases 21-22) + audit/complete/cleanup", "status": "done", "tag": "v3.0"},
+    {"id": 2, "name": "v3.1 Polish & Hardening autonomous (Phases 23-25) + audit/complete/cleanup", "status": "done", "tag": "v3.1"},
+    {"id": 3, "name": "Post-v3.1 adversarial review + Aurora-flash fix (SMOKE-02 strengthened)", "status": "done", "commit": "d77ace0"},
+    {"id": 4, "name": "Integration sweep: commit design/, merge all, push develop + tags v3.0/v3.1", "status": "done", "commit": "afa180a"}
+  ],
+  "remaining_tasks": [
+    {"id": 5, "name": "Start next milestone (/gsd-new-milestone) — direction TBD by user", "status": "not_started"},
+    {"id": 6, "name": "Optional: cut v3.1.1 tag to capture the post-v3.1 Aurora-flash fix", "status": "not_started"},
+    {"id": 7, "name": "Optional: close/re-scope stale quick task 260625-q08 via /gsd-capture", "status": "not_started"},
+    {"id": 8, "name": "Optional (user's call): merge develop -> main / cut a release", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [
+    {"action": "Choose the next milestone's direction (v4.0 feature vs G2 Intent refactor)", "context": "cannot be inferred from the codebase — strategic product decision", "blocking": false},
+    {"action": "Decide whether to cut a release (develop -> main)", "context": "main is at v0.1.0; no release was requested this session", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Skipped plan-check/code-review agents on trivial v3.1 phases; ran a dedicated adversarial review at the end instead", "rationale": "proportionate rigor; the end review caught the one real defect", "phase": "v3.1"},
+    {"decision": "Landed the Aurora-flash fix as a follow-up commit on develop, not by re-tagging v3.1", "rationale": "never rewrite a pushed tag", "phase": "post-v3.1"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Verify clean+synced (git status; origin/develop..develop = 0), then run /gsd-new-milestone and ask the user what to build next. Do NOT resume a phase — none is active.",
+  "context_notes": "Clean milestone boundary. Nothing mid-flight or broken. develop fully pushed. Only latent item is the stale v1.1 quick task 260625-q08."
+}

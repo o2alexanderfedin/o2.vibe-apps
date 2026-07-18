@@ -22,6 +22,8 @@ import {
 import { STORAGE_KEY_API } from "../lib/storage";
 import type { Registry } from "./registry";
 import { realRegistry } from "./realRegistry";
+import { createDataBroker, type DataFetchBroker } from "../data/dataBroker";
+import { realSettingsStore, type SettingsStore } from "../host/settingsStore";
 
 /** Reads the access key. Returns null when unavailable. */
 export type ApiKeyGetter = () => string | null;
@@ -44,6 +46,24 @@ export interface Services {
    * estimate, driving LRU eviction when the registry approaches quota.
    */
   storage: StoragePressureSeam;
+  /**
+   * Data-fetch broker for the sanctioned network-data path (DATA-01).
+   * Optional — core flow unaffected when absent.
+   */
+  fetchDataBroker?: DataFetchBroker;
+  /**
+   * Durable mirror for user preferences (Phase 14, THEME-01): the named-theme
+   * provider writes the chosen theme here as a best-effort IDB mirror, while
+   * localStorage stays the source of truth for first paint.
+   */
+  settingsStore: SettingsStore;
+  /**
+   * Render mode for app bodies (SANDBOX-05): "iframe" runs each app in an
+   * opaque-origin frame; "in-tree" renders it directly in the host subtree.
+   * Production uses "iframe"; tests default to "in-tree" so the existing
+   * JSDOM/RTL suite runs the direct path without a real browser.
+   */
+  frameMode: "iframe" | "in-tree";
 }
 
 /**
@@ -95,5 +115,11 @@ export function createServices(): Services {
     produceGate: createProduceGate({ clock: realClock }),
     // RESIL-06: the real navigator.storage seam (guarded persist + estimate).
     storage: navigatorStorageSeam,
+    // DATA-01: real broker wired with manifest + limiter + ttlCache + realClock.
+    fetchDataBroker: createDataBroker({ clock: realClock }),
+    // THEME-01: best-effort IDB mirror of the named-theme preference (DB v3).
+    settingsStore: realSettingsStore,
+    // SANDBOX-05: production renders app bodies inside opaque-origin frames.
+    frameMode: "iframe",
   };
 }

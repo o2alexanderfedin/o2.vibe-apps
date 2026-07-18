@@ -47,7 +47,7 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
   it("allows up to N misses, then blocks the (N+1)th with the neutral throttled error", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
+    const { registryKey } = await import("../registry/cacheKey");
 
     const clock = createStubClock();
     const produceGate = createProduceGate({ clock, cap: 2, windowMs: 1000 });
@@ -58,14 +58,14 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
 
     // Two distinct UNSEEDED types → two produce misses → both allowed.
     for (const type of ["miss-type-a", "miss-type-b"]) {
-      const key = await cacheKey(type);
+      const key = await registryKey("app", type);
       await expect(
         resolveComponent(type + "-1", type, key, services),
       ).resolves.toBeTypeOf("function");
     }
 
     // A third distinct unseeded type → the (N+1)th produce → blocked, no model call.
-    const key = await cacheKey("miss-type-c");
+    const key = await registryKey("app", "miss-type-c");
     await expect(
       resolveComponent("miss-type-c-1", "miss-type-c", key, services),
     ).rejects.toBeInstanceOf(ProduceThrottledError);
@@ -74,7 +74,7 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
   it("RECOVERS after the window advances (stub clock) — a later open succeeds", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
+    const { registryKey } = await import("../registry/cacheKey");
 
     const clock = createStubClock();
     const produceGate = createProduceGate({ clock, cap: 1, windowMs: 1000 });
@@ -83,10 +83,10 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
       produceGate,
     });
 
-    const k1 = await cacheKey("recover-a");
+    const k1 = await registryKey("app", "recover-a");
     await resolveComponent("recover-a-1", "recover-a", k1, services); // allowed
 
-    const k2 = await cacheKey("recover-b");
+    const k2 = await registryKey("app", "recover-b");
     await expect(
       resolveComponent("recover-b-1", "recover-b", k2, services),
     ).rejects.toBeInstanceOf(ProduceThrottledError);
@@ -94,7 +94,7 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
     // Advance virtual time past the window — capacity frees up (no real wait).
     clock.sleep(1001);
 
-    const k3 = await cacheKey("recover-c");
+    const k3 = await registryKey("app", "recover-c");
     await expect(
       resolveComponent("recover-c-1", "recover-c", k3, services),
     ).resolves.toBeTypeOf("function");
@@ -103,7 +103,7 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
   it("cache HITS do NOT count against the cap (only misses that reach the model)", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
+    const { registryKey } = await import("../registry/cacheKey");
 
     const clock = createStubClock();
     // cap 1: exactly one produce miss is allowed in the window.
@@ -115,7 +115,7 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
       registry,
     });
 
-    const key = await cacheKey("hot-type");
+    const key = await registryKey("app", "hot-type");
 
     // First open: a MISS → produce → counts as 1 (the only allowed slot).
     await resolveComponent("hot-1", "hot-type", key, services);
@@ -131,7 +131,7 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
 
     // A brand-new unseeded type would be the SECOND miss — proving the hits above
     // never spent the budget (the single slot is still only used by the first miss).
-    const fresh = await cacheKey("fresh-type");
+    const fresh = await registryKey("app", "fresh-type");
     await expect(
       resolveComponent("fresh-1", "fresh-type", fresh, services),
     ).rejects.toBeInstanceOf(ProduceThrottledError);
@@ -140,7 +140,7 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
   it("seeded types never consult the gate (no model call) — cap untouched by seeds", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
+    const { registryKey } = await import("../registry/cacheKey");
 
     const clock = createStubClock();
     // cap 0 is invalid; use cap 1 but open MANY seeded apps — none should throttle.
@@ -152,7 +152,7 @@ describe("DI — produce-cost cap is enforced at the loader produce path (RESIL-
     for (let i = 0; i < 3; i++) {
       for (const type of ["counter", "notes"]) {
         _clearCachesForTesting();
-        const key = await cacheKey(type);
+        const key = await registryKey("app", type);
         await expect(
           resolveComponent(`${type}-s${i}`, type, key, services),
         ).resolves.toBeTypeOf("function");
@@ -165,14 +165,14 @@ describe("DI — cache HIT refreshes LRU bookkeeping (RESIL-06)", () => {
   it("a registry (tier-3) hit increments useCount and refreshes updatedAt", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
+    const { registryKey } = await import("../registry/cacheKey");
 
     const registry = createInMemoryRegistry();
     const services = createTestServices({
       transport: cannedTransport(CANNED_SOURCE),
       registry,
     });
-    const key = await cacheKey("lru-type");
+    const key = await registryKey("app", "lru-type");
 
     // First open: MISS → write. Fresh record: useCount 0.
     await resolveComponent("lru-1", "lru-type", key, services);
@@ -197,7 +197,7 @@ describe("DI — loader runs LRU eviction before a produce write under pressure 
   it("evicts a least-recently-used victim so the new record fits", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
+    const { registryKey } = await import("../registry/cacheKey");
 
     const registry = createInMemoryRegistry();
     // Pre-seed two OLD records (low updatedAt) directly into the registry.
@@ -222,7 +222,7 @@ describe("DI — loader runs LRU eviction before a produce write under pressure 
       storage,
     });
 
-    const key = await cacheKey("newcomer");
+    const key = await registryKey("app", "newcomer");
     await resolveComponent("newcomer-1", "newcomer", key, services);
 
     // The oldest pre-seeded record (old-a, updatedAt 1) was evicted to relieve
@@ -234,7 +234,7 @@ describe("DI — loader runs LRU eviction before a produce write under pressure 
   it("no eviction when under threshold — pre-existing records survive a new write", async () => {
     const { resolveComponent, _clearCachesForTesting } = await import("./loader");
     _clearCachesForTesting();
-    const { cacheKey } = await import("../registry/cacheKey");
+    const { registryKey } = await import("../registry/cacheKey");
 
     const registry = createInMemoryRegistry();
     await registry.put(
@@ -254,7 +254,7 @@ describe("DI — loader runs LRU eviction before a produce write under pressure 
       storage,
     });
 
-    const key = await cacheKey("addition");
+    const key = await registryKey("app", "addition");
     await resolveComponent("addition-1", "addition", key, services);
 
     expect(await registry.get("apps", "keep")).toBeDefined();

@@ -30,17 +30,53 @@ import { produceComponent } from "./producer";
 import { parseWidgetDeps } from "./widgetParse";
 import { wrapWidget } from "../ui/widgetWrap";
 import { SEEDED_SOURCES } from "../apps/seeds";
-import { cacheKey } from "../registry/cacheKey";
+import { registryKey } from "../registry/cacheKey";
 import type { Services } from "../services/services";
+import type { WidgetRecord } from "../registry/db";
 import { logger } from "../lib/logger";
 
 /** The maximum number of widgets resolved concurrently (WIDGET-02). */
 export const WIDGET_CONCURRENCY = 2;
 
+/**
+ * The maximum widget composition DEPTH (WIDGET-06). The host app's directly
+ * declared widgets are depth 1; a widget those declare are depth 2; and so on.
+ * A widget whose depth would exceed this cap is never resolved — it stays absent
+ * from the map (`useWidget` returns null) and the host renders around it, exactly
+ * like a resolve failure. This bounds a pathological A→B→C→…→Z nesting chain (the
+ * cycle guard already stops A→B→A loops; this stops unbounded straight-line depth).
+ */
+export const MAX_WIDGET_DEPTH = 8;
+
 /** A widget's resolved source + transpiled JS (mirrors the app dual-cache). */
 interface ResolvedWidget {
   source: string;
   transpiledJS: string;
+}
+
+/**
+ * Refresh a widget record's LRU bookkeeping after a cache HIT — bump `useCount`,
+ * stamp `updatedAt` — consistent with the handler path (touchHandler) and the
+ * loader's app path (touchRecord, Phase 7, RESIL-06). Best-effort: a write
+ * failure must never break a widget resolve, so it is swallowed to the gated
+ * logger.
+ */
+async function touchWidget(
+  services: Services,
+  key: string,
+  record: WidgetRecord,
+): Promise<void> {
+  try {
+    const useCount =
+      typeof record.useCount === "number" ? record.useCount + 1 : 1;
+    await services.registry.put(
+      "widgets",
+      { ...record, useCount, updatedAt: Date.now() },
+      key,
+    );
+  } catch (err) {
+    logger.error("Widget pre-warm: failed to refresh LRU bookkeeping: " + String(err));
+  }
 }
 
 /**
@@ -58,14 +94,18 @@ async function resolveWidget(
   widgetType: string,
   services: Services,
 ): Promise<ResolvedWidget | null> {
-  const key = await cacheKey(widgetType);
+  const key = await registryKey("widget", widgetType);
 
   // Registry hit — reuse both pieces, no recompile, no model call.
   const stored = await services.registry.get("widgets", key);
-  const storedSource = stored?.["source"];
-  const storedJS = stored?.["transpiledJS"];
-  if (typeof storedSource === "string" && typeof storedJS === "string") {
+  const storedSource = stored?.source;
+  const storedJS = stored?.transpiledJS;
+  if (stored && typeof storedSource === "string" && typeof storedJS === "string") {
     logger.info("Widget pre-warm: registry hit for " + widgetType);
+    // Cache HIT: refresh LRU bookkeeping (bump useCount, stamp updatedAt) so
+    // this entry is marked recently used and survives the next eviction sweep
+    // (RESIL-06 parity with the handler and app hit paths).
+    await touchWidget(services, key, stored);
     return { source: storedSource, transpiledJS: storedJS };
   }
 
@@ -96,9 +136,11 @@ async function resolveWidget(
   }
 
   // Persist both pieces so the next open is an instant registry hit (GEN-04 parity).
+  // Phase 10 (WIDGET-07d): include LRU bookkeeping fields on first write for parity
+  // with the handler and app write paths (useCount: 0 = no hits yet; updatedAt = now).
   await services.registry.put(
     "widgets",
-    { cacheKey: key, type: widgetType, source, transpiledJS },
+    { cacheKey: key, type: widgetType, source, transpiledJS, useCount: 0, updatedAt: Date.now() },
     key,
   );
   return { source, transpiledJS };
@@ -130,16 +172,20 @@ export async function resolveWidgetTweak(
 ): Promise<ComponentType | null> {
   // New cache key from (type + instruction) — the tweaked variant is cached
   // separately, so re-applying the same tweak is an instant registry hit.
-  const key = await cacheKey(widgetType + "\n" + instruction);
+  const key = await registryKey("widget", widgetType, instruction);
 
   let source: string;
   let transpiledJS: string;
   try {
     const stored = await services.registry.get("widgets", key);
-    const storedSource = stored?.["source"];
-    const storedJS = stored?.["transpiledJS"];
-    if (typeof storedSource === "string" && typeof storedJS === "string") {
+    const storedSource = stored?.source;
+    const storedJS = stored?.transpiledJS;
+    if (stored && typeof storedSource === "string" && typeof storedJS === "string") {
       logger.info("Widget tweak: registry hit for " + widgetType);
+      // Cache HIT: refresh LRU bookkeeping (bump useCount, stamp updatedAt) so
+      // this entry is marked recently used and survives the next eviction sweep
+      // (RESIL-06 parity with the handler and app hit paths).
+      await touchWidget(services, key, stored);
       source = storedSource;
       transpiledJS = storedJS;
     } else {
@@ -153,9 +199,11 @@ export async function resolveWidgetTweak(
       );
       source = produced.source;
       transpiledJS = produced.transpiledJS;
+      // Phase 10 (WIDGET-07d): include LRU bookkeeping fields on first write for parity
+      // with the handler and app write paths (useCount: 0 = no hits yet; updatedAt = now).
       await services.registry.put(
         "widgets",
-        { cacheKey: key, type: widgetType, source, transpiledJS },
+        { cacheKey: key, type: widgetType, source, transpiledJS, useCount: 0, updatedAt: Date.now() },
         key,
       );
     }
@@ -196,29 +244,43 @@ export async function prewarmWidgets(
   // Cycle guard (WIDGET-02): a type seen here is never queued twice, so a
   // dependency cycle (A→B→A) terminates. `seen` includes in-progress types.
   const seen = new Set<string>();
-  // FIFO worklist of widget types still needing resolution.
-  const queue: string[] = [];
+  // FIFO worklist of widget types still needing resolution, each tagged with its
+  // composition depth (root deps = 1) so the depth cap can be enforced (WIDGET-06).
+  const queue: Array<{ type: string; depth: number }> = [];
 
-  function enqueue(types: string[]): void {
+  function enqueue(types: string[], depth: number): void {
+    // Depth cap (WIDGET-06): a type beyond MAX_WIDGET_DEPTH is dropped — isolated
+    // like a resolve failure (absent from the map → useWidget null → host renders
+    // around it). Bounds unbounded straight-line nesting; the cycle guard handles
+    // loops. Logged (gated) so a too-deep tree is observable in dev.
+    if (depth > MAX_WIDGET_DEPTH) {
+      if (types.length > 0) {
+        logger.info(
+          "Widget pre-warm: depth cap (" + MAX_WIDGET_DEPTH + ") reached — skipping " +
+            types.join(", "),
+        );
+      }
+      return;
+    }
     for (const t of types) {
       if (!seen.has(t)) {
         seen.add(t);
-        queue.push(t);
+        queue.push({ type: t, depth });
       }
     }
   }
 
-  // Seed the worklist from the root source's declarations.
-  enqueue(parseWidgetDeps(rootSource));
+  // Seed the worklist from the root source's declarations (depth 1).
+  enqueue(parseWidgetDeps(rootSource), 1);
 
   // Resolve a single type: fetch/produce → record source → instantiate against
   // the shared map → enqueue its nested declarations. All failures are isolated.
-  async function processOne(widgetType: string): Promise<void> {
+  async function processOne(widgetType: string, depth: number): Promise<void> {
     const resolved = await resolveWidget(widgetType, services);
     if (!resolved) return; // isolated failure — type stays absent from the map
     sources.set(widgetType, resolved.source);
-    // Transitive: queue any widgets THIS widget declares (WIDGET-02).
-    enqueue(parseWidgetDeps(resolved.source));
+    // Transitive: queue any widgets THIS widget declares, one level deeper (WIDGET-02/06).
+    enqueue(parseWidgetDeps(resolved.source), depth + 1);
     // Instantiate against the SHARED map so nested useWidget calls resolve too,
     // then wrap in WidgetShell + per-widget ErrorBoundary (WIDGET-04/05) so the
     // component the host receives is isolated by construction. A render-time
@@ -259,7 +321,7 @@ export async function prewarmWidgets(
       }
       activeCount += 1;
       try {
-        await processOne(next);
+        await processOne(next.type, next.depth);
       } finally {
         activeCount -= 1;
       }

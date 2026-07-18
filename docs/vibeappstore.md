@@ -49,6 +49,45 @@ on first need, cached for all subsequent calls.
 
 ---
 
+## Built Reality (v1.1) — How the Implementation Diverges From This Blueprint
+
+This blueprint describes the original v1.0 design. The shipped code implements it
+and then moved past it. Where the two differ, **the code is authoritative**; the
+sections below are annotated with the deltas, and `.planning/BLUEPRINT-DELTA.md`
+carries the full audit. The headline divergences:
+
+- **Delegated thin-shell is the default for unseeded apps (not monolithic).** A
+  cache miss on an unseeded app produces a *behavior-free module* — `initialState`
+  (the state SSOT), a **markup-only** `view(state)` whose interactive elements carry
+  `data-action="…"` and **no** handlers, and a precise `actionSpec`. A permanent
+  `DelegatedShell` runtime (`src/execution/delegated.tsx`) mounts it: one
+  container-level click delegate reads `data-action` and **produces that action's
+  behavior on demand** via `runHandler`, caching it so a re-press is a cache hit
+  ("attached forever"). Behavior handlers are produced as **TypeScript** with a
+  require-purity guard. **Seeded apps stay monolithic**, and a delegated payload
+  that exports no `view` **gracefully falls back** to the monolithic path. This
+  trades the blueprint's `<400`-line single component for a tiny markup module +
+  many small per-action handlers (smaller → more reliable from a cheap model).
+- **Flat token budget.** One `MAX_TOKENS = 8192` for every kind, not the per-kind
+  1500/1000/800 — real components overran the smaller budgets and truncated.
+- **Simplified theming variables.** Generated UI uses the triad
+  `var(--color-surface)`, `var(--color-text)`, `var(--color-accent)` (set on
+  `:root` via a `data-theme` attribute), not the larger primary/secondary/tertiary
+  set this blueprint's prompt templates show.
+- **Two layers this blueprint omits.** `src/host/` — resilience (token bucket,
+  429 backoff+jitter, a sliding-window produce-cost gate, a global async error
+  backstop, storage-pressure LRU eviction); `src/services/` — the IoC/DI
+  composition root that injects the transport, registry, key getter, and cost gate
+  so tests substitute every external dependency (no network, no real IndexedDB).
+- **The mandatory browser header.** Browser `fetch` to Anthropic also sends
+  `anthropic-dangerous-direct-browser-access: true` (omitted by this blueprint's
+  Auth line) — without it the CORS preflight is rejected.
+- **The cache-key contract is folded and opaque** (see Layer 2): SHA-256 over the
+  normalized `(kind, type, prompt)` parts, so an app and a widget of the same type
+  slug never collide and each tweak variant keys separately.
+
+---
+
 ## Architecture Layers
 
 ### Layer 0 — User Interaction Surface
@@ -150,9 +189,25 @@ interface StoredHandler {
 
 #### Cache key construction
 
+Implemented as `registryKey()` in `src/registry/cacheKey.ts`. SHA-256 — not
+`btoa`, which throws on emoji/CJK and is partially readable — over the
+per-part-normalized parts joined by a unit separator (`U+001F`, which survives
+normalization so field boundaries can't blur), yielding an opaque 64-char
+lowercase-hex key. Folding `kind` in keeps an app and a widget of the same type
+slug distinct; folding the normalized `prompt` in keys each tweak variant
+separately. (A single-string `cacheKey(input)` primitive remains for opaque keys
+that need no structure.)
+
 ```typescript
-const cacheKey = (kind: "app" | "widget" | "handler", type: string, prompt: string): string =>
-  btoa(`${kind}::${type}::${prompt}`).replace(/[^a-z0-9]/gi, "").slice(0, 64);
+type RegistryKind = "app" | "widget" | "handler";
+
+// normalizePart: NFC → lowercase → trim → collapse internal whitespace (per part).
+const registryKey = async (
+  kind: RegistryKind,
+  type: string,
+  prompt = "",
+): Promise<string> =>
+  sha256Hex([kind, normalizePart(type), normalizePart(prompt)].join(""));
 ```
 
 #### Lookup flow
@@ -171,8 +226,19 @@ resolve(intent)
 
 **Model:** `claude-haiku-4-5-20251001`
 **Transport:** Direct browser `fetch` to `https://api.anthropic.com/v1/messages`
-**Auth:** `x-api-key: ${localStorage.anthropic_api_key}`
-**Max tokens:** 1500 (app), 1000 (widget), 800 (handler)
+**Auth / headers:** `x-api-key: ${localStorage.anthropic_api_key}`,
+`anthropic-version: 2023-06-01`, and **`anthropic-dangerous-direct-browser-access: true`**
+(mandatory — the browser CORS preflight is rejected without it).
+**Max tokens:** a single flat `8192` for every kind. *(This blueprint originally
+specified 1500/1000/800 per kind; real components overran those and truncated
+mid-JSX → transpile failure, so the budget was unified and raised.)*
+
+> **Delegated default (v1.1):** an unseeded app is produced as a behavior-free
+> module (`initialState` + markup-only `view` + `actionSpec`) mounted through the
+> permanent `DelegatedShell`, with per-action behavior produced on demand via
+> `runHandler` and cached — NOT the monolithic component the templates below show.
+> Seeds stay monolithic; non-module payloads fall back to the monolithic path.
+> See "Built Reality (v1.1)" above.
 
 #### App generation prompt template
 
@@ -193,10 +259,8 @@ Declare any widgets you need at the top of the component as:
 
 Requirements:
 - React hooks (useState, useEffect, useMemo as needed)
-- CSS variables for theming:
-    var(--color-text-primary / secondary / tertiary)
-    var(--color-background-primary / secondary / tertiary)
-    var(--color-border-tertiary / secondary)
+- CSS variables for theming (the shipped triad, set on `:root` via `data-theme`):
+    var(--color-surface), var(--color-text), var(--color-accent)
 - Realistic interactive sample data
 - Self-contained — no imports other than React and useWidget()
 - Default export
@@ -601,6 +665,15 @@ src/
 │
 └── app.tsx                   # root, DB init, theme init, marketplace shell
 ```
+
+> **Shipped structure differs.** `db/` → **`registry/`** (`cacheKey.ts`,
+> `registry.ts`, `db.ts`, `storagePressure.ts`); generation lives in
+> **`execution/producer.ts`** (app / widget / handler / **delegated** kinds), with
+> `execution/delegated.tsx` (the `DelegatedShell` runtime) and `loader.ts` (the
+> three-tier resolve → compile → instantiate path). Two layers this tree omits:
+> **`host/`** (resilience — token bucket, 429 backoff, produce-cost gate, global
+> error backstop, storage-pressure LRU) and **`services/`** (the IoC/DI
+> composition root). `store/` → `lib/storage.ts`; `app.tsx` → `App.tsx` + `main.tsx`.
 
 ---
 

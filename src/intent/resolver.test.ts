@@ -2,7 +2,7 @@
 // Node environment: cacheKey uses crypto.subtle; avoids jsdom ArrayBuffer shim.
 import { describe, expect, it } from "vitest";
 import { resolveOpenApp } from "./resolver";
-import { cacheKey } from "../registry/cacheKey";
+import { registryKey } from "../registry/cacheKey";
 
 describe("intent resolver — resolveOpenApp", () => {
   it("returns an Intent with operation=open and kind=app", async () => {
@@ -21,8 +21,8 @@ describe("intent resolver — resolveOpenApp", () => {
     expect(intent.cacheKey).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("cacheKey matches standalone cacheKey(appType) call", async () => {
-    const expected = await cacheKey("counter");
+  it("cacheKey matches the structured registryKey(\"app\", appType)", async () => {
+    const expected = await registryKey("app", "counter");
     const intent = await resolveOpenApp("counter");
     expect(intent.cacheKey).toBe(expected);
   });

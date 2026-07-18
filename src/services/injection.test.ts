@@ -199,6 +199,20 @@ describe("DI — createServices() wires the real implementations", () => {
     expect(test.transport).not.toBe(defaultTransport);
     expect(test.registry).not.toBe(realRegistry);
   });
+
+  // SANDBOX-05: the render-mode seam. Production frames app bodies; tests run the
+  // direct in-tree path so the JSDOM/RTL suite needs no real browser.
+  it("production defaults frameMode to iframe", () => {
+    expect(createServices().frameMode).toBe("iframe");
+  });
+
+  it("the test bundle defaults frameMode to in-tree", () => {
+    expect(createTestServices().frameMode).toBe("in-tree");
+  });
+
+  it("a test can opt into the iframe render mode via override", () => {
+    expect(createTestServices({ frameMode: "iframe" }).frameMode).toBe("iframe");
+  });
 });
 
 // ---------------------------------------------------------------------------
