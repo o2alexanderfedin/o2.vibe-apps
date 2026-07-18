@@ -6,6 +6,8 @@ There is **no application server**. You supply your own Anthropic API key (kept 
 
 > **The core illusion:** to the user there is no "AI" and no "generate" button. Apps simply *exist* on the platform. Open one and it renders and works — instantly on a cache hit, seamlessly on a cache miss — and nothing visible ever reveals it was made on demand.
 
+**🔗 Live demo:** **https://o2alexanderfedin.github.io/o2.vibe-apps/** — runs entirely in your browser; bring your own [Anthropic API key](https://console.anthropic.com/) (kept in `localStorage`, sent only to `api.anthropic.com`).
+
 ---
 
 ## How it works
@@ -50,6 +52,8 @@ Each app body runs inside an **opaque-origin `<iframe sandbox="allow-scripts">`*
 The host has a normal Vite build; **only generated code is no-build** (compiled at runtime). The two compile paths are kept fully separate.
 
 ## Getting started
+
+Try the [hosted version](https://o2alexanderfedin.github.io/o2.vibe-apps/) — no install required, just bring your API key. To run locally:
 
 **Prerequisites:** Node 18+ and an [Anthropic API key](https://console.anthropic.com/).
 
