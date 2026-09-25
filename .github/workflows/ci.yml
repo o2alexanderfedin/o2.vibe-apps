@@ -41,6 +41,18 @@ jobs:
       - name: Build
         run: npm run build
 
+  hooks:
+    name: git-flow hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shellcheck
+        run: shellcheck .githooks/pre-commit .githooks/pre-push scripts/githooks.test.sh
+
+      - name: pre-commit behaviour in throwaway repos
+        run: sh scripts/githooks.test.sh
+
   e2e:
     name: Playwright e2e
     runs-on: ubuntu-latest
