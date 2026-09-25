@@ -13,14 +13,20 @@ concurrency:
 
 jobs:
   quality:
-    name: Typecheck, unit tests, build
+    name: Typecheck, unit tests, build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is what deploy.yml builds with; 25 is current Node, where the
+        # unit tests broke without anyone seeing it in CI.
+        node: [22, 25]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - name: Install dependencies
