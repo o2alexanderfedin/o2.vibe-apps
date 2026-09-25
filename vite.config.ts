@@ -18,5 +18,9 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     css: false,
+    // Node 25 enables its own Web Storage by default: a global `localStorage`
+    // that, without --localstorage-file, is an empty object with no methods,
+    // and it shadows jsdom's. Turn it off so tests see the DOM's storage.
+    execArgv: ["--no-experimental-webstorage"],
   },
 });
