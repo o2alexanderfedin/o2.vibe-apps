@@ -448,6 +448,26 @@ describe("SearchLauncherPanel", () => {
       expect(onDescribe).toHaveBeenCalledWith("a pomodoro timer");
     });
 
+    it("a description in a non-Latin script enables 'Open' and reaches onDescribe", async () => {
+      const onDescribe = vi.fn().mockResolvedValue(undefined);
+      const { container, getByRole } = render(
+        <SearchLauncherPanel
+          onOpen={vi.fn()}
+          onDescribe={onDescribe}
+          onClose={vi.fn()}
+        />,
+      );
+      const input = container.querySelector("input")!;
+      fireEvent.change(input, { target: { value: "  таймер помодоро  " } });
+      const btn = getByRole("button", { name: "Open" }) as HTMLButtonElement;
+      expect(btn.disabled).toBe(false);
+      await act(async () => {
+        fireEvent.click(btn);
+      });
+      expect(onDescribe).toHaveBeenCalledTimes(1);
+      expect(onDescribe).toHaveBeenCalledWith("таймер помодоро");
+    });
+
     it("clicking 'Open' with empty input does NOT call onDescribe", async () => {
       const onDescribe = vi.fn().mockResolvedValue(undefined);
       const { getByRole } = render(

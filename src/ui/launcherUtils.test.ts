@@ -40,6 +40,33 @@ describe("slugFromText", () => {
   it('keeps a bare article "the" (no trailing word boundary to strip)', () => {
     expect(slugFromText("the")).toBe("the");
   });
+
+  // Letters are letters in any script. A description written in Cyrillic, CJK,
+  // Devanagari, or with accents must keep its letters — otherwise the slug is
+  // empty and the launcher refuses to open the app at all.
+  it('keeps Cyrillic letters: "таймер помодоро" → "таймер-помодоро"', () => {
+    expect(slugFromText("таймер помодоро")).toBe("таймер-помодоро");
+  });
+
+  it('keeps CJK characters: "番茄钟" → "番茄钟"', () => {
+    expect(slugFromText("番茄钟")).toBe("番茄钟");
+  });
+
+  it('keeps accented Latin letters: "Café Timer" → "café-timer"', () => {
+    expect(slugFromText("Café Timer")).toBe("café-timer");
+  });
+
+  it('keeps combining marks inside a word: "टाइमर" stays one word', () => {
+    expect(slugFromText("टाइमर")).toBe("टाइमर");
+  });
+
+  it("folds composed and decomposed accents to the same slug", () => {
+    expect(slugFromText("cafe\u0301")).toBe(slugFromText("caf\u00e9"));
+  });
+
+  it("still turns symbols and emoji into separators", () => {
+    expect(slugFromText("⏰ таймер!")).toBe("таймер");
+  });
 });
 
 describe("EXAMPLE_CHIPS", () => {
