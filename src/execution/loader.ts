@@ -213,49 +213,23 @@ async function instantiateApp(
 }
 
 /**
- * Resolve an app type to a live React component, running through three tiers.
- *
- * @param instanceId  Unique id for this mounted instance (e.g. "counter-1").
- * @param appType     App type id from the storefront (e.g. "counter").
- * @param appCacheKey Opaque SHA-256 cache key from the intent resolver. For a
- *                    tweak (MOD-03) this is derived from (type + instruction) so
- *                    the tweaked variant caches separately from the original.
- * @param services    Injected dependency bundle (registry, transport, key getter).
- * @param userPrompt  Optional free-form mutation instruction (Phase 5 tweak,
- *                    MOD-03). When set on a FULL miss for an unseeded type, it is
- *                    woven into the produce prompt so the produced app reflects
- *                    the request. The resolve/cache machinery is otherwise
- *                    identical to a fresh open (DRY) — a tweaked app that hits the
- *                    cache (same key) reuses the cached variant with no model call.
+ * Resolve an app's pieces (source + transpiled JS + mode) through tiers 2 and 3,
+ * or produce/compile them on a full miss — WITHOUT evaluating the code. Nothing
+ * here runs the app: it reads caches, calls the model, transpiles, and persists.
+ * Both `resolveComponent` (in-tree) and `resolveFrameBody` (iframe) sit on it, so
+ * the cache, cost-gate and persistence behavior is identical for both.
  */
-export async function resolveComponent(
-  instanceId: string,
+async function resolveAppPieces(
   appType: string,
   appCacheKey: string,
   services: Services,
   userPrompt?: string,
-): Promise<ComponentType> {
-  // Tier 1: live component already instantiated for this instance.
-  const live = liveComponents.get(instanceId);
-  if (live) {
-    logger.info("Loader: tier-1 hit (live component) for " + instanceId);
-    return live;
-  }
-
-  // Tier 2: compiled pieces in session cache — instantiate without recompile,
-  // pre-warming declared widgets from the cached source first (WIDGET-02/03).
+): Promise<CachedApp> {
+  // Tier 2: compiled pieces in session cache — no recompile.
   const cached = transpiledCache.get(appCacheKey);
   if (cached) {
     logger.info("Loader: tier-2 hit (transpiled cache) for " + appType);
-    const Component = await instantiateApp(
-      cached.source,
-      cached.transpiledJS,
-      cached.mode,
-      appType,
-      services,
-    );
-    liveComponents.set(instanceId, Component);
-    return Component;
+    return cached;
   }
 
   // Tier 3: registry — read both source and transpiledJS.
@@ -269,20 +243,13 @@ export async function resolveComponent(
     // A record written by the delegated path carries mode:"delegated"; legacy/seeded
     // records have no mode and instantiate as a monolithic "app" (back-compat).
     const mode: AppMode = stored.mode === "delegated" ? "delegated" : "app";
-    transpiledCache.set(appCacheKey, {
+    const pieces: CachedApp = {
       source: stored.source,
       transpiledJS: stored.transpiledJS,
       mode,
-    });
-    const Component = await instantiateApp(
-      stored.source,
-      stored.transpiledJS,
-      mode,
-      appType,
-      services,
-    );
-    liveComponents.set(instanceId, Component);
-    return Component;
+    };
+    transpiledCache.set(appCacheKey, pieces);
+    return pieces;
   }
 
   // Full miss — resolve source. A tweak (userPrompt present) must reflect the
@@ -368,11 +335,80 @@ export async function resolveComponent(
     appCacheKey,
   );
 
+  return { source, transpiledJS, mode };
+}
+
+
+/**
+ * Resolve an app type to a live React component, running through three tiers.
+ *
+ * @param instanceId  Unique id for this mounted instance (e.g. "counter-1").
+ * @param appType     App type id from the storefront (e.g. "counter").
+ * @param appCacheKey Opaque SHA-256 cache key from the intent resolver. For a
+ *                    tweak (MOD-03) this is derived from (type + instruction) so
+ *                    the tweaked variant caches separately from the original.
+ * @param services    Injected dependency bundle (registry, transport, key getter).
+ * @param userPrompt  Optional free-form mutation instruction (Phase 5 tweak,
+ *                    MOD-03). When set on a FULL miss for an unseeded type, it is
+ *                    woven into the produce prompt so the produced app reflects
+ *                    the request. The resolve/cache machinery is otherwise
+ *                    identical to a fresh open (DRY) — a tweaked app that hits the
+ *                    cache (same key) reuses the cached variant with no model call.
+ */
+export async function resolveComponent(
+  instanceId: string,
+  appType: string,
+  appCacheKey: string,
+  services: Services,
+  userPrompt?: string,
+): Promise<ComponentType> {
+  // Tier 1: live component already instantiated for this instance.
+  const live = liveComponents.get(instanceId);
+  if (live) {
+    logger.info("Loader: tier-1 hit (live component) for " + instanceId);
+    return live;
+  }
+
+  const { source, transpiledJS, mode } = await resolveAppPieces(
+    appType,
+    appCacheKey,
+    services,
+    userPrompt,
+  );
   // Instantiate by mode: a delegated module mounts through DelegatedShell; a
   // monolithic app pre-warms its declared widgets and binds useWidget (WIDGET-02/03).
   const Component = await instantiateApp(source, transpiledJS, mode, appType, services);
   liveComponents.set(instanceId, Component);
   return Component;
+}
+
+/**
+ * Resolve the compiled code an app's opaque-origin frame will run, WITHOUT
+ * running any of it in this page. Used by every open path when
+ * `services.frameMode === "iframe"` (production).
+ *
+ * Why this exists: evaluating the app here — even only to find its `App` export
+ * before handing the string to the frame — runs the app's top-level code with
+ * this page's `window`, so it could read the saved key from localStorage or
+ * navigate the page away. This function only reads caches, calls the model,
+ * transpiles and persists; the frame is the only place the code is evaluated.
+ *
+ * Widgets are NOT resolved here: the frame's `useWidget` returns null, so
+ * producing them would spend model calls on code the frame never renders.
+ */
+export async function resolveFrameBody(
+  appType: string,
+  appCacheKey: string,
+  services: Services,
+  userPrompt?: string,
+): Promise<string> {
+  const { transpiledJS } = await resolveAppPieces(
+    appType,
+    appCacheKey,
+    services,
+    userPrompt,
+  );
+  return transpiledJS;
 }
 
 /**
@@ -386,9 +422,4 @@ export function evictLiveComponent(instanceId: string): void {
 export function _clearCachesForTesting(): void {
   liveComponents.clear();
   transpiledCache.clear();
-}
-
-/** Returns the cached compiled string for a given cache key, or undefined on a miss. */
-export function getTranspiledJS(cacheKey: string): string | undefined {
-  return transpiledCache.get(cacheKey)?.transpiledJS;
 }

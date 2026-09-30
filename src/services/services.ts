@@ -62,6 +62,11 @@ export interface Services {
    * opaque-origin frame; "in-tree" renders it directly in the host subtree.
    * Production uses "iframe"; tests default to "in-tree" so the existing
    * JSDOM/RTL suite runs the direct path without a real browser.
+   *
+   * "in-tree" is TEST-ONLY: it evaluates app code in this page, where the code
+   * can read localStorage (the saved key) and navigate the page. createServices
+   * must never select it. In "iframe" mode the host never evaluates app or
+   * widget code (see resolveFrameBody).
    */
   frameMode: "iframe" | "in-tree";
 }

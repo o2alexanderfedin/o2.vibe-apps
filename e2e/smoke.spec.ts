@@ -133,6 +133,15 @@ test.describe("SMOKE-01 — window layout persists across hard reload", () => {
       );
       expect(notesTransformAfter).toBe(notesTransform);
 
+      // ── Restored Notes renders inside its opaque-origin frame ─────────────
+      // A restored window must take the same frame path as a fresh open: its
+      // code runs only in the frame, never in this page.
+      await expect(
+        windowLocator(page, "Notes")
+          .frameLocator("iframe")
+          .getByText("No notes yet."),
+      ).toBeVisible({ timeout: 10_000 });
+
       // ── Assert Weather present and minimized ─────────────────────────────
       await expect(windowLocator(page, "Weather")).toBeAttached({
         timeout: 10_000,
