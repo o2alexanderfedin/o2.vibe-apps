@@ -1,10 +1,15 @@
 // Component instantiation from a transpiled JS string (Phase 2, LOOP-06/07;
 // Phase 4 wires the real `useWidget`).
 //
-// Security note: this phase uses a plain new Function() scope. The user
-// explicitly deferred sandbox/iframe isolation (SEC-01/02/03 are out of scope
-// for Phase 2). App source runs in global scope and can reach window, document,
-// etc. This is intentional for the MVP; hardening is a later phase.
+// Security note: new Function() is NOT a boundary — code evaluated here runs
+// with this page's globals (window, document, localStorage with the saved key,
+// location). So production never calls this for app or widget code: in iframe
+// mode (Services.frameMode, the only mode createServices selects) the host only
+// fetches and transpiles, and the app's opaque-origin frame is the one place
+// its code is evaluated (see resolveFrameBody in loader.ts). This evaluator
+// serves the "in-tree" mode, which only the unit-test services select.
+// Still open: model-written data handlers are evaluated in this page by
+// handler.ts behind a name denylist, which is not a boundary either.
 //
 // A SINGLE shared React instance is injected into every function scope to
 // prevent "Invalid hook call" errors that arise when two separate React copies

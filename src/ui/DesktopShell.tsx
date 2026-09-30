@@ -34,7 +34,7 @@ import {
   resolveComponent,
   evictLiveComponent,
   deriveDisplayName,
-  getTranspiledJS,
+  resolveFrameBody,
 } from "../execution/loader";
 import { ProduceAuthError } from "../execution/producer";
 import { ProduceThrottledError } from "../host/produceGate";
@@ -322,6 +322,46 @@ function DesktopShellInner() {
     [],
   );
 
+  // Resolve a window's app body and store it, for every open path (open,
+  // describe, tweak, restore). Returns false when the window was closed while
+  // the body was resolving (nothing is stored then).
+  //
+  // In iframe mode (production) this page only fetches the compiled code and
+  // hands it to the window's opaque-origin frame; the code is never evaluated
+  // here, so an app cannot read this page's localStorage (the saved key) or
+  // navigate it away. The in-tree mode, which evaluates the app in this page,
+  // is selected only by the unit-test services (see Services.frameMode).
+  const resolveBodyInto = useCallback(
+    async (
+      instanceId: string,
+      appType: string,
+      cacheKey: string,
+      prompt?: string,
+    ): Promise<boolean> => {
+      if (services.frameMode === "iframe") {
+        const tjs = await resolveFrameBody(appType, cacheKey, services, prompt);
+        if (!windowManagerRef.current.isOpenByInstance(instanceId)) return false;
+        storeComponent(instanceId, null);
+        setTranspiledMap((prev) => new Map(prev).set(instanceId, tjs));
+        return true;
+      }
+      const Component = await resolveComponent(
+        instanceId,
+        appType,
+        cacheKey,
+        services,
+        prompt,
+      );
+      if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
+        evictLiveComponent(instanceId);
+        return false;
+      }
+      storeComponent(instanceId, Component);
+      return true;
+    },
+    [services, storeComponent],
+  );
+
   const handleOpen = useCallback(
     async (appType: string, displayName: string) => {
       logger.info("Opening " + appType);
@@ -348,30 +388,10 @@ function DesktopShellInner() {
 
       try {
         const intent = await resolveOpenApp(appType);
-        const Component = await resolveComponent(
-          instanceId,
-          appType,
-          intent.cacheKey,
-          services,
-        );
-
-        // PRIMARY mid-produce-close guard (Pitfall 9): if the window was closed
-        // while produce was in flight, drop the result and evict — never store a
-        // body for a window that no longer exists. Keyed on the manager-minted
-        // instanceId (synchronously mirrored), so it never depends on the
-        // windows array having flushed.
-        if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
-          evictLiveComponent(instanceId);
-          return;
-        }
-
-        storeComponent(instanceId, Component);
-        // Capture the compiled app string alongside the Component so iframe mode
-        // can seed the frame body (SANDBOX-05). Inert in the in-tree default.
-        const tjs = getTranspiledJS(intent.cacheKey);
-        if (tjs) {
-          setTranspiledMap((prev) => new Map(prev).set(instanceId, tjs));
-        }
+        // PRIMARY mid-produce-close guard (Pitfall 9) lives in resolveBodyInto:
+        // if the window was closed while produce was in flight, nothing is
+        // stored for a window that no longer exists.
+        await resolveBodyInto(instanceId, appType, intent.cacheKey);
       } catch (err) {
         // Surface a neutral fallback so the failure is visible and debuggable;
         // diagnostics go to the gated logger, the user-facing copy stays
@@ -398,7 +418,7 @@ function DesktopShellInner() {
         storeComponent(instanceId, Fallback);
       }
     },
-    [services, storeComponent, handleClose],
+    [resolveBodyInto, storeComponent, handleClose],
   );
 
   // Stable self-reference so the fallback retry handler can re-invoke the
@@ -448,24 +468,7 @@ function DesktopShellInner() {
           if (wid) handleClose(wid, iid);
         };
         try {
-          const Component = await resolveComponent(
-            instanceId,
-            slug,
-            cacheKey,
-            services,
-            text,
-          );
-          if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
-            evictLiveComponent(instanceId);
-            return;
-          }
-          storeComponent(instanceId, Component);
-          // Capture the compiled app string for iframe mode (SANDBOX-05). The
-          // described path builds its own cacheKey; reuse it here. Inert in-tree.
-          const tjs = getTranspiledJS(cacheKey);
-          if (tjs) {
-            setTranspiledMap((prev) => new Map(prev).set(instanceId, tjs));
-          }
+          await resolveBodyInto(instanceId, slug, cacheKey, text);
         } catch (err) {
           const needsAuth = err instanceof ProduceAuthError;
           const throttled = err instanceof ProduceThrottledError;
@@ -487,7 +490,7 @@ function DesktopShellInner() {
         setLauncherOpen(false);
       }
     },
-    [services, storeComponent, handleClose],
+    [resolveBodyInto, storeComponent, handleClose],
   );
   const handleDescribeRef = useRef(handleDescribe);
   handleDescribeRef.current = handleDescribe;
@@ -556,24 +559,19 @@ function DesktopShellInner() {
         // fresh component then lands back under this window's instanceId, and
         // closing the window reclaims it with no leak (WR-01).
         evictLiveComponent(instanceId);
-        const Component = await resolveComponent(
+        // In iframe mode this replaces the window's compiled string, so the
+        // frame rebuilds its srcdoc (keyed on it) and re-bootstraps with the
+        // tweaked body (WR-01).
+        const stored = await resolveBodyInto(
           instanceId,
           target.appType,
           tweakKey,
-          services,
           prompt,
         );
-        storeComponent(instanceId, Component);
         // Only a tweak that worked goes into the saved layout, so a reload
         // brings back the tweaked app (and never retries a failed one).
-        windowManagerRef.current.setTweak(target.id, routed.instruction);
-        // WR-01 (iframe mode): mirror the open/describe paths — update this
-        // instance's compiled string so the frame re-bootstraps with the tweaked
-        // body. Without this the srcdoc useMemo (keyed on transpiledJS) never
-        // rebuilds and the tweak is invisible in production iframe mode.
-        const tjs = getTranspiledJS(tweakKey);
-        if (tjs) {
-          setTranspiledMap((prev) => new Map(prev).set(instanceId, tjs));
+        if (stored) {
+          windowManagerRef.current.setTweak(target.id, routed.instruction);
         }
       } catch (err) {
         // A tweak that fails to resolve surfaces the neutral fallback (in place)
@@ -590,7 +588,7 @@ function DesktopShellInner() {
         storeComponent(instanceId, Fallback);
       }
     },
-    [services, handleClose, storeComponent, components],
+    [resolveBodyInto, handleClose, storeComponent, components],
   );
 
   const handleModifyRef = useRef(handleModify);
@@ -853,19 +851,9 @@ function DesktopShellInner() {
           // an evicted app never reaches tryAcquire() in loader.ts:320.
           const stored = await services.registry.get("apps", cacheKey);
           if (stored != null) {
-            // App is cached in IDB — resolve through the three-tier loader.
-            const Component = await resolveComponent(
-              instanceId,
-              appType,
-              cacheKey,
-              services,
-              prompt,
-            );
-            if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
-              evictLiveComponent(instanceId);
-              continue;
-            }
-            storeComponent(instanceId, Component);
+            // App is cached in IDB — resolve through the three-tier loader
+            // (into the frame in iframe mode, like every other open path).
+            await resolveBodyInto(instanceId, appType, cacheKey, prompt);
           } else {
             // App evicted from IDB — show placeholder without spending quota.
             if (!windowManagerRef.current.isOpenByInstance(instanceId)) continue;
