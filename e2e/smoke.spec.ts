@@ -144,6 +144,13 @@ test.describe("SMOKE-01 — window layout persists across hard reload", () => {
 
       // ── Assert desktop not blank ──────────────────────────────────────────
       await expect(page.locator(".window-chrome")).toHaveCount(2);
+
+      // ── Assert both apps loaded, not only the first ──────────────────────
+      // Restore opens both windows at once and then fills them one by one; a
+      // window it skips stays on the "Preparing…" placeholder for good.
+      await expect(page.locator(".window-chrome__placeholder")).toHaveCount(0, {
+        timeout: 10_000,
+      });
     }
   );
 });
