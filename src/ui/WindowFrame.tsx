@@ -116,6 +116,8 @@ export interface WindowFrameProps {
   /** Parent-side handler brokers passed to the frame (key never crosses). */
   onResolveHandler?: (intent: string) => Promise<{ code?: string; error?: string }>;
   onFetchData?: (sourceId: string, params: unknown) => Promise<{ data?: unknown; error?: string }>;
+  /** The app in the window's frame failed (iframe mode); see SandboxFrame. */
+  onFrameError?: () => void;
 }
 
 export function WindowFrame({
@@ -144,6 +146,7 @@ export function WindowFrame({
   themeVars,
   onResolveHandler,
   onFetchData,
+  onFrameError,
 }: WindowFrameProps) {
   const { frameMode } = useServices();
   const frameRef = useRef<HTMLDivElement>(null);
@@ -342,6 +345,7 @@ export function WindowFrame({
             onClose={onClose}
             onResolveHandler={onResolveHandler}
             onFetchData={onFetchData}
+            onFrameError={onFrameError}
           />
         ) : (
           <WindowBody

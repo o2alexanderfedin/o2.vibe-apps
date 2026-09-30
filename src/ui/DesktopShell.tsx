@@ -618,6 +618,51 @@ function DesktopShellInner() {
     [storeComponent],
   );
 
+  // "Try again" for a window whose app failed: open the same app again the way
+  // it was opened. A tweaked app is rebuilt with its tweak, in place; a
+  // described app is described again (not opened as a bare catalogue slug);
+  // anything else is closed and opened again. The window's own description and
+  // tweak give the same cache key as before (appIdentity).
+  const reopenWindow = useCallback(
+    (instanceId: string): void => {
+      const entry = windowManagerRef.current.windows.find(
+        (w) => w.instanceId === instanceId,
+      );
+      if (!entry) return;
+      if (entry.tweak) {
+        retryTweak(instanceId, entry.tweak);
+        return;
+      }
+      handleClose(entry.id, instanceId);
+      if (entry.description) void handleDescribeRef.current(entry.description);
+      else void handleOpenRef.current(entry.appType, entry.title);
+    },
+    [retryTweak, handleClose],
+  );
+
+  // The app inside a window's frame failed (iframe mode). Swap the frame for
+  // the same fallback a failed open shows, so "Try again" opens the app again.
+  const handleFrameError = useCallback(
+    (instanceId: string): void => {
+      if (!windowManagerRef.current.isOpenByInstance(instanceId)) return;
+      setTranspiledMap((prev) => {
+        const next = new Map(prev);
+        next.delete(instanceId);
+        return next;
+      });
+      storeComponent(
+        instanceId,
+        makeFallback({
+          needsAuth: false,
+          throttled: false,
+          onConnect: () => setKeyDialogOpen(true),
+          onRetry: () => reopenWindow(instanceId),
+        }),
+      );
+    },
+    [storeComponent, reopenWindow],
+  );
+
   // Reflect the OS prefers-reduced-motion preference into state (PERF-01).
   // Guarded for environments where matchMedia is unavailable (older jsdom / SSR)
   // so the desktop still renders. Subscribes to live preference changes via the
@@ -835,24 +880,9 @@ function DesktopShellInner() {
       for (const { appType, title, description, tweak, instanceId } of opened) {
         // Guard: window may have been closed before resolution completed.
         if (!windowManagerRef.current.isOpenByInstance(instanceId)) continue;
-        // A described app is cached under a key that folds in its description
-        // (see handleDescribe), and "Try again" must re-describe it rather than
-        // open the bare slug as if it were a catalogue app.
-        // A tweaked app is rebuilt with its tweak, in place: that is what the
-        // window showed and what this restore just asked the cache for. The
-        // others close the window and open it again.
-        const reopen = (): void => {
-          if (tweak) {
-            retryTweak(instanceId, tweak);
-            return;
-          }
-          const wid = windowManagerRef.current.windows.find(
-            (w) => w.instanceId === instanceId,
-          )?.id;
-          if (wid) handleClose(wid, instanceId);
-          if (description) void handleDescribeRef.current(description);
-          else void handleOpenRef.current(appType, title);
-        };
+        // "Try again" opens the app again the way it was opened: re-described,
+        // or rebuilt with its tweak in place (the window carries both).
+        const reopen = (): void => reopenWindow(instanceId);
         try {
           // The same key the open, describe and tweak paths cached it under.
           const { cacheKey, prompt } = await appIdentity(
@@ -1032,6 +1062,7 @@ function DesktopShellInner() {
                 services.fetchDataBroker?.fetch(sourceId, params) ??
                 Promise.resolve({ error: "This data could not be loaded." })
               }
+              onFrameError={() => handleFrameError(entry.instanceId)}
             />
           );
         })}
