@@ -381,3 +381,55 @@ describe("described apps: the description survives the layout", () => {
     expect(result[0]!.description).toBe("a pomodoro timer with a gentle chime");
   });
 });
+
+// A tweaked window's app is cached under a key that folds in the tweak. Its
+// window must carry the tweak through save → reload, or the reopened window
+// shows the un-tweaked app.
+describe("tweaked apps: the tweak survives the layout", () => {
+  const tweaked: WindowEntry = {
+    ...sampleWindow,
+    description: "a pomodoro timer",
+    tweak: "make it blue",
+  };
+  const entry = {
+    appType: "pomodoro-timer",
+    title: "Pomodoro Timer",
+    icon: "p",
+    x: 1,
+    y: 2,
+    z: 201,
+    minimized: false,
+  };
+
+  it("serializeLayout writes the tweak of a tweaked window", () => {
+    const parsed = JSON.parse(serializeLayout([tweaked])) as LayoutEntry[];
+    expect(parsed[0]!.tweak).toBe("make it blue");
+    expect(parsed[0]!.description).toBe("a pomodoro timer");
+  });
+
+  it("serializeLayout writes no tweak key for an untweaked window", () => {
+    const parsed = JSON.parse(serializeLayout([sampleWindow])) as object[];
+    expect("tweak" in parsed[0]!).toBe(false);
+  });
+
+  it("isLayoutEntry accepts a string tweak, with or without a description", () => {
+    expect(isLayoutEntry({ ...entry, tweak: "make it blue" })).toBe(true);
+    expect(
+      isLayoutEntry({ ...entry, description: "a timer", tweak: "make it blue" }),
+    ).toBe(true);
+  });
+
+  it("isLayoutEntry rejects a tweak that is not a string", () => {
+    expect(isLayoutEntry({ ...entry, tweak: 42 })).toBe(false);
+  });
+
+  it("isLayoutEntry still rejects an unknown extra key", () => {
+    expect(isLayoutEntry({ ...entry, tweak: "x", extra: "y" })).toBe(false);
+  });
+
+  it("round-trip keeps the tweak", () => {
+    const result = deserializeLayout(serializeLayout([tweaked]));
+    expect(result).toHaveLength(1);
+    expect(result[0]!.tweak).toBe("make it blue");
+  });
+});
