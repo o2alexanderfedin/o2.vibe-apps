@@ -57,12 +57,18 @@ export interface WindowEntry {
   // side marker so DesktopShell knows to apply a half-rect. A window cannot be
   // both maximized and snapped — snapLeft/snapRight clear `maximized`.
   snapSide: "left" | "right" | null;
+  /** The free-text description the app was opened from, if it was opened that
+   *  way. Part of the app's cache identity, so the saved layout keeps it. */
+  description?: string;
 }
 
 export interface WindowManagerValue {
   windows: WindowEntry[];
   /** Mint a new window entry and return the minted instanceId. */
-  open: (appType: string, meta: { title: string; icon: string }) => string;
+  open: (
+    appType: string,
+    meta: { title: string; icon: string; description?: string },
+  ) => string;
   focus: (id: string) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
@@ -119,7 +125,7 @@ export interface WindowManagerValue {
    */
   openAt: (
     appType: string,
-    meta: { title: string; icon: string },
+    meta: { title: string; icon: string; description?: string },
     position: { x: number; y: number; z: number; minimized: boolean },
   ) => string;
 }
@@ -181,7 +187,10 @@ export function WindowManagerProvider({
   }, [windows]);
 
   const open = useCallback(
-    (appType: string, meta: { title: string; icon: string }): string => {
+    (
+      appType: string,
+      meta: { title: string; icon: string; description?: string },
+    ): string => {
       const n = ++counter;
       const id = `win-${n}`;
       const instanceId = `${appType}-${n}`;
@@ -210,6 +219,7 @@ export function WindowManagerProvider({
           maximized: false,
           restoreRect: null,
           snapSide: null,
+          ...(meta.description ? { description: meta.description } : {}),
         };
         // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
         // before the effect runs.
@@ -229,7 +239,7 @@ export function WindowManagerProvider({
   const openAt = useCallback(
     (
       appType: string,
-      meta: { title: string; icon: string },
+      meta: { title: string; icon: string; description?: string },
       position: { x: number; y: number; z: number; minimized: boolean },
     ): string => {
       const n = ++counter;
@@ -261,6 +271,7 @@ export function WindowManagerProvider({
           maximized: false,
           restoreRect: null,
           snapSide: null,
+          ...(meta.description ? { description: meta.description } : {}),
         };
         // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
         // before the useEffect mirror fires.
