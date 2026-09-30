@@ -67,10 +67,11 @@ export interface SandboxFrameProps {
   themeVars: Record<string, string>;
   onClose: () => void;
   onModify?: (instruction: string) => void;
-  onRunHandler?: (
+  /** Resolve a data handler's CODE for the frame's request. The frame runs the
+   *  code in its own opaque realm; this page never evaluates it. */
+  onResolveHandler?: (
     intent: string,
-    input: unknown,
-  ) => Promise<{ data?: unknown; error?: string }>;
+  ) => Promise<{ code?: string; error?: string }>;
   onFetchData?: (
     sourceId: string,
     params: unknown,
@@ -91,7 +92,7 @@ export function SandboxFrame({
   themeVars,
   onClose,
   onModify,
-  onRunHandler,
+  onResolveHandler,
   onFetchData,
   _utils,
 }: SandboxFrameProps) {
@@ -142,7 +143,7 @@ export function SandboxFrame({
 
   // Latest-value refs so the single message listener (attached ONCE below) reads
   // current props without re-subscribing. The parent passes fresh inline handler
-  // closures (onRunHandler/onFetchData/onModify) on every render, and transpiledJS
+  // closures (onResolveHandler/onFetchData/onModify) on every render, and transpiledJS
   // /themeVars can update post-mount; if the listener effect depended on them it
   // would tear down and re-add on every parent render, leaving NO listener
   // attached at the instant the frame's one-shot FRAME_READY arrives — so the
@@ -155,8 +156,8 @@ export function SandboxFrame({
   appTypeRef.current = appType;
   const themeVarsRef = useRef(themeVars);
   themeVarsRef.current = themeVars;
-  const onRunHandlerRef = useRef(onRunHandler);
-  onRunHandlerRef.current = onRunHandler;
+  const onResolveHandlerRef = useRef(onResolveHandler);
+  onResolveHandlerRef.current = onResolveHandler;
   const onFetchDataRef = useRef(onFetchData);
   onFetchDataRef.current = onFetchData;
   const onModifyRef = useRef(onModify);
@@ -223,25 +224,26 @@ export function SandboxFrame({
       }
 
       if (type === "RUN_HANDLER") {
+        // The frame keeps the input and runs the handler itself: this page only
+        // resolves the handler's code and sends it back. Model-written handler
+        // code is never evaluated here (it could reach localStorage/location).
         const intent = payload?.["intent"];
-        const input = payload?.["input"];
         const corrId = env.correlationId;
         if (typeof intent !== "string" || !corrId) return;
         try {
-          const result = await (onRunHandlerRef.current?.(intent, input) ??
-            Promise.resolve<{ data?: unknown; error?: string }>({
-              data: undefined,
+          const result = await (onResolveHandlerRef.current?.(intent) ??
+            Promise.resolve<{ code?: string; error?: string }>({
+              error: "This operation could not be completed.",
             }));
           sendToFrame(
             frameWindow,
             {
               type: "RUN_HANDLER_RESULT",
               correlationId: corrId,
-              // Forward the WHOLE result shape so the frame app can distinguish
-              // "no data" from a neutral failure (broker returns { error } WITHOUT
-              // throwing — produce throttled, broker absent, handler failure),
-              // matching the in-tree contract (WR-02).
-              payload: { data: result?.data, error: result?.error },
+              payload:
+                typeof result?.code === "string"
+                  ? { code: result.code }
+                  : { error: result?.error ?? "This operation could not be completed." },
             },
             "*",
           );

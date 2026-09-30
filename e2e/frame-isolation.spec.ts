@@ -173,4 +173,28 @@ test.describe("opaque-origin app body", () => {
       );
     expect(childCount).toBeGreaterThan(0);
   });
+
+  // A delegated app's action runs its data handler INSIDE the frame: the host
+  // only resolves the handler code and brokers the data fetch. The FX source is
+  // stubbed so the test needs no network. The rate appearing in the frame proves
+  // the whole round trip: code sent to the frame, run there, fetchData brokered
+  // by the host, result merged into the view.
+  test("a delegated action runs its handler inside the frame", async ({ page }) => {
+    await page.route("https://api.frankfurter.dev/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ base: "USD", rates: { EUR: 0.9123 } }),
+      }),
+    );
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Open launcher" }).click();
+    await page.getByRole("button", { name: "Currency", exact: true }).click();
+
+    const frame = page.frameLocator("iframe").first();
+    await frame.getByRole("button", { name: "Load rates" }).click();
+    await expect(frame.getByText("0.9123")).toBeVisible({ timeout: 10_000 });
+  });
 });

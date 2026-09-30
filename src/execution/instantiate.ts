@@ -8,8 +8,8 @@
 // fetches and transpiles, and the app's opaque-origin frame is the one place
 // its code is evaluated (see resolveFrameBody in loader.ts). This evaluator
 // serves the "in-tree" mode, which only the unit-test services select.
-// Still open: model-written data handlers are evaluated in this page by
-// handler.ts behind a name denylist, which is not a boundary either.
+// Model-written data handlers follow the same rule: in iframe mode the host
+// only resolves their code (resolveHandlerCode) and the frame runs it.
 //
 // A SINGLE shared React instance is injected into every function scope to
 // prevent "Invalid hook call" errors that arise when two separate React copies

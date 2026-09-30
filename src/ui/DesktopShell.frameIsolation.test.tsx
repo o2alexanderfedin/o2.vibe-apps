@@ -193,3 +193,73 @@ describe("iframe mode keeps app code out of the host page", () => {
     expectHostUntouched();
   });
 });
+
+// A model-written data handler whose top level escapes a name-denylist scope:
+// the function-constructor trick returns the real global object even when
+// `window`/`localStorage` are shadowed, and from it reaches storage and
+// location. Run in the host page, it would copy the saved key and move the page.
+const HOSTILE_HANDLER_JS = `
+var g = (function () {}).constructor("return this")();
+g.__vibeMarker = "handler-ran-in-host";
+g.__vibeLeak = g.localStorage.getItem("${STORAGE_KEY_API}");
+g.location.hash = "vibe-away";
+async function handler(input) { return { data: { ok: true } }; }
+`;
+const HOSTILE_INTENT = "summarize the notes";
+
+describe("iframe mode keeps data handlers out of the host page", () => {
+  it("a frame's handler request gets the handler code back and never runs it in the host", async () => {
+    const registry = createInMemoryRegistry();
+    const handlerKey = await registryKey("handler", HOSTILE_INTENT);
+    await registry.put(
+      "handlers",
+      {
+        cacheKey: handlerKey,
+        intent: HOSTILE_INTENT,
+        source: HOSTILE_HANDLER_JS,
+        transpiledJS: HOSTILE_HANDLER_JS,
+        useCount: 0,
+        updatedAt: 0,
+      },
+      handlerKey,
+    );
+    renderShell({ registry });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+    const dialog = screen.getByRole("dialog", { name: "Open an app" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Notes" }));
+    await settle(() => appFrames().length > 0);
+    expect(appFrames()).toHaveLength(1);
+
+    // jsdom frames carry no usable window: give this one a recording stand-in
+    // and send the request from it with the opaque "null" origin.
+    const sent: Array<{ type: string; payload?: Record<string, unknown> }> = [];
+    const frameWindow = {
+      postMessage: (msg: { type: string; payload?: Record<string, unknown> }) => {
+        sent.push(msg);
+      },
+    } as unknown as Window;
+    Object.defineProperty(appFrames()[0]!, "contentWindow", {
+      get: () => frameWindow,
+      configurable: true,
+    });
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: "null",
+          source: frameWindow,
+          data: {
+            type: "RUN_HANDLER",
+            correlationId: "c1",
+            payload: { intent: HOSTILE_INTENT, input: {} },
+          },
+        }),
+      );
+    });
+    const reply = () => sent.find((m) => m.type === "RUN_HANDLER_RESULT");
+    await settle(() => reply() !== undefined);
+
+    expectHostUntouched();
+    expect(reply()?.payload).toEqual({ code: HOSTILE_HANDLER_JS });
+  });
+});

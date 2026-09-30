@@ -46,7 +46,7 @@ import { MenuBar } from "./MenuBar";
 import { Dock } from "./Dock";
 import { SearchLauncherPanel } from "./SearchLauncherPanel";
 import { slugFromText } from "./launcherUtils";
-import { runHandler } from "../execution/handler";
+import { resolveHandlerCode } from "../execution/handler";
 import { VibeThemeContext, VIBE_THEMES } from "./VibeThemeProvider";
 
 // Work-area geometry (Phase 19, plan 19-02, CHROME-02). Maximize = zoom-to-work-
@@ -1002,8 +1002,10 @@ function DesktopShellInner() {
               appType={entry.appType}
               transpiledJS={transpiledMap.get(entry.instanceId)}
               themeVars={currentThemeVars}
-              onRunHandler={(intent, input) =>
-                runHandler(intent, input, services)
+              // The frame runs handlers itself; this page only resolves the
+              // code (a paid model call on a cache miss).
+              onResolveHandler={(intent) =>
+                resolveHandlerCode(intent, services)
               }
               onFetchData={(sourceId, params) =>
                 services.fetchDataBroker?.fetch(sourceId, params) ??
