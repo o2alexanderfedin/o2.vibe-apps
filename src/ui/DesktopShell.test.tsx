@@ -1094,19 +1094,30 @@ const DESCRIBED_SLUG = "pomodoro-timer-with-a-gentle-chime";
 // The cached body of that app: renders a text the test can look for.
 const CHIME_TRANSPILED_JS = `exports['default'] = function App() { return React.createElement("div", null, "Chime Timer"); };`;
 
-/** Advance the stubbed clock in small steps until `check` stops throwing.
- *  Async work that is not timer-driven (the SHA-256 digest) still completes
- *  between steps; the layout debounce only fires when the clock is advanced. */
-async function settleUntil(check: () => void): Promise<void> {
-  await vi.waitFor(
-    async () => {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(50);
-      });
+// Captured before any test fakes the clock, so settleUntil can yield real time.
+const realSetTimeout = globalThis.setTimeout;
+
+/** Advance the stubbed clock in small steps until `check` stops throwing, or
+ *  throw its last error after `steps` tries. Each step also yields 10 ms of
+ *  real time, so async work that is not timer-driven (the SHA-256 digest)
+ *  completes between steps; the layout debounce only fires when the clock is
+ *  advanced. A plain loop rather than vi.waitFor: when it gives up, no step is
+ *  still running, so a failing test cannot leak an open act() into the next. */
+async function settleUntil(check: () => void, steps = 200): Promise<void> {
+  let lastError: unknown;
+  for (let i = 0; i < steps; i++) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    try {
       check();
-    },
-    { timeout: 2500, interval: 10 },
-  );
+      return;
+    } catch (err) {
+      lastError = err;
+    }
+    await new Promise((resolve) => realSetTimeout(resolve, 10));
+  }
+  throw lastError;
 }
 
 /** The last layout the desktop saved, parsed. */
@@ -1256,3 +1267,194 @@ describe("Desktop persistence — described apps survive a reload", () => {
     expect(requestBodies[0]).toContain(DESCRIPTION);
   });
 });
+
+// ====================================================================
+// Tweaked apps across a reload. A tweak re-builds a window's app from its base
+// (the catalogue app, or the described app) plus the instruction, and caches it
+// under a key that folds both in. The saved layout has to carry the tweak, or
+// after a reload the window shows the un-tweaked app again.
+// ====================================================================
+
+const TWEAK = "make the whole thing blue";
+// These tests wait in several steps, each allowed up to 2.5 s. Their timeout is
+// above the sum, so a failing step reports its own assertion instead of the
+// test timing out and running on into the next test.
+const TWEAK_TEST_TIMEOUT_MS = 20_000;
+const ORIGINAL_TSX = `
+export default function App() {
+  return <div>Original Result</div>;
+}
+`;
+const TWEAKED_TSX = `
+export default function App() {
+  return <div>Tweaked Result</div>;
+}
+`;
+
+/** Answers a tweak request with TWEAKED_TSX and anything else with
+ *  ORIGINAL_TSX, recording every request body. */
+function tweakAwareTransport(bodies: string[]): ReturnType<typeof cannedTransport> {
+  const original = cannedTransport(ORIGINAL_TSX);
+  const tweaked = cannedTransport(TWEAKED_TSX);
+  return (url, init) => {
+    const body = String(init?.body ?? "");
+    bodies.push(body);
+    return body.includes(TWEAK) ? tweaked(url, init) : original(url, init);
+  };
+}
+
+/** Type `instruction` into the `⋮` prompt of `frame` and apply it. */
+async function modifyWindow(frame: HTMLElement, instruction: string): Promise<void> {
+  await act(async () => {
+    fireEvent.click(within(frame).getByRole("button", { name: "App options" }));
+  });
+  const prompt = within(frame).getByRole("dialog");
+  await act(async () => {
+    fireEvent.change(within(prompt).getByRole("textbox"), {
+      target: { value: instruction },
+    });
+  });
+  await act(async () => {
+    fireEvent.click(within(prompt).getByRole("button", { name: "Apply" }));
+  });
+}
+
+/** Unmount the desktop and drop every in-memory cache, then render it again
+ *  over the same registry with the layout the first desktop saved last. The
+ *  default transport throws, so the reloaded app must come from the registry. */
+async function reload(
+  settingsStore: ReturnType<typeof createRecordingSettingsStore>,
+  registry: ReturnType<typeof createInMemoryRegistry>,
+): Promise<ReturnType<typeof createRecordingSettingsStore>> {
+  const saved = JSON.stringify(lastSavedLayout(settingsStore));
+  cleanup();
+  unmountAll();
+  _clearCachesForTesting();
+  const nextStore = createRecordingSettingsStore();
+  await nextStore.writeRaw(LAYOUT_KEY, saved);
+  renderDesktopShell({ settingsStore: nextStore, registry });
+  return nextStore;
+}
+
+describe("Desktop persistence — tweaked apps survive a reload", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Open Notes from the launcher and tweak it; resolves once the tweaked
+   *  app is on screen. */
+  async function openAndTweakNotes(): Promise<void> {
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole("dialog", { name: "Open an app" })).getByRole(
+          "button",
+          { name: "Notes" },
+        ),
+      );
+    });
+    await settleUntil(() => {
+      expect(frames()).toHaveLength(1);
+    });
+    await modifyWindow(frameByTitle("Notes"), TWEAK);
+    await settleUntil(() => {
+      expect(screen.getByText("Tweaked Result")).toBeInTheDocument();
+    });
+  }
+
+  it("a tweaked catalogue app comes back tweaked after a reload", async () => {
+    vi.useFakeTimers();
+    const settingsStore = createRecordingSettingsStore();
+    const registry = createInMemoryRegistry();
+    renderDesktopShell({
+      settingsStore,
+      registry,
+      transport: tweakAwareTransport([]),
+    });
+    await openAndTweakNotes();
+    await settleUntil(() => {
+      expect(lastSavedLayout(settingsStore)[0]!["tweak"]).toBe(TWEAK);
+    });
+
+    const reloadedStore = await reload(settingsStore, registry);
+    await settleUntil(() => {
+      expect(screen.getByText("Tweaked Result")).toBeInTheDocument();
+    });
+    // The restored window still carries the tweak, so the save after the
+    // reload keeps it and a second reload still shows the tweaked app.
+    await settleUntil(() => {
+      // More than the one write that seeded the reload: the desktop saved.
+      expect(reloadedStore.rawWrites.get(LAYOUT_KEY)!.length).toBeGreaterThan(1);
+      expect(lastSavedLayout(reloadedStore)[0]!["tweak"]).toBe(TWEAK);
+    });
+  }, TWEAK_TEST_TIMEOUT_MS);
+
+  it("cloning a tweaked window saves the tweak for both windows", async () => {
+    vi.useFakeTimers();
+    const settingsStore = createRecordingSettingsStore();
+    renderDesktopShell({
+      settingsStore,
+      transport: tweakAwareTransport([]),
+    });
+    await openAndTweakNotes();
+    await modifyWindow(frameByTitle("Notes"), "clone");
+    await settleUntil(() => {
+      expect(lastSavedLayout(settingsStore).map((e) => e["tweak"])).toEqual([
+        TWEAK,
+        TWEAK,
+      ]);
+    });
+  }, TWEAK_TEST_TIMEOUT_MS);
+
+  it("tweaking a described app keeps the description, and the result comes back after a reload", async () => {
+    vi.useFakeTimers();
+    const settingsStore = createRecordingSettingsStore();
+    const registry = createInMemoryRegistry();
+    const bodies: string[] = [];
+    renderDesktopShell({
+      settingsStore,
+      registry,
+      transport: tweakAwareTransport(bodies),
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+    });
+    const dialog = screen.getByRole("dialog", { name: "Open an app" });
+    await act(async () => {
+      fireEvent.change(within(dialog).getByRole("textbox"), {
+        target: { value: DESCRIPTION },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Open" }));
+    });
+    await settleUntil(() => {
+      expect(screen.getByText("Original Result")).toBeInTheDocument();
+    });
+
+    await modifyWindow(frames()[0]!, TWEAK);
+    await settleUntil(() => {
+      expect(screen.getByText("Tweaked Result")).toBeInTheDocument();
+    });
+    // The tweak request asks for the described app, changed — not for an app
+    // built from the slug and the instruction alone.
+    const tweakRequest = bodies.find((b) => b.includes(TWEAK));
+    expect(tweakRequest).toContain(DESCRIPTION);
+
+    await settleUntil(() => {
+      expect(lastSavedLayout(settingsStore)[0]).toMatchObject({
+        description: DESCRIPTION,
+        tweak: TWEAK,
+      });
+    });
+
+    await reload(settingsStore, registry);
+    await settleUntil(() => {
+      expect(screen.getByText("Tweaked Result")).toBeInTheDocument();
+    });
+  }, TWEAK_TEST_TIMEOUT_MS);
+});
+

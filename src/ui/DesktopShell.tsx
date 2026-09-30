@@ -40,7 +40,7 @@ import { ProduceAuthError } from "../execution/producer";
 import { ProduceThrottledError } from "../host/produceGate";
 import { useServices } from "../services/ServicesProvider";
 import { routeModification } from "../intent/routeModification";
-import { registryKey } from "../registry/cacheKey";
+import { appIdentity } from "../intent/appIdentity";
 import { logger } from "../lib/logger";
 import { MenuBar } from "./MenuBar";
 import { Dock } from "./Dock";
@@ -411,7 +411,7 @@ function DesktopShellInner() {
   // (so each description caches as its own app), and route through the SAME
   // windowing machinery handleOpen uses. The ONE difference from handleOpen is
   // deliberate: resolveOpenApp does not fold a prompt into its cache key, so for
-  // a description we build the key here via registryKey and call resolveComponent
+  // a description we build the key here via appIdentity and call resolveComponent
   // directly with the pre-built key + the full text as the userPrompt. This
   // duplication is intentional and contained — handleOpen stays untouched so its
   // 7 integration tests keep passing; a later phase may extract a shared
@@ -421,14 +421,14 @@ function DesktopShellInner() {
       setLauncherWorking(true);
       try {
         // Derive the slug, title, and cache key INSIDE the try so a rejection
-        // from any of them (notably registryKey → crypto.subtle.digest, which
+        // from any of them (notably appIdentity → crypto.subtle.digest, which
         // rejects on a non-secure origin / hardened CSP / certain embedded
         // webviews) still reaches the finally below: the launcher always closes
         // and the working indicator always clears, and the rejection never
         // escapes into the panel's handleSubmit as an unhandled rejection.
         const slug = slugFromText(text);
         const displayName = deriveDisplayName(slug, text);
-        const cacheKey = await registryKey("app", slug, text);
+        const { cacheKey } = await appIdentity(slug, text);
         // Route through the windowing machinery: mint the window first (so a
         // frame appears immediately showing the neutral "Preparing…" placeholder
         // while resolve is in flight), then resolve the component under the
@@ -521,6 +521,7 @@ function DesktopShellInner() {
           title: target.title,
           icon: target.icon,
           description: target.description,
+          tweak: target.tweak,
         });
         const sourceComponent = components.get(instanceId) ?? null;
         storeComponent(cloneInstanceId, sourceComponent);
@@ -540,9 +541,12 @@ function DesktopShellInner() {
       // Tweak — re-resolve and replace this instance's component in place.
       logger.info("Tweaking " + target.appType);
       try {
-        const tweakKey = await registryKey(
-          "app",
+        // The tweak applies to the window's base app — for a described app
+        // that is the description, not the bare slug. It replaces any earlier
+        // tweak rather than stacking on it.
+        const { cacheKey: tweakKey, prompt } = await appIdentity(
           target.appType,
+          target.description,
           routed.instruction,
         );
         // Resolve the tweak under the window's OWN instanceId (not a synthetic
@@ -557,9 +561,12 @@ function DesktopShellInner() {
           target.appType,
           tweakKey,
           services,
-          routed.instruction,
+          prompt,
         );
         storeComponent(instanceId, Component);
+        // Only a tweak that worked goes into the saved layout, so a reload
+        // brings back the tweaked app (and never retries a failed one).
+        windowManagerRef.current.setTweak(target.id, routed.instruction);
         // WR-01 (iframe mode): mirror the open/describe paths — update this
         // instance's compiled string so the frame re-bootstraps with the tweaked
         // body. Without this the srcdoc useMemo (keyed on transpiledJS) never
@@ -769,6 +776,7 @@ function DesktopShellInner() {
         appType: string;
         title: string;
         description: string | undefined;
+        tweak: string | undefined;
         instanceId: string;
       }> = [];
       for (const entry of sorted) {
@@ -778,6 +786,7 @@ function DesktopShellInner() {
             title: entry.title,
             icon: entry.icon,
             description: entry.description,
+            tweak: entry.tweak,
           },
           { x: entry.x, y: entry.y, z: entry.z, minimized: entry.minimized },
         );
@@ -785,6 +794,7 @@ function DesktopShellInner() {
           appType: entry.appType,
           title: entry.title,
           description: entry.description,
+          tweak: entry.tweak,
           instanceId,
         });
       }
@@ -798,7 +808,7 @@ function DesktopShellInner() {
       // Resolve components serially (1 concurrent). Cache hits (tiers 1-3)
       // never reach tryAcquire(); evicted or unresolvable apps fall through
       // to the placeholder path (PERSIST-03).
-      for (const { appType, title, description, instanceId } of opened) {
+      for (const { appType, title, description, tweak, instanceId } of opened) {
         // Guard: window may have been closed before resolution completed.
         if (!windowManagerRef.current.isOpenByInstance(instanceId)) continue;
         // A described app is cached under a key that folds in its description
@@ -809,9 +819,12 @@ function DesktopShellInner() {
           else void handleOpenRef.current(appType, title);
         };
         try {
-          const cacheKey = description
-            ? await registryKey("app", appType, description)
-            : (await resolveOpenApp(appType)).cacheKey;
+          // The same key the open, describe and tweak paths cached it under.
+          const { cacheKey, prompt } = await appIdentity(
+            appType,
+            description,
+            tweak,
+          );
           // PERSIST-03: check IDB before calling resolveComponent so that
           // an evicted app never reaches tryAcquire() in loader.ts:320.
           const stored = await services.registry.get("apps", cacheKey);
@@ -822,7 +835,7 @@ function DesktopShellInner() {
               appType,
               cacheKey,
               services,
-              description,
+              prompt,
             );
             if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
               evictLiveComponent(instanceId);
@@ -847,7 +860,7 @@ function DesktopShellInner() {
             storeComponent(instanceId, Fallback);
           }
         } catch {
-          // resolveOpenApp threw (bad app type) or resolveComponent failed.
+          // appIdentity threw (no digest available) or resolveComponent failed.
           // Show placeholder so the window is never a silent blank frame.
           if (!windowManagerRef.current.isOpenByInstance(instanceId)) continue;
           const Fallback = makeFallback({

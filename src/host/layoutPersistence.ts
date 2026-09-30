@@ -47,6 +47,13 @@ export interface LayoutEntry {
    * existed have no description and still load.
    */
   description?: string;
+  /**
+   * The latest tweak applied to the window's app, when it was tweaked. A
+   * tweaked app is cached under a key that folds in this text (and the
+   * description, if any), so without it a restored window shows the app as it
+   * was before the tweak. Absent for untweaked windows.
+   */
+  tweak?: string;
 }
 
 // The canonical set of keys in a LayoutEntry — used by isLayoutEntry to reject
@@ -61,31 +68,29 @@ const LAYOUT_ENTRY_KEYS: ReadonlySet<string> = new Set([
   "minimized",
 ]);
 
-// The one optional key a LayoutEntry may carry on top of the 7 required ones.
-const OPTIONAL_DESCRIPTION_KEY = "description";
+// The optional string keys a LayoutEntry may carry on top of the 7 required ones.
+const OPTIONAL_STRING_KEYS: ReadonlySet<string> = new Set(["description", "tweak"]);
 
 /**
  * Runtime type guard for LayoutEntry. Returns true only when `v` is a non-null
  * object with EXACTLY the 7 required fields at the correct types, plus at most
- * an optional string `description`. Any other extra field causes false (T-21-02:
+ * an optional string `description` and an optional string `tweak`. Any other
+ * extra field causes false (T-21-02:
  * strict shape check prevents un-expected fields from silently passing through
  * to the render path).
  */
 export function isLayoutEntry(v: unknown): v is LayoutEntry {
   if (typeof v !== "object" || v === null) return false;
   const obj = v as Record<string, unknown>;
-  const keys = Object.keys(obj).filter((k) => k !== OPTIONAL_DESCRIPTION_KEY);
+  const keys = Object.keys(obj).filter((k) => !OPTIONAL_STRING_KEYS.has(k));
   // Exact key count: must have exactly 7 — rejects missing and extra fields.
   if (keys.length !== LAYOUT_ENTRY_KEYS.size) return false;
   // Every key must be one of the 7 canonical keys.
   for (const k of keys) {
     if (!LAYOUT_ENTRY_KEYS.has(k)) return false;
   }
-  if (
-    OPTIONAL_DESCRIPTION_KEY in obj &&
-    typeof obj[OPTIONAL_DESCRIPTION_KEY] !== "string"
-  ) {
-    return false;
+  for (const k of OPTIONAL_STRING_KEYS) {
+    if (k in obj && typeof obj[k] !== "string") return false;
   }
   // Field type checks.
   if (typeof obj["appType"] !== "string") return false;
@@ -104,7 +109,8 @@ export function isLayoutEntry(v: unknown): v is LayoutEntry {
  * Serialize an array of open windows to a JSON string suitable for storage via
  * `realSettingsStore.writeRaw(LAYOUT_KEY, json)`. Each WindowEntry is projected
  * to a LayoutEntry-shaped object — only the 7 safe geometric fields are written,
- * plus the description for a window opened from one.
+ * plus the description for a window opened from one and the tweak for a
+ * tweaked window.
  * Sensitive or transient fields (instanceId, maximized, restoreRect, snapSide,
  * id) are NEVER included (T-21-02).
  */
@@ -120,6 +126,7 @@ export function serializeLayout(windows: WindowEntry[]): string {
     // Only described windows carry the key, so a window opened by name still
     // persists exactly the 7 fields.
     ...(w.description ? { description: w.description } : {}),
+    ...(w.tweak ? { tweak: w.tweak } : {}),
   }));
   return JSON.stringify(entries);
 }

@@ -60,6 +60,9 @@ export interface WindowEntry {
   /** The free-text description the app was opened from, if it was opened that
    *  way. Part of the app's cache identity, so the saved layout keeps it. */
   description?: string;
+  /** The latest tweak applied to the app, if any. Also part of the app's cache
+   *  identity, so the saved layout keeps it. A new tweak replaces it. */
+  tweak?: string;
 }
 
 export interface WindowManagerValue {
@@ -67,9 +70,12 @@ export interface WindowManagerValue {
   /** Mint a new window entry and return the minted instanceId. */
   open: (
     appType: string,
-    meta: { title: string; icon: string; description?: string },
+    meta: { title: string; icon: string; description?: string; tweak?: string },
   ) => string;
   focus: (id: string) => void;
+  /** Record the latest tweak applied to a window's app (replaces any earlier
+   *  one), so the saved layout can bring the tweaked app back after a reload. */
+  setTweak: (id: string, tweak: string) => void;
   minimize: (id: string) => void;
   restore: (id: string) => void;
   /** Commit a free (non-pinned) position back to the entry so `x`/`y` are the
@@ -125,7 +131,7 @@ export interface WindowManagerValue {
    */
   openAt: (
     appType: string,
-    meta: { title: string; icon: string; description?: string },
+    meta: { title: string; icon: string; description?: string; tweak?: string },
     position: { x: number; y: number; z: number; minimized: boolean },
   ) => string;
 }
@@ -189,7 +195,7 @@ export function WindowManagerProvider({
   const open = useCallback(
     (
       appType: string,
-      meta: { title: string; icon: string; description?: string },
+      meta: { title: string; icon: string; description?: string; tweak?: string },
     ): string => {
       const n = ++counter;
       const id = `win-${n}`;
@@ -220,6 +226,7 @@ export function WindowManagerProvider({
           restoreRect: null,
           snapSide: null,
           ...(meta.description ? { description: meta.description } : {}),
+          ...(meta.tweak ? { tweak: meta.tweak } : {}),
         };
         // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
         // before the effect runs.
@@ -239,7 +246,7 @@ export function WindowManagerProvider({
   const openAt = useCallback(
     (
       appType: string,
-      meta: { title: string; icon: string; description?: string },
+      meta: { title: string; icon: string; description?: string; tweak?: string },
       position: { x: number; y: number; z: number; minimized: boolean },
     ): string => {
       const n = ++counter;
@@ -272,6 +279,7 @@ export function WindowManagerProvider({
           restoreRect: null,
           snapSide: null,
           ...(meta.description ? { description: meta.description } : {}),
+          ...(meta.tweak ? { tweak: meta.tweak } : {}),
         };
         // Sync the refs immediately so isOpen()/isOpenByInstance() are accurate
         // before the useEffect mirror fires.
@@ -293,6 +301,12 @@ export function WindowManagerProvider({
     const z = ++zTop;
     setWindows(prev =>
       prev.map(w => (w.id === id ? { ...w, z } : w)),
+    );
+  }, []);
+
+  const setTweak = useCallback((id: string, tweak: string) => {
+    setWindows(prev =>
+      prev.map(w => (w.id === id ? { ...w, tweak } : w)),
     );
   }, []);
 
@@ -484,6 +498,7 @@ export function WindowManagerProvider({
     open,
     openAt,
     focus,
+    setTweak,
     minimize,
     restore,
     setGeometry,
