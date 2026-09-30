@@ -442,14 +442,23 @@ body { overflow: hidden; margin: 0; }
           App = makeDelegatedComponent(appType, mod.exports);
         }
         if (typeof App !== "function") {
-          postToParent({ type: "FRAME_ERROR", payload: { message: "App did not render" } });
+          postToParent({ type: "FRAME_ERROR", payload: { message: "App did not render", fatal: true } });
           return;
         }
-        window.ReactDOM.createRoot(document.getElementById("root")).render(
+        // An error while rendering, with no boundary to catch it, takes the
+        // whole app off screen (React removes the tree), so it is fatal: the
+        // parent replaces the frame with its own fallback. Any other error (for
+        // example in one button's click handler) leaves the app running with
+        // its state and goes through window.onerror below as not fatal.
+        window.ReactDOM.createRoot(document.getElementById("root"), {
+          onUncaughtError: function(err) {
+            postToParent({ type: "FRAME_ERROR", payload: { message: String(err), fatal: true } });
+          }
+        }).render(
           window.React.createElement(App)
         );
       } catch (err) {
-        postToParent({ type: "FRAME_ERROR", payload: { message: String(err) } });
+        postToParent({ type: "FRAME_ERROR", payload: { message: String(err), fatal: true } });
       }
       return;
     }
@@ -507,7 +516,7 @@ body { overflow: hidden; margin: 0; }
   // onerror — forward to parent
   // ---------------------------------------------------------------------------
   window.onerror = function(msg) {
-    postToParent({ type: "FRAME_ERROR", payload: { message: String(msg) } });
+    postToParent({ type: "FRAME_ERROR", payload: { message: String(msg), fatal: false } });
   };
 
   // ---------------------------------------------------------------------------
