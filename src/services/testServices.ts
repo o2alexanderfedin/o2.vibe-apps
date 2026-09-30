@@ -175,6 +175,8 @@ export interface TestServicesOverrides {
   settingsStore?: SettingsStore;
   /** Override the app-body render mode; defaults to "in-tree" for the JSDOM suite. */
   frameMode?: "iframe" | "in-tree";
+  /** Whether the user has just clicked; defaults to true (a user-driven test). */
+  userActivation?: () => boolean;
 }
 
 /**
@@ -196,6 +198,7 @@ export function createTestServices(overrides: TestServicesOverrides = {}): Servi
     fetchDataBroker: overrides.fetchDataBroker,
     settingsStore: overrides.settingsStore ?? createRecordingSettingsStore(),
     frameMode: overrides.frameMode ?? "in-tree",
+    userActivation: overrides.userActivation ?? (() => true),
   };
 }
 

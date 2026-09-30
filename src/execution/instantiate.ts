@@ -10,6 +10,11 @@
 // serves the "in-tree" mode, which only the unit-test services select.
 // Model-written data handlers follow the same rule: in iframe mode the host
 // only resolves their code (resolveHandlerCode) and the frame runs it.
+// A frame cannot make the host start a NEW paid model call on its own: that
+// needs a recent user action (Services.userActivation). Still open: while the
+// user IS interacting, a frame can request several paid handlers per click,
+// bounded only by the global produce gate (10 per 5 minutes); widgets are not
+// rendered in iframe mode; and in-tree mode (tests only) has none of this.
 //
 // A SINGLE shared React instance is injected into every function scope to
 // prevent "Invalid hook call" errors that arise when two separate React copies

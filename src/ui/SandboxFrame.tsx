@@ -66,7 +66,6 @@ export interface SandboxFrameProps {
   transpiledJS: string;
   themeVars: Record<string, string>;
   onClose: () => void;
-  onModify?: (instruction: string) => void;
   /** Resolve a data handler's CODE for the frame's request. The frame runs the
    *  code in its own opaque realm; this page never evaluates it. */
   onResolveHandler?: (
@@ -91,7 +90,6 @@ export function SandboxFrame({
   transpiledJS,
   themeVars,
   onClose,
-  onModify,
   onResolveHandler,
   onFetchData,
   _utils,
@@ -143,7 +141,7 @@ export function SandboxFrame({
 
   // Latest-value refs so the single message listener (attached ONCE below) reads
   // current props without re-subscribing. The parent passes fresh inline handler
-  // closures (onResolveHandler/onFetchData/onModify) on every render, and transpiledJS
+  // closures (onResolveHandler/onFetchData) on every render, and transpiledJS
   // /themeVars can update post-mount; if the listener effect depended on them it
   // would tear down and re-add on every parent render, leaving NO listener
   // attached at the instant the frame's one-shot FRAME_READY arrives — so the
@@ -160,8 +158,6 @@ export function SandboxFrame({
   onResolveHandlerRef.current = onResolveHandler;
   const onFetchDataRef = useRef(onFetchData);
   onFetchDataRef.current = onFetchData;
-  const onModifyRef = useRef(onModify);
-  onModifyRef.current = onModify;
   // utils is rebuilt each render from defaultUtils + _utils; capture its members
   // in a ref too so the stable listener calls the current sendToFrame.
   const sendToFrameRef = useRef(utils.sendToFrame);
@@ -296,11 +292,10 @@ export function SandboxFrame({
         return;
       }
 
-      if (type === "MODIFY_REQUEST") {
-        const instruction = payload?.["instruction"];
-        if (typeof instruction === "string") onModifyRef.current?.(instruction);
-        return;
-      }
+      // MODIFY_REQUEST is deliberately NOT honored: the frame's bootstrap never
+      // sends it, and honoring it would let app code close its own window or
+      // start a paid tweak with no user action. Changes to a window come only
+      // from the host-owned ⋮ menu in the titlebar.
     };
 
     window.addEventListener("message", onMessage);

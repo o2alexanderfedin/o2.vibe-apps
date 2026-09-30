@@ -69,6 +69,15 @@ export interface Services {
    * widget code (see resolveFrameBody).
    */
   frameMode: "iframe" | "in-tree";
+  /**
+   * True while the user has just interacted with the page (a click or key
+   * press within the browser's transient-activation window, about 5 seconds).
+   * A click inside an app's frame counts too: browsers propagate activation
+   * to ancestor frames. A frame's request that would start a NEW paid model
+   * call is honored only while this holds, so app code cannot spend the
+   * user's money on its own (cached and seeded handlers are free and always run).
+   */
+  userActivation: () => boolean;
 }
 
 /**
@@ -105,6 +114,18 @@ export function createModelTransport(inner: TransportFn = defaultTransport): Tra
 }
 
 /**
+ * Production activation reader. A browser without the User Activation API is
+ * treated as "no recent click", so it can still run cached and seeded handlers
+ * but never lets a frame start a new paid call.
+ */
+export function browserUserActivation(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    navigator.userActivation?.isActive === true
+  );
+}
+
+/**
  * Build the production services bundle: the resilient model transport, the real
  * IndexedDB registry, and the localStorage key getter. The transport now carries
  * the limiter + 429 backoff (Phase 6); the success path is unchanged, so the open
@@ -126,5 +147,6 @@ export function createServices(): Services {
     settingsStore: realSettingsStore,
     // SANDBOX-05: production renders app bodies inside opaque-origin frames.
     frameMode: "iframe",
+    userActivation: browserUserActivation,
   };
 }
