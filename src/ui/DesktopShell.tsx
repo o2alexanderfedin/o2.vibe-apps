@@ -434,7 +434,13 @@ function DesktopShellInner() {
         // while resolve is in flight), then resolve the component under the
         // manager-minted instanceId.
         const wm = windowManagerRef.current;
-        const instanceId = wm.open(slug, { title: displayName, icon: slug });
+        // The description goes on the window so the saved layout can find this
+        // app again after a reload (its cache key folds in the full text).
+        const instanceId = wm.open(slug, {
+          title: displayName,
+          icon: slug,
+          description: text,
+        });
         const closeByInstance = (iid: string) => {
           const wid = windowManagerRef.current.windows.find(
             (x) => x.instanceId === iid,
@@ -514,6 +520,7 @@ function DesktopShellInner() {
         const cloneInstanceId = wm.open(target.appType, {
           title: target.title,
           icon: target.icon,
+          description: target.description,
         });
         const sourceComponent = components.get(instanceId) ?? null;
         storeComponent(cloneInstanceId, sourceComponent);
@@ -761,15 +768,25 @@ function DesktopShellInner() {
       const opened: Array<{
         appType: string;
         title: string;
+        description: string | undefined;
         instanceId: string;
       }> = [];
       for (const entry of sorted) {
         const instanceId = windowManagerRef.current.openAt(
           entry.appType,
-          { title: entry.title, icon: entry.icon },
+          {
+            title: entry.title,
+            icon: entry.icon,
+            description: entry.description,
+          },
           { x: entry.x, y: entry.y, z: entry.z, minimized: entry.minimized },
         );
-        opened.push({ appType: entry.appType, title: entry.title, instanceId });
+        opened.push({
+          appType: entry.appType,
+          title: entry.title,
+          description: entry.description,
+          instanceId,
+        });
       }
 
       // All openAt calls are synchronously complete — release the save gate.
@@ -781,21 +798,31 @@ function DesktopShellInner() {
       // Resolve components serially (1 concurrent). Cache hits (tiers 1-3)
       // never reach tryAcquire(); evicted or unresolvable apps fall through
       // to the placeholder path (PERSIST-03).
-      for (const { appType, title, instanceId } of opened) {
+      for (const { appType, title, description, instanceId } of opened) {
         // Guard: window may have been closed before resolution completed.
         if (!windowManagerRef.current.isOpenByInstance(instanceId)) continue;
+        // A described app is cached under a key that folds in its description
+        // (see handleDescribe), and "Try again" must re-describe it rather than
+        // open the bare slug as if it were a catalogue app.
+        const reopen = (): void => {
+          if (description) void handleDescribeRef.current(description);
+          else void handleOpenRef.current(appType, title);
+        };
         try {
-          const intent = await resolveOpenApp(appType);
+          const cacheKey = description
+            ? await registryKey("app", appType, description)
+            : (await resolveOpenApp(appType)).cacheKey;
           // PERSIST-03: check IDB before calling resolveComponent so that
           // an evicted app never reaches tryAcquire() in loader.ts:320.
-          const stored = await services.registry.get("apps", intent.cacheKey);
+          const stored = await services.registry.get("apps", cacheKey);
           if (stored != null) {
             // App is cached in IDB — resolve through the three-tier loader.
             const Component = await resolveComponent(
               instanceId,
               appType,
-              intent.cacheKey,
+              cacheKey,
               services,
+              description,
             );
             if (!windowManagerRef.current.isOpenByInstance(instanceId)) {
               evictLiveComponent(instanceId);
@@ -814,7 +841,7 @@ function DesktopShellInner() {
                   (w) => w.instanceId === instanceId,
                 )?.id;
                 if (wid) handleClose(wid, instanceId);
-                void handleOpenRef.current(appType, title);
+                reopen();
               },
             });
             storeComponent(instanceId, Fallback);
@@ -832,7 +859,7 @@ function DesktopShellInner() {
                 (w) => w.instanceId === instanceId,
               )?.id;
               if (wid) handleClose(wid, instanceId);
-              void handleOpenRef.current(appType, title);
+              reopen();
             },
           });
           storeComponent(instanceId, Fallback);

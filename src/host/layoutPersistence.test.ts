@@ -322,3 +322,62 @@ describe("round-trip: serializeLayout → deserializeLayout", () => {
     expect(entry["snapSide"]).toBeUndefined();
   });
 });
+
+// An app opened from a free-text description is cached under a key that folds
+// in the description, not just the slug. Its window must carry the description
+// through save → reload, or the reopened window looks the app up under the
+// wrong key and comes back as "couldn't load".
+describe("described apps: the description survives the layout", () => {
+  const described: WindowEntry = {
+    ...sampleWindow,
+    appType: "pomodoro-timer-with-a-gentle-chime",
+    title: "Pomodoro Timer",
+    description: "a pomodoro timer with a gentle chime",
+  };
+
+  it("serializeLayout writes the description of a described window", () => {
+    const parsed = JSON.parse(serializeLayout([described])) as LayoutEntry[];
+    expect(parsed[0]!.description).toBe("a pomodoro timer with a gentle chime");
+  });
+
+  it("serializeLayout writes no description key for a window opened by name", () => {
+    const parsed = JSON.parse(serializeLayout([sampleWindow])) as object[];
+    expect("description" in parsed[0]!).toBe(false);
+  });
+
+  it("isLayoutEntry accepts the 7 fields plus a string description", () => {
+    expect(
+      isLayoutEntry({
+        appType: "pomodoro-timer",
+        title: "Pomodoro Timer",
+        icon: "p",
+        x: 1,
+        y: 2,
+        z: 201,
+        minimized: false,
+        description: "a pomodoro timer",
+      }),
+    ).toBe(true);
+  });
+
+  it("isLayoutEntry rejects a description that is not a string", () => {
+    expect(
+      isLayoutEntry({
+        appType: "pomodoro-timer",
+        title: "Pomodoro Timer",
+        icon: "p",
+        x: 1,
+        y: 2,
+        z: 201,
+        minimized: false,
+        description: 42,
+      }),
+    ).toBe(false);
+  });
+
+  it("round-trip keeps the description", () => {
+    const result = deserializeLayout(serializeLayout([described]));
+    expect(result).toHaveLength(1);
+    expect(result[0]!.description).toBe("a pomodoro timer with a gentle chime");
+  });
+});

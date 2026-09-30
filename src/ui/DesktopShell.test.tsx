@@ -1080,3 +1080,179 @@ describe("Phase 22 — ThemeEditor wiring + currentVars SandboxFrame coupling", 
     });
   });
 });
+
+// ====================================================================
+// Described apps across a reload. An app opened from a free-text description
+// is cached under registryKey("app", slug, description) — the description is
+// part of its identity. The saved layout has to carry it, or after a reload the
+// window looks the app up under the slug alone, misses, and shows "couldn't
+// load" although the app sits in the cache.
+// ====================================================================
+
+const DESCRIPTION = "a pomodoro timer with a gentle chime";
+const DESCRIBED_SLUG = "pomodoro-timer-with-a-gentle-chime";
+// The cached body of that app: renders a text the test can look for.
+const CHIME_TRANSPILED_JS = `exports['default'] = function App() { return React.createElement("div", null, "Chime Timer"); };`;
+
+/** Advance the stubbed clock in small steps until `check` stops throwing.
+ *  Async work that is not timer-driven (the SHA-256 digest) still completes
+ *  between steps; the layout debounce only fires when the clock is advanced. */
+async function settleUntil(check: () => void): Promise<void> {
+  await vi.waitFor(
+    async () => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      check();
+    },
+    { timeout: 2500, interval: 10 },
+  );
+}
+
+/** The last layout the desktop saved, parsed. */
+function lastSavedLayout(
+  settingsStore: ReturnType<typeof createRecordingSettingsStore>,
+): Array<Record<string, unknown>> {
+  const writes = settingsStore.rawWrites.get(LAYOUT_KEY) ?? [];
+  const raw = writes[writes.length - 1];
+  if (raw === undefined) throw new Error("no layout saved yet");
+  return JSON.parse(raw) as Array<Record<string, unknown>>;
+}
+
+describe("Desktop persistence — described apps survive a reload", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("describing an app saves its description with the window", async () => {
+    vi.useFakeTimers();
+    const settingsStore = createRecordingSettingsStore();
+    renderDesktopShell({
+      settingsStore,
+      transport: cannedTransport(EXPORT_DEFAULT_TSX),
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+    });
+    const dialog = screen.getByRole("dialog", { name: "Open an app" });
+    await act(async () => {
+      fireEvent.change(within(dialog).getByRole("textbox"), {
+        target: { value: DESCRIPTION },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Open" }));
+    });
+
+    await settleUntil(() => {
+      expect(lastSavedLayout(settingsStore)[0]!["description"]).toBe(
+        DESCRIPTION,
+      );
+    });
+  });
+
+  it("a restored described app opens from the cache and keeps its description on the next save", async () => {
+    vi.useFakeTimers();
+    const settingsStore = createRecordingSettingsStore();
+    await settingsStore.writeRaw(
+      LAYOUT_KEY,
+      JSON.stringify([
+        {
+          appType: DESCRIBED_SLUG,
+          title: "Pomodoro Timer",
+          icon: DESCRIBED_SLUG,
+          x: 120,
+          y: 90,
+          z: 201,
+          minimized: false,
+          description: DESCRIPTION,
+        },
+      ]),
+    );
+    // The app is cached ONLY under the key the describe path wrote. The default
+    // transport throws if called, so a miss cannot be papered over by a produce.
+    const registry = createInMemoryRegistry();
+    const key = await registryKey("app", DESCRIBED_SLUG, DESCRIPTION);
+    await registry.put(
+      "apps",
+      {
+        cacheKey: key,
+        type: DESCRIBED_SLUG,
+        source: STUB_SOURCE,
+        transpiledJS: CHIME_TRANSPILED_JS,
+      },
+      key,
+    );
+
+    renderDesktopShell({ settingsStore, registry });
+
+    await settleUntil(() => {
+      expect(frames()).toHaveLength(1);
+    });
+    await settleUntil(() => {
+      expect(screen.getByText("Chime Timer")).toBeInTheDocument();
+    });
+
+    // Any change after the restore triggers a save; it must still carry the
+    // description, or the SECOND reload loses the app. Cloning the window is
+    // such a change, and the clone is the same described app, so both saved
+    // entries must carry it.
+    const frame = frameByTitle("Pomodoro Timer");
+    await act(async () => {
+      fireEvent.click(
+        within(frame).getByRole("button", { name: "App options" }),
+      );
+    });
+    const prompt = within(frame).getByRole("dialog");
+    await act(async () => {
+      fireEvent.change(within(prompt).getByRole("textbox"), {
+        target: { value: "clone" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(within(prompt).getByRole("button", { name: "Apply" }));
+    });
+    await settleUntil(() => {
+      expect(lastSavedLayout(settingsStore).map((e) => e["description"])).toEqual([
+        DESCRIPTION,
+        DESCRIPTION,
+      ]);
+    });
+  });
+
+  it("'Try again' on an evicted described app asks for the described app, not the bare slug", async () => {
+    const settingsStore = createRecordingSettingsStore();
+    await settingsStore.writeRaw(
+      LAYOUT_KEY,
+      JSON.stringify([
+        {
+          appType: DESCRIBED_SLUG,
+          title: "Pomodoro Timer",
+          icon: DESCRIBED_SLUG,
+          x: 120,
+          y: 90,
+          z: 201,
+          minimized: false,
+          description: DESCRIPTION,
+        },
+      ]),
+    );
+    const requestBodies: string[] = [];
+    const canned = cannedTransport(EXPORT_DEFAULT_TSX);
+    const recordingTransport: typeof canned = (url, init) => {
+      requestBodies.push(String(init?.body ?? ""));
+      return canned(url, init);
+    };
+
+    const { user } = renderDesktopShell({
+      settingsStore,
+      transport: recordingTransport,
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(requestBodies).toHaveLength(1), { timeout: 4000 });
+    expect(requestBodies[0]).toContain(DESCRIPTION);
+  });
+});
