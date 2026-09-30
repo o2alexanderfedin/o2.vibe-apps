@@ -187,6 +187,15 @@ export function WindowManagerProvider({
   const windowsRef = useRef<WindowEntry[]>(windows);
   windowsRef.current = windows;
 
+  // Adds a just-opened window to both ref mirrors at once.
+  const markOpen = (id: string, instanceId: string): void => {
+    openIdsRef.current = new Set([...openIdsRef.current, id]);
+    openInstanceIdsRef.current = new Set([
+      ...openInstanceIdsRef.current,
+      instanceId,
+    ]);
+  };
+
   useEffect(() => {
     openIdsRef.current = new Set(windows.map(w => w.id));
     openInstanceIdsRef.current = new Set(windows.map(w => w.instanceId));
@@ -209,6 +218,11 @@ export function WindowManagerProvider({
       // logging here (same location as the zTop mutation) fires exactly once per
       // call, matching the zTop discipline already in place.
       logger.info(`Window opened: ${id} (${appType})`);
+      // The window counts as open from this call on, not from the next render:
+      // React may hold this update until it renders, and a caller can ask
+      // isOpen()/isOpenByInstance() before then (restore opens several windows
+      // and then checks each one).
+      markOpen(id, instanceId);
 
       setWindows(prev => {
         const { x, y } = cascadePlace(prev);
@@ -263,6 +277,8 @@ export function WindowManagerProvider({
       // Hoist outside the updater — same Strict-Mode discipline as open() and
       // the zTop bump above: fires exactly once per openAt call.
       logger.info(`Window opened: ${id} (${appType})`);
+      // Open from this call on — see open().
+      markOpen(id, instanceId);
 
       setWindows(prev => {
         const entry: WindowEntry = {
