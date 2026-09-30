@@ -1458,3 +1458,116 @@ describe("Desktop persistence — tweaked apps survive a reload", () => {
   }, TWEAK_TEST_TIMEOUT_MS);
 });
 
+
+// ====================================================================
+// "Try again" rebuilds what the window was asked to show. After a failed
+// tweak that is the window's app with the tweak; after a reload whose tweaked
+// app is no longer cached it is the saved app with its saved tweak. Both go
+// through the same key and prompt as the tweak itself (appIdentity).
+// ====================================================================
+
+/** Like tweakAwareTransport, but the first tweak request fails. */
+function tweakFailsOnceTransport(
+  bodies: string[],
+): ReturnType<typeof cannedTransport> {
+  const inner = tweakAwareTransport(bodies);
+  let failed = false;
+  return (url, init) => {
+    const body = String(init?.body ?? "");
+    if (!failed && body.includes(TWEAK)) {
+      failed = true;
+      bodies.push(body);
+      return Promise.reject(new Error("connection dropped"));
+    }
+    return inner(url, init);
+  };
+}
+
+/** Click the "Try again" button currently on screen. */
+async function clickTryAgain(): Promise<void> {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  });
+}
+
+describe("'Try again' rebuilds the window's app with its description and tweak", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("after a failed tweak of a described app, it retries the tweak of the described app", async () => {
+    vi.useFakeTimers();
+    const bodies: string[] = [];
+    renderDesktopShell({ transport: tweakFailsOnceTransport(bodies) });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+    });
+    const dialog = screen.getByRole("dialog", { name: "Open an app" });
+    await act(async () => {
+      fireEvent.change(within(dialog).getByRole("textbox"), {
+        target: { value: DESCRIPTION },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Open" }));
+    });
+    await settleUntil(() => {
+      expect(screen.getByText("Original Result")).toBeInTheDocument();
+    });
+
+    await modifyWindow(frames()[0]!, TWEAK);
+    await settleUntil(() => {
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    });
+    const before = bodies.length;
+
+    await clickTryAgain();
+    await settleUntil(() => {
+      expect(screen.getByText("Tweaked Result")).toBeInTheDocument();
+    });
+    // One request, for the described app changed by the tweak — not for the
+    // app built from the hyphenated slug. (The transport answers "Tweaked
+    // Result" only to a request that carries the tweak.)
+    const retried = bodies.slice(before);
+    expect(retried).toHaveLength(1);
+    expect(retried[0]).toContain(DESCRIPTION);
+  }, TWEAK_TEST_TIMEOUT_MS);
+
+  it("after a reload whose tweaked app was evicted, it rebuilds the app with the saved tweak", async () => {
+    vi.useFakeTimers();
+    const settingsStore = createRecordingSettingsStore();
+    await settingsStore.writeRaw(
+      LAYOUT_KEY,
+      JSON.stringify([
+        {
+          appType: DESCRIBED_SLUG,
+          title: "Pomodoro Timer",
+          icon: DESCRIBED_SLUG,
+          x: 120,
+          y: 90,
+          z: 201,
+          minimized: false,
+          description: DESCRIPTION,
+          tweak: TWEAK,
+        },
+      ]),
+    );
+    const bodies: string[] = [];
+    // Empty registry: nothing is cached, so the restore offers "Try again".
+    renderDesktopShell({ settingsStore, transport: tweakAwareTransport(bodies) });
+    await settleUntil(() => {
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    });
+    expect(bodies).toHaveLength(0);
+
+    await clickTryAgain();
+    await settleUntil(() => {
+      expect(screen.getByText("Tweaked Result")).toBeInTheDocument();
+    });
+    // One model call, for the described app with the saved tweak. (The
+    // transport answers "Tweaked Result" only to a request with the tweak.)
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain(DESCRIPTION);
+  }, TWEAK_TEST_TIMEOUT_MS);
+});

@@ -583,15 +583,28 @@ function DesktopShellInner() {
           needsAuth: false,
           throttled: false,
           onConnect: () => setKeyDialogOpen(true),
-          onRetry: () => {
-            handleClose(target.id, instanceId);
-            void handleOpenRef.current(target.appType, target.title);
-          },
+          // "Try again" retries what failed: this tweak of this window's app
+          // (its description, if it has one), in place.
+          onRetry: () => retryTweak(instanceId, routed.instruction),
         });
         storeComponent(instanceId, Fallback);
       }
     },
     [services, handleClose, storeComponent, components],
+  );
+
+  const handleModifyRef = useRef(handleModify);
+  handleModifyRef.current = handleModify;
+
+  // Rebuild a window's app with `tweak` in place: show the "Preparing…"
+  // placeholder, then run the tweak again. The tweak path builds the key and
+  // prompt from the window's description and the tweak, as a reload does.
+  const retryTweak = useCallback(
+    (instanceId: string, tweak: string): void => {
+      storeComponent(instanceId, null);
+      void handleModifyRef.current(instanceId, tweak);
+    },
+    [storeComponent],
   );
 
   // Reflect the OS prefers-reduced-motion preference into state (PERF-01).
@@ -814,7 +827,18 @@ function DesktopShellInner() {
         // A described app is cached under a key that folds in its description
         // (see handleDescribe), and "Try again" must re-describe it rather than
         // open the bare slug as if it were a catalogue app.
+        // A tweaked app is rebuilt with its tweak, in place: that is what the
+        // window showed and what this restore just asked the cache for. The
+        // others close the window and open it again.
         const reopen = (): void => {
+          if (tweak) {
+            retryTweak(instanceId, tweak);
+            return;
+          }
+          const wid = windowManagerRef.current.windows.find(
+            (w) => w.instanceId === instanceId,
+          )?.id;
+          if (wid) handleClose(wid, instanceId);
           if (description) void handleDescribeRef.current(description);
           else void handleOpenRef.current(appType, title);
         };
@@ -849,13 +873,7 @@ function DesktopShellInner() {
               needsAuth: false,
               throttled: false,
               onConnect: () => setKeyDialogOpen(true),
-              onRetry: () => {
-                const wid = windowManagerRef.current.windows.find(
-                  (w) => w.instanceId === instanceId,
-                )?.id;
-                if (wid) handleClose(wid, instanceId);
-                reopen();
-              },
+              onRetry: reopen,
             });
             storeComponent(instanceId, Fallback);
           }
@@ -867,13 +885,7 @@ function DesktopShellInner() {
             needsAuth: false,
             throttled: false,
             onConnect: () => setKeyDialogOpen(true),
-            onRetry: () => {
-              const wid = windowManagerRef.current.windows.find(
-                (w) => w.instanceId === instanceId,
-              )?.id;
-              if (wid) handleClose(wid, instanceId);
-              reopen();
-            },
+            onRetry: reopen,
           });
           storeComponent(instanceId, Fallback);
         }
