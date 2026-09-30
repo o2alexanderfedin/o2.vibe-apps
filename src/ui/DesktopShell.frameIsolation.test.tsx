@@ -498,7 +498,7 @@ describe("a broken app in a frame shows the host's fallback", () => {
     renderShell({});
     const { frameWindow } = await openNotesFrame();
 
-    fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom" } });
+    fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom", fatal: true } });
     await settle(() => couldNotLoad() !== null);
 
     expect({
@@ -509,11 +509,28 @@ describe("a broken app in a frame shows the host's fallback", () => {
     }).toEqual({ hostFallback: true, tryAgain: 1, frames: 0, frameOverlay: null });
   });
 
+  // An error that leaves the app on screen (say, in one button's click
+  // handler) must not throw the app and what the user typed away.
+  it("an error that is not fatal keeps the same frame, under the frame's own notice", async () => {
+    renderShell({});
+    const { frameWindow } = await openNotesFrame();
+    const liveFrame = appFrames()[0];
+
+    fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom", fatal: false } });
+    await settle(() => screen.queryByText("Something went wrong.") !== null);
+
+    expect({
+      sameFrame: appFrames().length === 1 && appFrames()[0] === liveFrame,
+      frameNotice: screen.queryByText("Something went wrong.") !== null,
+      hostFallback: couldNotLoad(),
+    }).toEqual({ sameFrame: true, frameNotice: true, hostFallback: null });
+  });
+
   it("Try again opens the app again in the same single window", async () => {
     renderShell({});
     const { frameWindow } = await openNotesFrame();
     const brokenFrame = appFrames()[0];
-    fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom" } });
+    fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom", fatal: true } });
     await settle(() => couldNotLoad() !== null);
     const fallbackShown = couldNotLoad() !== null;
 

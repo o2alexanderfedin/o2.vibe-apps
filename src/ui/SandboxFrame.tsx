@@ -66,9 +66,10 @@ export interface SandboxFrameProps {
   transpiledJS: string;
   themeVars: Record<string, string>;
   onClose: () => void;
-  /** The app in the frame failed. When given, the host shows its own fallback
+  /** The app in the frame failed so badly that it is off screen (the frame
+   *  reports the error as fatal). When given, the host shows its own fallback
    *  (with a "Try again" that opens the app again) instead of this frame's
-   *  overlay, whose "Try again" could only hide the overlay. */
+   *  overlay. A non-fatal error still shows the overlay, over the running app. */
   onFrameError?: () => void;
   /** Resolve a data handler's CODE for the frame's request. The frame runs the
    *  code in its own opaque realm; this page never evaluates it. */
@@ -217,8 +218,14 @@ export function SandboxFrame({
           "Frame: runtime error: " +
             String(payload?.["message"] ?? "unknown"),
         );
-        if (onFrameErrorRef.current) onFrameErrorRef.current();
-        else setErrored(true);
+        // Only a fatal error (the app is off screen) goes to the host's
+        // fallback. Any other error keeps the app and its state: the overlay's
+        // "Try again" hides the notice over the same running app.
+        if (payload?.["fatal"] === true && onFrameErrorRef.current) {
+          onFrameErrorRef.current();
+        } else {
+          setErrored(true);
+        }
         return;
       }
 
