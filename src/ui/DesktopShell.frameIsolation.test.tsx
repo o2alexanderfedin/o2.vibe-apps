@@ -352,16 +352,38 @@ describe("a frame cannot act for the user without a click", () => {
   });
 
   it("a frame cannot close or change its own window", async () => {
-    renderShell({});
+    // A tweak the host honoured would start a model call, counted here. The
+    // window can look unchanged afterwards (a failed tweak falls back quietly),
+    // so the count is what catches it, not the frame count. The user has "just
+    // clicked", so a host that honours the frame only after a click is caught
+    // too.
+    let calls = 0;
+    const counted = cannedTransport(
+      "```tsx\nexport default function App() { return <div>Tweaked</div>; }\n```",
+    );
+    renderShell({
+      transport: (url, init) => {
+        calls += 1;
+        return counted(url, init);
+      },
+      userActivation: () => true,
+    });
     const { frameWindow } = await openNotesFrame();
 
     fromFrame(frameWindow, {
       type: "MODIFY_REQUEST",
       payload: { instruction: "remove" },
     });
+    fromFrame(frameWindow, {
+      type: "MODIFY_REQUEST",
+      payload: { instruction: "make the list blue" },
+    });
     await settle(() => false);
 
-    expect(appFrames()).toHaveLength(1);
+    expect({ frames: appFrames().length, modelCalls: calls }).toEqual({
+      frames: 1,
+      modelCalls: 0,
+    });
   });
 });
 

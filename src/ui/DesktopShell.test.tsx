@@ -590,9 +590,11 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     await openApp(user, "Notes"); // seeded — renders a real "Add a note…" input
     await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
 
-    const input = within(frameByTitle("Notes")).getByPlaceholderText(
+    // The frame appears at once with a "Preparing…" placeholder; the app body
+    // (and its input) arrives only after the app resolves, so wait for it.
+    const input = (await within(frameByTitle("Notes")).findByPlaceholderText(
       "Add a note…",
-    ) as HTMLInputElement;
+    )) as HTMLInputElement;
     input.focus();
     expect(document.activeElement).toBe(input);
 
@@ -619,9 +621,11 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     await openApp(user, "Notes"); // seeded
     await waitFor(() => expect(frameByTitle("Notes")).toBeInTheDocument());
 
-    const input = within(frameByTitle("Notes")).getByPlaceholderText(
+    // The frame appears at once with a "Preparing…" placeholder; the app body
+    // (and its input) arrives only after the app resolves, so wait for it.
+    const input = (await within(frameByTitle("Notes")).findByPlaceholderText(
       "Add a note…",
-    ) as HTMLInputElement;
+    )) as HTMLInputElement;
     input.focus();
 
     const event = new KeyboardEvent("keydown", {
