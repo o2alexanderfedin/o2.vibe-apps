@@ -230,6 +230,34 @@ describe("DI — createServices() wires the real implementations", () => {
     Reflect.deleteProperty(navigator, "userActivation");
     expect(seen).toEqual([true, false, false]);
   });
+
+  // One click must not pay for a burst of new handlers from one window: each
+  // window's allowance is one paid call per 10 seconds, longer than a click's
+  // 5-second activation, and a second window has its own.
+  it("production gives each window one paid handler call per 10 seconds", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const services = createServices();
+      const first = services.newFramePaidGate();
+      const other = services.newFramePaidGate();
+      const allowed = (gate: { tryAcquire(): void }) => {
+        try {
+          gate.tryAcquire();
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      const seen = [allowed(first), allowed(first), allowed(other)];
+      vi.advanceTimersByTime(9_999);
+      seen.push(allowed(first));
+      vi.advanceTimersByTime(1);
+      seen.push(allowed(first));
+      expect(seen).toEqual([true, false, true, false, true]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

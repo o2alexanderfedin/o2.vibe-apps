@@ -37,7 +37,7 @@ import {
   resolveFrameBody,
 } from "../execution/loader";
 import { ProduceAuthError } from "../execution/producer";
-import { ProduceThrottledError } from "../host/produceGate";
+import { ProduceThrottledError, type ProduceGate } from "../host/produceGate";
 import { useServices } from "../services/ServicesProvider";
 import { routeModification } from "../intent/routeModification";
 import { appIdentity } from "../intent/appIdentity";
@@ -290,8 +290,21 @@ function DesktopShellInner() {
 
   // Tear down a window: evict its live component, route close through the
   // manager (which unmounts the single root), and drop its body/position.
+  // Each open app window's own allowance for new paid handler calls, keyed by
+  // instanceId and made on first use; dropped when the window closes.
+  const framePaidGatesRef = useRef(new Map<string, ProduceGate>());
+  const framePaidGate = (instanceId: string): ProduceGate => {
+    let gate = framePaidGatesRef.current.get(instanceId);
+    if (gate === undefined) {
+      gate = services.newFramePaidGate();
+      framePaidGatesRef.current.set(instanceId, gate);
+    }
+    return gate;
+  };
+
   const handleClose = useCallback(
     (id: string, instanceId: string) => {
+      framePaidGatesRef.current.delete(instanceId);
       evictLiveComponent(instanceId);
       windowManagerRef.current.close(id);
       setComponents((prev) => {
@@ -1007,9 +1020,12 @@ function DesktopShellInner() {
               // right after a user click or key press (read NOW, while the
               // frame's message is being handled); otherwise app code could
               // spend the user's money on its own.
+              // One click pays for at most one new handler per window: each
+              // window has its own allowance, on top of the global gate.
               onResolveHandler={(intent) =>
                 resolveHandlerCode(intent, services, {
                   mayProduce: services.userActivation(),
+                  frameGate: framePaidGate(entry.instanceId),
                 })
               }
               onFetchData={(sourceId, params) =>

@@ -14,7 +14,11 @@ import { defaultTransport, type TransportFn } from "../host/modelClient";
 import { realClock } from "../host/clock";
 import { TokenBucket } from "../host/tokenBucket";
 import { createResilientTransport } from "../host/resilientTransport";
-import { createProduceGate, type ProduceGate } from "../host/produceGate";
+import {
+  createFramePaidGate,
+  createProduceGate,
+  type ProduceGate,
+} from "../host/produceGate";
 import {
   navigatorStorageSeam,
   type StoragePressureSeam,
@@ -78,6 +82,12 @@ export interface Services {
    * user's money on its own (cached and seeded handlers are free and always run).
    */
   userActivation: () => boolean;
+  /**
+   * Make a new per-window allowance for paid handler calls (see
+   * createFramePaidGate). The host keeps one per open app window, so one click
+   * cannot pay for a burst of new handlers from the same frame.
+   */
+  newFramePaidGate: () => ProduceGate;
 }
 
 /**
@@ -148,5 +158,6 @@ export function createServices(): Services {
     // SANDBOX-05: production renders app bodies inside opaque-origin frames.
     frameMode: "iframe",
     userActivation: browserUserActivation,
+    newFramePaidGate: () => createFramePaidGate(realClock),
   };
 }

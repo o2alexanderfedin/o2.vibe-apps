@@ -93,3 +93,20 @@ export function createProduceGate(opts: ProduceGateOptions): ProduceGate {
     },
   };
 }
+
+/**
+ * Per-window allowance for NEW paid handler calls that an app's frame asks for:
+ * one call per 10 seconds for each app window. The host cannot see a click
+ * inside a frame, and the browser's User Activation API gives no id for each
+ * click, so "one call per click" is enforced as one call per period that is
+ * longer than a click's activation (5 s in Chromium and Firefox). A click can
+ * therefore pay for at most one new handler per app window; the global gate
+ * still caps all windows together.
+ */
+export const FRAME_PAID_CAP = 1;
+export const FRAME_PAID_WINDOW_MS = 10 * 1000;
+
+/** A fresh per-window allowance on the given clock (one per app window). */
+export function createFramePaidGate(clock: Clock): ProduceGate {
+  return createProduceGate({ clock, cap: FRAME_PAID_CAP, windowMs: FRAME_PAID_WINDOW_MS });
+}

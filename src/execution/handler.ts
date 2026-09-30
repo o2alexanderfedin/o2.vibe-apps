@@ -45,6 +45,7 @@
 import { transpileHandler } from "./transpile";
 import { produceComponent } from "./producer";
 import type { Services } from "../services/services";
+import type { ProduceGate } from "../host/produceGate";
 import type { HandlerRecord } from "../registry/db";
 import { registryKey } from "../registry/cacheKey";
 import { logger } from "../lib/logger";
@@ -213,6 +214,7 @@ async function resolveHandlerJS(
   services: Services,
   nowFn: () => number = Date.now,
   mayProduce = true,
+  frameGate?: ProduceGate,
 ): Promise<string> {
   // Seeded-handler short-circuit: host-authored handler sources for known intents.
   // Fires BEFORE the registry lookup and BEFORE any model call (DATA-03). The
@@ -240,6 +242,8 @@ async function resolveHandlerJS(
   if (!mayProduce) {
     throw new Error("Handler: a new handler needs a recent user action");
   }
+  // Per-window allowance first, so a refusal here never uses a global slot.
+  frameGate?.tryAcquire();
   services.produceGate.tryAcquire();
   logger.info("Handler: cache miss — requesting handler");
   const produced = await produceComponent(
@@ -340,16 +344,19 @@ export async function runHandler(
  * `mayProduce: false` refuses a cache miss BEFORE any model call — the caller
  * passes it when the frame's request is not backed by a recent user action, so
  * app code cannot start paid calls on its own. Seeded and cached handlers still
- * resolve (they cost nothing).
+ * resolve (they cost nothing). `frameGate` is the calling window's own
+ * allowance: a cache miss must pass it too, before the global gate.
  */
 export async function resolveHandlerCode(
   intent: string,
   services: Services,
-  options: { mayProduce?: boolean; nowFn?: () => number } = {},
+  options: { mayProduce?: boolean; frameGate?: ProduceGate; nowFn?: () => number } = {},
 ): Promise<{ code?: string; error?: string }> {
-  const { mayProduce = true, nowFn = Date.now } = options;
+  const { mayProduce = true, frameGate, nowFn = Date.now } = options;
   try {
-    return { code: await resolveHandlerJS(intent, services, nowFn, mayProduce) };
+    return {
+      code: await resolveHandlerJS(intent, services, nowFn, mayProduce, frameGate),
+    };
   } catch (err) {
     logger.error("Handler: resolve failed: " + String(err));
     return { error: NEUTRAL_HANDLER_ERROR };

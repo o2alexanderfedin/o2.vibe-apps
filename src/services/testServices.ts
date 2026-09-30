@@ -9,7 +9,8 @@
 import type { Registry, StoreName, StoreValue } from "./registry";
 import type { ApiKeyGetter, Services } from "./services";
 import type { TransportFn, MessagesResponse } from "../host/modelClient";
-import type { ProduceGate } from "../host/produceGate";
+import { createFramePaidGate, type ProduceGate } from "../host/produceGate";
+import { realClock } from "../host/clock";
 import type { StoragePressureSeam } from "../host/storageEstimate";
 import type { DataFetchBroker } from "../data/dataBroker";
 import type { SettingsStore } from "../host/settingsStore";
@@ -177,6 +178,8 @@ export interface TestServicesOverrides {
   frameMode?: "iframe" | "in-tree";
   /** Whether the user has just clicked; defaults to true (a user-driven test). */
   userActivation?: () => boolean;
+  /** Per-window paid-call allowance; defaults to the production one. */
+  newFramePaidGate?: () => ProduceGate;
 }
 
 /**
@@ -199,6 +202,8 @@ export function createTestServices(overrides: TestServicesOverrides = {}): Servi
     settingsStore: overrides.settingsStore ?? createRecordingSettingsStore(),
     frameMode: overrides.frameMode ?? "in-tree",
     userActivation: overrides.userActivation ?? (() => true),
+    // Production allowance on the wall clock (tests stub Date to move it).
+    newFramePaidGate: overrides.newFramePaidGate ?? (() => createFramePaidGate(realClock)),
   };
 }
 
