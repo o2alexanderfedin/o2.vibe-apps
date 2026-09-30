@@ -364,3 +364,124 @@ describe("a frame cannot act for the user without a click", () => {
     expect(appFrames()).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// One click must not pay for a burst of new handlers from the same window.
+// ---------------------------------------------------------------------------
+
+/** Open a seeded app from the launcher and stand in for its (newest) frame. */
+async function openFrame(name: string): Promise<{ frameWindow: Window; sent: Sent[] }> {
+  const before = appFrames().length;
+  fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+  const dialog = screen.getByRole("dialog", { name: "Open an app" });
+  fireEvent.click(within(dialog).getByRole("button", { name }));
+  await settle(() => appFrames().length > before);
+  const sent: Sent[] = [];
+  const frameWindow = {
+    postMessage: (msg: Sent) => {
+      sent.push(msg);
+    },
+  } as unknown as Window;
+  Object.defineProperty(appFrames()[before]!, "contentWindow", {
+    get: () => frameWindow,
+    configurable: true,
+  });
+  return { frameWindow, sent };
+}
+
+/** Ask for a handler from `frameWindow` and wait for the host's reply. */
+async function askHandler(
+  frame: { frameWindow: Window; sent: Sent[] },
+  intent: string,
+  id: string,
+): Promise<Record<string, unknown> | undefined> {
+  fromFrame(frame.frameWindow, {
+    type: "RUN_HANDLER",
+    correlationId: id,
+    payload: { intent, input: {} },
+  });
+  const reply = () =>
+    frame.sent.find(
+      (m) =>
+        m.type === "RUN_HANDLER_RESULT" &&
+        (m as { correlationId?: string }).correlationId === id,
+    );
+  await settle(() => reply() !== undefined);
+  return reply()?.payload;
+}
+
+function countingShell(): { calls: () => number } {
+  let calls = 0;
+  const counted = cannedTransport(HANDLER_REPLY);
+  renderShell({
+    transport: (url, init) => {
+      calls += 1;
+      return counted(url, init);
+    },
+    userActivation: () => true,
+  });
+  return { calls: () => calls };
+}
+
+const NEUTRAL = { error: "This operation could not be completed." };
+
+describe("one click pays for at most one new handler per window", () => {
+  it("a second new handler right after the first is refused without a model call", async () => {
+    const shell = countingShell();
+    const frame = await openFrame("Notes");
+
+    const first = await askHandler(frame, "rank the notes by length", "c1");
+    const second = await askHandler(frame, "count the words in every note", "c2");
+
+    expect({
+      modelCalls: shell.calls(),
+      firstIsCode: typeof first?.["code"],
+      second,
+    }).toEqual({ modelCalls: 1, firstIsCode: "string", second: NEUTRAL });
+  });
+
+  it("the handler already paid for is still free to ask for again", async () => {
+    const shell = countingShell();
+    const frame = await openFrame("Notes");
+
+    await askHandler(frame, "rank the notes by length", "c1");
+    const again = await askHandler(frame, "rank the notes by length", "c2");
+
+    expect({ modelCalls: shell.calls(), againIsCode: typeof again?.["code"] }).toEqual({
+      modelCalls: 1,
+      againIsCode: "string",
+    });
+  });
+
+  it("the window may pay again once the click that paid has long expired", async () => {
+    const shell = countingShell();
+    const frame = await openFrame("Notes");
+
+    await askHandler(frame, "rank the notes by length", "c1");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    const later = await askHandler(frame, "count the words in every note", "c2");
+
+    expect({ modelCalls: shell.calls(), laterIsCode: typeof later?.["code"] }).toEqual({
+      modelCalls: 2,
+      laterIsCode: "string",
+    });
+  });
+
+  it("each window has its own allowance", async () => {
+    const shell = countingShell();
+    const notes = await openFrame("Notes");
+    const timer = await openFrame("Timer");
+    const atStart = shell.calls();
+
+    const a = await askHandler(notes, "rank the notes by length", "c1");
+    const b = await askHandler(timer, "list the laps by duration", "c2");
+
+    expect({
+      modelCalls: shell.calls() - atStart,
+      a: typeof a?.["code"],
+      b: typeof b?.["code"],
+    }).toEqual({ modelCalls: 2, a: "string", b: "string" });
+  });
+});
