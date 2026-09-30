@@ -1391,6 +1391,39 @@ describe("Desktop persistence — tweaked apps survive a reload", () => {
     });
   }, TWEAK_TEST_TIMEOUT_MS);
 
+  // A tweak that failed must stay out of the saved layout: after a reload the
+  // window would ask for a tweaked app that was never built, show "couldn't
+  // load", and its "Try again" would pay for the failed tweak once more.
+  it("a tweak that failed is not saved in the layout", async () => {
+    vi.useFakeTimers();
+    const settingsStore = createRecordingSettingsStore();
+    renderDesktopShell({ settingsStore, transport: tweakFailsOnceTransport([]) });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(screen.getByRole("dialog", { name: "Open an app" })).getByRole(
+          "button",
+          { name: "Notes" },
+        ),
+      );
+    });
+    await settleUntil(() => {
+      expect(frames()).toHaveLength(1);
+    });
+    await modifyWindow(frameByTitle("Notes"), TWEAK);
+    await settleUntil(() => {
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    });
+    // Let any pending layout save run.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(lastSavedLayout(settingsStore).map((e) => e["tweak"])).toEqual([undefined]);
+  }, TWEAK_TEST_TIMEOUT_MS);
+
   it("cloning a tweaked window saves the tweak for both windows", async () => {
     vi.useFakeTimers();
     const settingsStore = createRecordingSettingsStore();
