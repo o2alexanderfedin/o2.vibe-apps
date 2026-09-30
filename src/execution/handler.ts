@@ -212,6 +212,7 @@ async function resolveHandlerJS(
   intent: string,
   services: Services,
   nowFn: () => number = Date.now,
+  mayProduce = true,
 ): Promise<string> {
   // Seeded-handler short-circuit: host-authored handler sources for known intents.
   // Fires BEFORE the registry lookup and BEFORE any model call (DATA-03). The
@@ -236,6 +237,9 @@ async function resolveHandlerJS(
   // MISS: this is the ONE place a handler spends real budget — apply the cost cap
   // BEFORE the model call, exactly like the loader's produce path (RESIL-05). A
   // cache hit above never reaches this line, so reused handlers are never capped.
+  if (!mayProduce) {
+    throw new Error("Handler: a new handler needs a recent user action");
+  }
   services.produceGate.tryAcquire();
   logger.info("Handler: cache miss — requesting handler");
   const produced = await produceComponent(
@@ -332,14 +336,20 @@ export async function runHandler(
  *
  * Same cache, seed, cost gate and persistence as `runHandler`. NEVER throws: any
  * failure maps to the neutral `{ error }`.
+ *
+ * `mayProduce: false` refuses a cache miss BEFORE any model call — the caller
+ * passes it when the frame's request is not backed by a recent user action, so
+ * app code cannot start paid calls on its own. Seeded and cached handlers still
+ * resolve (they cost nothing).
  */
 export async function resolveHandlerCode(
   intent: string,
   services: Services,
-  nowFn: () => number = Date.now,
+  options: { mayProduce?: boolean; nowFn?: () => number } = {},
 ): Promise<{ code?: string; error?: string }> {
+  const { mayProduce = true, nowFn = Date.now } = options;
   try {
-    return { code: await resolveHandlerJS(intent, services, nowFn) };
+    return { code: await resolveHandlerJS(intent, services, nowFn, mayProduce) };
   } catch (err) {
     logger.error("Handler: resolve failed: " + String(err));
     return { error: NEUTRAL_HANDLER_ERROR };

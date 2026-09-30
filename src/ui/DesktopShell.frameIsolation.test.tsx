@@ -263,3 +263,104 @@ describe("iframe mode keeps data handlers out of the host page", () => {
     expect(reply()?.payload).toEqual({ code: HOSTILE_HANDLER_JS });
   });
 });
+
+// ---------------------------------------------------------------------------
+// A frame must not spend the user's money or close its own window on its own.
+// ---------------------------------------------------------------------------
+
+type Sent = { type: string; payload?: Record<string, unknown> };
+
+/** Open Notes (seeded, no model call) and return a stand-in for its frame. */
+async function openNotesFrame(): Promise<{ frameWindow: Window; sent: Sent[] }> {
+  fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
+  const dialog = screen.getByRole("dialog", { name: "Open an app" });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Notes" }));
+  await settle(() => appFrames().length > 0);
+  const sent: Sent[] = [];
+  const frameWindow = {
+    postMessage: (msg: Sent) => {
+      sent.push(msg);
+    },
+  } as unknown as Window;
+  Object.defineProperty(appFrames()[0]!, "contentWindow", {
+    get: () => frameWindow,
+    configurable: true,
+  });
+  return { frameWindow, sent };
+}
+
+function fromFrame(frameWindow: Window, data: unknown): void {
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", { origin: "null", source: frameWindow, data }),
+    );
+  });
+}
+
+const NEW_INTENT = "rank the notes by length";
+const HANDLER_REPLY = "```js\nasync function handler(input) { return { data: 1 }; }\n```";
+
+describe("a frame cannot act for the user without a click", () => {
+  it("a handler request that needs a new paid call is refused when the user has not just clicked", async () => {
+    let calls = 0;
+    const counted = cannedTransport(HANDLER_REPLY);
+    renderShell({
+      transport: (url, init) => {
+        calls += 1;
+        return counted(url, init);
+      },
+      userActivation: () => false,
+    });
+    const { frameWindow, sent } = await openNotesFrame();
+
+    fromFrame(frameWindow, {
+      type: "RUN_HANDLER",
+      correlationId: "c1",
+      payload: { intent: NEW_INTENT, input: {} },
+    });
+    const reply = () => sent.find((m) => m.type === "RUN_HANDLER_RESULT");
+    await settle(() => reply() !== undefined);
+
+    expect({ modelCalls: calls, reply: reply()?.payload }).toEqual({
+      modelCalls: 0,
+      reply: { error: "This operation could not be completed." },
+    });
+  });
+
+  it("the same request goes through right after a user click", async () => {
+    let calls = 0;
+    const counted = cannedTransport(HANDLER_REPLY);
+    renderShell({
+      transport: (url, init) => {
+        calls += 1;
+        return counted(url, init);
+      },
+      userActivation: () => true,
+    });
+    const { frameWindow, sent } = await openNotesFrame();
+
+    fromFrame(frameWindow, {
+      type: "RUN_HANDLER",
+      correlationId: "c1",
+      payload: { intent: NEW_INTENT, input: {} },
+    });
+    const reply = () => sent.find((m) => m.type === "RUN_HANDLER_RESULT");
+    await settle(() => reply() !== undefined);
+
+    expect(calls).toBe(1);
+    expect(typeof reply()?.payload?.["code"]).toBe("string");
+  });
+
+  it("a frame cannot close or change its own window", async () => {
+    renderShell({});
+    const { frameWindow } = await openNotesFrame();
+
+    fromFrame(frameWindow, {
+      type: "MODIFY_REQUEST",
+      payload: { instruction: "remove" },
+    });
+    await settle(() => false);
+
+    expect(appFrames()).toHaveLength(1);
+  });
+});

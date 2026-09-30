@@ -1003,9 +1003,14 @@ function DesktopShellInner() {
               transpiledJS={transpiledMap.get(entry.instanceId)}
               themeVars={currentThemeVars}
               // The frame runs handlers itself; this page only resolves the
-              // code (a paid model call on a cache miss).
+              // code. A cache miss is a paid model call, so it is allowed only
+              // right after a user click or key press (read NOW, while the
+              // frame's message is being handled); otherwise app code could
+              // spend the user's money on its own.
               onResolveHandler={(intent) =>
-                resolveHandlerCode(intent, services)
+                resolveHandlerCode(intent, services, {
+                  mayProduce: services.userActivation(),
+                })
               }
               onFetchData={(sourceId, params) =>
                 services.fetchDataBroker?.fetch(sourceId, params) ??

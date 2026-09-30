@@ -340,7 +340,6 @@ export function WindowFrame({
             transpiledJS={transpiledJS}
             themeVars={themeVars ?? {}}
             onClose={onClose}
-            onModify={onModify}
             onResolveHandler={onResolveHandler}
             onFetchData={onFetchData}
           />

@@ -213,6 +213,23 @@ describe("DI — createServices() wires the real implementations", () => {
   it("a test can opt into the iframe render mode via override", () => {
     expect(createTestServices({ frameMode: "iframe" }).frameMode).toBe("iframe");
   });
+
+  // A frame's paid request is honored only while this reads true. It follows
+  // the browser's User Activation API, and a browser without it counts as "no
+  // recent click".
+  it("production reads the browser's user-activation state", () => {
+    const read = createServices().userActivation;
+    const seen: boolean[] = [];
+    for (const state of [{ isActive: true }, { isActive: false }, undefined]) {
+      Object.defineProperty(navigator, "userActivation", {
+        value: state,
+        configurable: true,
+      });
+      seen.push(read());
+    }
+    Reflect.deleteProperty(navigator, "userActivation");
+    expect(seen).toEqual([true, false, false]);
+  });
 });
 
 // ---------------------------------------------------------------------------
