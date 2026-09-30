@@ -671,6 +671,44 @@ describe("useWindowManager", () => {
       expect(result.current.isOpenByInstance(instanceId)).toBe(true);
     });
 
+    it("a second window opened before React renders is already open (openAt)", () => {
+      const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+      // Inside act React holds the renders back until the callback returns,
+      // which is what restore sees when it opens several windows at once.
+      act(() => {
+        const first = result.current.openAt(
+          "notes",
+          { title: "Notes", icon: "N" },
+          { x: 0, y: 0, z: 59000, minimized: false },
+        );
+        const second = result.current.openAt(
+          "weather",
+          { title: "Weather", icon: "W" },
+          { x: 10, y: 10, z: 59001, minimized: false },
+        );
+        expect(result.current.isOpenByInstance(first)).toBe(true);
+        expect(result.current.isOpenByInstance(second)).toBe(true);
+      });
+    });
+
+    it("a second window opened before React renders is already open (open)", () => {
+      const { result } = renderHook(() => useWindowManager(), { wrapper });
+
+      act(() => {
+        result.current.open("notes", { title: "Notes", icon: "N" });
+        const second = result.current.open("weather", {
+          title: "Weather",
+          icon: "W",
+        });
+        expect(result.current.isOpenByInstance(second)).toBe(true);
+        // The window id shares the counter with the instanceId (win-N).
+        expect(result.current.isOpen(`win-${second.split("-").pop()}`)).toBe(
+          true,
+        );
+      });
+    });
+
     it("returns a fresh session-scoped instanceId: appType-N (not a persisted UUID)", () => {
       const { result } = renderHook(() => useWindowManager(), { wrapper });
 
