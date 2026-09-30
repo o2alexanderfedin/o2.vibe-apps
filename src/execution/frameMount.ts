@@ -208,11 +208,61 @@ body { overflow: hidden; margin: 0; }
     return null;
   }
 
-  function runHandler(intent, input) {
+  var NEUTRAL_ERROR = "This operation could not be completed.";
+
+  // The sanctioned data accessor for handlers: the parent fetches from its
+  // allowlisted sources (this frame has connect-src 'none') and replies with
+  // FETCH_DATA_RESULT.
+  function fetchData(sourceId, params) {
     return new Promise(function(resolve) {
       var corrId = Math.random().toString(36).slice(2);
       pendingCalls[corrId] = resolve;
-      postToParent({ type: "RUN_HANDLER", correlationId: corrId, payload: { intent: intent, input: input } });
+      postToParent({ type: "FETCH_DATA", correlationId: corrId, payload: { sourceId: sourceId, params: params } });
+    });
+  }
+
+  // Run a data handler's code HERE, in this frame's own opaque realm. The
+  // parent only resolves the code for the intent; it never evaluates it, so a
+  // handler cannot reach the parent's storage (the saved key) or location.
+  function execHandler(code, input) {
+    return Promise.resolve().then(function() {
+      var mod = { exports: {} };
+      function handlerRequire(specifier) {
+        throw new Error("Handler requested an unavailable module " + String(specifier));
+      }
+      var body = code +
+        "\\n;const __h = (typeof handler !== 'undefined') ? handler" +
+        " : (module.exports && (module.exports.default || module.exports.handler));" +
+        "\\nif (typeof __h !== 'function') { throw new Error('Handler did not define a handler function'); }" +
+        "\\nreturn __h(input);";
+      return new Function("module", "exports", "require", "fetchData", "input", body)(
+        mod, mod.exports, handlerRequire, fetchData, input
+      );
+    }).then(
+      function(result) {
+        if (result && typeof result === "object" && ("data" in result || "error" in result)) {
+          return result;
+        }
+        return { data: result };
+      },
+      function() {
+        return { error: NEUTRAL_ERROR };
+      }
+    );
+  }
+
+  function runHandler(intent, input) {
+    return new Promise(function(resolve) {
+      var corrId = Math.random().toString(36).slice(2);
+      pendingCalls[corrId] = function(reply) {
+        var code = reply && typeof reply.code === "string" ? reply.code : null;
+        if (code === null) {
+          resolve({ error: (reply && reply.error) || NEUTRAL_ERROR });
+          return;
+        }
+        execHandler(code, input).then(resolve);
+      };
+      postToParent({ type: "RUN_HANDLER", correlationId: corrId, payload: { intent: intent } });
     });
   }
 

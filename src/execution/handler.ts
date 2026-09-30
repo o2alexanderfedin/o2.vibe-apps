@@ -31,6 +31,11 @@
 //   `indexedDB`), the API key, or the DOM (`window`/`document`). This is a
 //   targeted, handler-specific denylist; general sandboxing (iframe) is deferred
 //   to v2 (HARD-01). The handler receives ONLY its `input`.
+//   THIS DENYLIST IS NOT A BOUNDARY: `(function(){}).constructor("return this")()`
+//   (and globalThis/self/top/location) still reach this page's globals. So
+//   production never runs handlers here — in iframe mode the host only resolves
+//   the code (`resolveHandlerCode`) and the app's opaque-origin frame runs it.
+//   `runHandler`/`executeHandler` serve the test-only "in-tree" mode.
 //
 // IoC/DI: every dependency arrives via the injected `Services` bundle (transport,
 // registry, getApiKey, produceGate). Tests substitute a canned transport, an
@@ -311,6 +316,32 @@ export async function runHandler(
     // The handler threw at instantiation or execution time. The thrown detail is
     // diagnostics-only (gated logger); the caller sees neutral copy (HANDLER-01).
     logger.error("Handler: execution failed: " + String(err));
+    return { error: NEUTRAL_HANDLER_ERROR };
+  }
+}
+
+/**
+ * Resolve (or produce) a handler's code for an intent WITHOUT running it — the
+ * iframe-mode path. The app's opaque-origin frame asks for a handler, gets the
+ * code back, and runs it in its own realm; this page never evaluates it.
+ *
+ * Why not run it here: the name denylist in `executeHandler` is not a boundary.
+ * `(function(){}).constructor("return this")()` returns this page's real global
+ * object, and from it localStorage (the saved key) and location. Only a separate
+ * realm stops that, and the app's frame already is one.
+ *
+ * Same cache, seed, cost gate and persistence as `runHandler`. NEVER throws: any
+ * failure maps to the neutral `{ error }`.
+ */
+export async function resolveHandlerCode(
+  intent: string,
+  services: Services,
+  nowFn: () => number = Date.now,
+): Promise<{ code?: string; error?: string }> {
+  try {
+    return { code: await resolveHandlerJS(intent, services, nowFn) };
+  } catch (err) {
+    logger.error("Handler: resolve failed: " + String(err));
     return { error: NEUTRAL_HANDLER_ERROR };
   }
 }

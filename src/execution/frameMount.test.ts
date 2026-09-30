@@ -30,6 +30,16 @@ const THEME_VARS = {
 // ---------------------------------------------------------------------------
 
 describe("buildSrcdoc", () => {
+  // The hash guard (frameCsp.test.ts) only proves the host CSP matches the
+  // script; a script that does not even parse matches its own hash too and
+  // leaves every app blank. Compiling it (not running it) catches that here.
+  it("bootstrap script parses as JavaScript", () => {
+    const html = buildSrcdoc("", THEME_VARS, "http://localhost");
+    const body = html.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "";
+    expect(body.length).toBeGreaterThan(0);
+    expect(() => new Function(body)).not.toThrow();
+  });
+
   it("has exactly 3 parameters", () => {
     expect(buildSrcdoc.length).toBe(3);
   });

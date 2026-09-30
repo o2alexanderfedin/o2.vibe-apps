@@ -114,7 +114,7 @@ export interface WindowFrameProps {
   /** Theme vars baked into the frame's first paint (frameMode==="iframe"). */
   themeVars?: Record<string, string>;
   /** Parent-side handler brokers passed to the frame (key never crosses). */
-  onRunHandler?: (intent: string, input: unknown) => Promise<{ data?: unknown; error?: string }>;
+  onResolveHandler?: (intent: string) => Promise<{ code?: string; error?: string }>;
   onFetchData?: (sourceId: string, params: unknown) => Promise<{ data?: unknown; error?: string }>;
 }
 
@@ -142,7 +142,7 @@ export function WindowFrame({
   appType,
   transpiledJS,
   themeVars,
-  onRunHandler,
+  onResolveHandler,
   onFetchData,
 }: WindowFrameProps) {
   const { frameMode } = useServices();
@@ -341,7 +341,7 @@ export function WindowFrame({
             themeVars={themeVars ?? {}}
             onClose={onClose}
             onModify={onModify}
-            onRunHandler={onRunHandler}
+            onResolveHandler={onResolveHandler}
             onFetchData={onFetchData}
           />
         ) : (
