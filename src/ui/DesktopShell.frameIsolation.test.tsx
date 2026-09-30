@@ -485,3 +485,53 @@ describe("one click pays for at most one new handler per window", () => {
     }).toEqual({ modelCalls: 2, a: "string", b: "string" });
   });
 });
+
+// ---------------------------------------------------------------------------
+// A broken app gets the host's own "couldn't load" fallback, whose "Try again"
+// opens the app again, the same as when an open fails before the frame.
+// ---------------------------------------------------------------------------
+
+describe("a broken app in a frame shows the host's fallback", () => {
+  const couldNotLoad = () => screen.queryByText("This app couldn’t load. Try again.");
+
+  it("the frame's failure replaces the frame with the host's Try again fallback", async () => {
+    renderShell({});
+    const { frameWindow } = await openNotesFrame();
+
+    fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom" } });
+    await settle(() => couldNotLoad() !== null);
+
+    expect({
+      hostFallback: couldNotLoad() !== null,
+      tryAgain: screen.queryAllByRole("button", { name: "Try again" }).length,
+      frames: appFrames().length,
+      frameOverlay: screen.queryByText("Something went wrong."),
+    }).toEqual({ hostFallback: true, tryAgain: 1, frames: 0, frameOverlay: null });
+  });
+
+  it("Try again opens the app again in the same single window", async () => {
+    renderShell({});
+    const { frameWindow } = await openNotesFrame();
+    const brokenFrame = appFrames()[0];
+    fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom" } });
+    await settle(() => couldNotLoad() !== null);
+    const fallbackShown = couldNotLoad() !== null;
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await settle(() => appFrames().length > 0);
+
+    expect({
+      fallbackShown,
+      frames: appFrames().length,
+      freshFrame: appFrames()[0] !== brokenFrame,
+      windows: document.querySelectorAll(".window-chrome__body").length,
+      hostFallback: couldNotLoad(),
+    }).toEqual({
+      fallbackShown: true,
+      frames: 1,
+      freshFrame: true,
+      windows: 1,
+      hostFallback: null,
+    });
+  });
+});

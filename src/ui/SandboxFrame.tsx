@@ -66,6 +66,10 @@ export interface SandboxFrameProps {
   transpiledJS: string;
   themeVars: Record<string, string>;
   onClose: () => void;
+  /** The app in the frame failed. When given, the host shows its own fallback
+   *  (with a "Try again" that opens the app again) instead of this frame's
+   *  overlay, whose "Try again" could only hide the overlay. */
+  onFrameError?: () => void;
   /** Resolve a data handler's CODE for the frame's request. The frame runs the
    *  code in its own opaque realm; this page never evaluates it. */
   onResolveHandler?: (
@@ -90,6 +94,7 @@ export function SandboxFrame({
   transpiledJS,
   themeVars,
   onClose,
+  onFrameError,
   onResolveHandler,
   onFetchData,
   _utils,
@@ -158,6 +163,8 @@ export function SandboxFrame({
   onResolveHandlerRef.current = onResolveHandler;
   const onFetchDataRef = useRef(onFetchData);
   onFetchDataRef.current = onFetchData;
+  const onFrameErrorRef = useRef(onFrameError);
+  onFrameErrorRef.current = onFrameError;
   // utils is rebuilt each render from defaultUtils + _utils; capture its members
   // in a ref too so the stable listener calls the current sendToFrame.
   const sendToFrameRef = useRef(utils.sendToFrame);
@@ -206,11 +213,12 @@ export function SandboxFrame({
       }
 
       if (type === "FRAME_ERROR") {
-        setErrored(true);
         logger.error(
           "Frame: runtime error: " +
             String(payload?.["message"] ?? "unknown"),
         );
+        if (onFrameErrorRef.current) onFrameErrorRef.current();
+        else setErrored(true);
         return;
       }
 
