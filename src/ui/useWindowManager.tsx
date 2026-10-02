@@ -65,6 +65,19 @@ export interface WindowEntry {
   tweak?: string;
 }
 
+/** Where openAt puts a window. A reload passes only position, layer and
+ *  minimized state; "Try again" also passes the maximized or half-screen
+ *  state, so the window comes back the way the user left it. */
+export interface WindowPlacement {
+  x: number;
+  y: number;
+  z: number;
+  minimized: boolean;
+  maximized?: boolean;
+  restoreRect?: WindowEntry["restoreRect"];
+  snapSide?: WindowEntry["snapSide"];
+}
+
 export interface WindowManagerValue {
   windows: WindowEntry[];
   /** Mint a new window entry and return the minted instanceId. */
@@ -132,7 +145,7 @@ export interface WindowManagerValue {
   openAt: (
     appType: string,
     meta: { title: string; icon: string; description?: string; tweak?: string },
-    position: { x: number; y: number; z: number; minimized: boolean },
+    position: WindowPlacement,
   ) => string;
 }
 
@@ -261,7 +274,7 @@ export function WindowManagerProvider({
     (
       appType: string,
       meta: { title: string; icon: string; description?: string; tweak?: string },
-      position: { x: number; y: number; z: number; minimized: boolean },
+      position: WindowPlacement,
     ): string => {
       const n = ++counter;
       const id = `win-${n}`;
@@ -291,9 +304,9 @@ export function WindowManagerProvider({
           y: position.y,
           z: position.z,
           minimized: position.minimized,
-          maximized: false,
-          restoreRect: null,
-          snapSide: null,
+          maximized: position.maximized ?? false,
+          restoreRect: position.restoreRect ?? null,
+          snapSide: position.snapSide ?? null,
           ...(meta.description ? { description: meta.description } : {}),
           ...(meta.tweak ? { tweak: meta.tweak } : {}),
         };

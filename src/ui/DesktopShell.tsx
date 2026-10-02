@@ -23,6 +23,7 @@ import {
   WindowManagerProvider,
   useWindowManager,
   type WindowManagerValue,
+  type WindowPlacement,
 } from "./useWindowManager";
 import { resolveOpenApp } from "../intent/resolver";
 import {
@@ -61,8 +62,6 @@ import { MENU_BAR_H, DOCK_RESERVE } from "./workArea";
 // so dragging a window never produces a write-storm.
 const LAYOUT_SAVE_DEBOUNCE_MS = 300;
 
-// Where a window sits: what openAt needs to put a window back in its place.
-type WindowSpot = { x: number; y: number; z: number; minimized: boolean };
 
 // Snap-to-half (Phase 19, plan 19-03, CHROME-03). The SNAP_THRESHOLD that drives
 // both the during-drag drop-zone preview (WindowFrame) and the on-release commit
@@ -377,7 +376,7 @@ function DesktopShellInner() {
   );
 
   const handleOpen = useCallback(
-    async (appType: string, displayName: string, at?: WindowSpot) => {
+    async (appType: string, displayName: string, at?: WindowPlacement) => {
       logger.info("Opening " + appType);
 
       // Mint the window FIRST so a frame appears immediately (its body shows the
@@ -446,12 +445,12 @@ function DesktopShellInner() {
   // windowing machinery handleOpen uses. The ONE difference from handleOpen is
   // deliberate: resolveOpenApp does not fold a prompt into its cache key, so for
   // a description we build the key here via appIdentity and call resolveComponent
-  // directly with the pre-built key + the full text as the userPrompt. This
-  // duplication is intentional and contained — handleOpen stays untouched so its
-  // 7 integration tests keep passing; a later phase may extract a shared
-  // free-text helper both paths route through.
+  // directly with the pre-built key + the full text as the userPrompt. The two
+  // paths keep separate code on purpose; a later phase may extract a shared
+  // helper both route through. Both take an optional placement, so "Try again"
+  // can open the app where its old window was (see reopenWindow).
   const handleDescribe = useCallback(
-    async (text: string, at?: WindowSpot) => {
+    async (text: string, at?: WindowPlacement) => {
       setLauncherWorking(true);
       try {
         // Derive the slug, title, and cache key INSIDE the try so a rejection
@@ -619,7 +618,8 @@ function DesktopShellInner() {
   // "Try again" for a window whose app failed: open the same app again the way
   // it was opened. A tweaked app is rebuilt with its tweak, in place; a
   // described app is described again (not opened as a bare catalogue slug);
-  // anything else is closed and opened again, at the same spot, so the user's
+  // anything else is closed and opened again, at the same spot and still
+  // maximized or snapped to half the screen if it was, so the user's
   // arrangement (often the one restored after a reload) stays as it was. The
   // window's own description and tweak give the same cache key as before
   // (appIdentity).
@@ -633,11 +633,14 @@ function DesktopShellInner() {
         retryTweak(instanceId, entry.tweak);
         return;
       }
-      const at: WindowSpot = {
+      const at: WindowPlacement = {
         x: entry.x,
         y: entry.y,
         z: entry.z,
         minimized: entry.minimized,
+        maximized: entry.maximized,
+        restoreRect: entry.restoreRect,
+        snapSide: entry.snapSide,
       };
       handleClose(entry.id, instanceId);
       if (entry.description) void handleDescribeRef.current(entry.description, at);
