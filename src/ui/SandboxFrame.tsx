@@ -20,6 +20,7 @@ import {
   unregisterFrame,
 } from "../execution/frameMount";
 import { logger } from "../lib/logger";
+import { maxAppBodyHeight } from "./workArea";
 import "./SandboxFrame.css";
 
 // ---------------------------------------------------------------------------
@@ -208,8 +209,15 @@ export function SandboxFrame({
       }
 
       if (type === "FRAME_RESIZE") {
+        // The app reports its own height, so it is not trusted: anything that
+        // is not a finite, non-negative number is ignored, and the rest is cut
+        // to the tallest body whose window still fits between the menu bar
+        // and the dock. Without the ceiling a buggy or hostile app could make
+        // its window far taller than the screen.
         const h = payload?.["height"];
-        if (typeof h === "number") setHeight(h);
+        if (typeof h === "number" && Number.isFinite(h) && h >= 0) {
+          setHeight(Math.min(h, maxAppBodyHeight(window.innerHeight)));
+        }
         return;
       }
 

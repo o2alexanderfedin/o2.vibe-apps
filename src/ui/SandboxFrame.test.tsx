@@ -184,6 +184,61 @@ describe("SandboxFrame", () => {
     expect((iframe as HTMLIFrameElement).style.height).toBe("350px");
   });
 
+  describe("a frame cannot make its window taller than the desktop", () => {
+    const realInnerHeight = window.innerHeight;
+    beforeEach(() => {
+      // An 800px viewport: the work area between the 40px menu bar and the
+      // 88px dock is 672px; less the 36px titlebar, an app body may be 636px.
+      Object.defineProperty(window, "innerHeight", {
+        value: 800,
+        configurable: true,
+      });
+    });
+    afterEach(() => {
+      Object.defineProperty(window, "innerHeight", {
+        value: realInnerHeight,
+        configurable: true,
+      });
+    });
+
+    it("a huge reported height is cut to the tallest body that fits the work area", async () => {
+      const { utils } = makeUtils();
+      const { container } = render(<SandboxFrame {...defaultProps(utils)} />);
+      const { fakeContentWindow, iframe } = getMockContentWindow(container);
+
+      await act(async () => {
+        fireMessage(fakeContentWindow, {
+          type: "FRAME_RESIZE",
+          payload: { height: 99_999 },
+        });
+      });
+
+      expect(iframe.style.height).toBe("636px");
+    });
+
+    it("a height that is not a finite, non-negative number is ignored", async () => {
+      const { utils } = makeUtils();
+      const { container } = render(<SandboxFrame {...defaultProps(utils)} />);
+      const { fakeContentWindow, iframe } = getMockContentWindow(container);
+
+      await act(async () => {
+        fireMessage(fakeContentWindow, {
+          type: "FRAME_RESIZE",
+          payload: { height: 350 },
+        });
+      });
+      for (const bad of [Infinity, -Infinity, NaN, -5]) {
+        await act(async () => {
+          fireMessage(fakeContentWindow, {
+            type: "FRAME_RESIZE",
+            payload: { height: bad },
+          });
+        });
+        expect(iframe.style.height).toBe("350px");
+      }
+    });
+  });
+
   it("FRAME_ERROR message renders role='alert' overlay with neutral copy", async () => {
     const { utils } = makeUtils();
     const { container } = render(<SandboxFrame {...defaultProps(utils)} />);
