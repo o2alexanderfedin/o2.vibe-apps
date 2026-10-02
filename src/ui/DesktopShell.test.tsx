@@ -27,6 +27,7 @@ import {
 } from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
 import { unmountAll } from "../execution/mount";
+import { waitUntil, WAIT_TIMEOUT_MS } from "../test/waitUntil";
 import {
   renderDesktopShell,
   openApp,
@@ -75,6 +76,12 @@ afterEach(() => {
   unmountAll();
   _clearCachesForTesting();
 });
+
+
+// A failed settleUntil gives up after WAIT_TIMEOUT_MS; a test must outlast
+// that, or vitest's own timeout fires first and the assertion that was awaited
+// is lost.
+vi.setConfig({ testTimeout: 4 * WAIT_TIMEOUT_MS });
 
 describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", () => {
   it("renders the desktop-shell and four blob layers behind the windows", () => {
@@ -1098,30 +1105,20 @@ const DESCRIBED_SLUG = "pomodoro-timer-with-a-gentle-chime";
 // The cached body of that app: renders a text the test can look for.
 const CHIME_TRANSPILED_JS = `exports['default'] = function App() { return React.createElement("div", null, "Chime Timer"); };`;
 
-// Captured before any test fakes the clock, so settleUntil can yield real time.
-const realSetTimeout = globalThis.setTimeout;
-
-/** Advance the stubbed clock in small steps until `check` stops throwing, or
- *  throw its last error after `steps` tries. Each step also yields 10 ms of
- *  real time, so async work that is not timer-driven (the SHA-256 digest)
- *  completes between steps; the layout debounce only fires when the clock is
- *  advanced. A plain loop rather than vi.waitFor: when it gives up, no step is
- *  still running, so a failing test cannot leak an open act() into the next. */
-async function settleUntil(check: () => void, steps = 200): Promise<void> {
-  let lastError: unknown;
-  for (let i = 0; i < steps; i++) {
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(50);
-    });
-    try {
-      check();
-      return;
-    } catch (err) {
-      lastError = err;
-    }
-    await new Promise((resolve) => realSetTimeout(resolve, 10));
-  }
-  throw lastError;
+/** Advance the stubbed clock (50 ms a step, at most 10 s in one wait) until
+ *  `check` stops throwing. Each step also yields 10 ms of real time, so async
+ *  work that is not timer-driven (the SHA-256 digest) completes between steps;
+ *  the layout debounce only fires when the clock is advanced. It waits as long
+ *  as a slow machine needs, up to vitest's default test timeout, then fails
+ *  with the check's last assertion. A plain loop rather than vi.waitFor: when
+ *  it gives up, no step is still running, so a failing test cannot leak an
+ *  open act() into the next. */
+async function settleUntil(check: () => void): Promise<void> {
+  await waitUntil("this test's check to pass", check, {
+    fakeStepMs: 50,
+    fakeBudgetMs: 10_000,
+    realYieldMs: 10,
+  });
 }
 
 /** The last layout the desktop saved, parsed. */
@@ -1362,9 +1359,9 @@ describe("Desktop persistence — described apps survive a reload", () => {
 // ====================================================================
 
 const TWEAK = "make the whole thing blue";
-// These tests wait in several steps, each allowed up to 2.5 s. Their timeout is
-// above the sum, so a failing step reports its own assertion instead of the
-// test timing out and running on into the next test.
+// These tests wait in several steps, each allowed up to WAIT_TIMEOUT_MS. Their
+// timeout is above that, so a failing step reports its own assertion instead of
+// the test timing out and running on into the next test.
 const TWEAK_TEST_TIMEOUT_MS = 20_000;
 const ORIGINAL_TSX = `
 export default function App() {

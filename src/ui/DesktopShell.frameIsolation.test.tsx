@@ -11,7 +11,9 @@
 // `window` can only come from the host evaluating it.
 //
 // Timers are stubbed; `settle` advances them in small steps and yields to the real
-// event loop so the async resolve path (digest, registry) can finish.
+// event loop so the async resolve path (digest, registry) can finish. It waits
+// for its condition, however long that takes on a slow machine, up to vitest's
+// default test timeout, and then fails saying what it waited for.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
@@ -28,6 +30,7 @@ import {
 } from "../services/testServices";
 import { _clearCachesForTesting } from "../execution/loader";
 import { unmountAll } from "../execution/mount";
+import { waitUntil, WAIT_TIMEOUT_MS } from "../test/waitUntil";
 import { transpile } from "../execution/transpile";
 import { LAYOUT_KEY } from "../host/layoutPersistence";
 import { registryKey } from "../registry/cacheKey";
@@ -79,9 +82,18 @@ function renderShell(overrides: TestServicesOverrides) {
   return { services };
 }
 
-/** Advance stubbed time in small steps until `done()` holds (bounded). */
-async function settle(done: () => boolean): Promise<void> {
-  for (let i = 0; i < 200 && !done(); i++) {
+/** Wait until `done()` holds; `what` names it in the failure message. The
+ *  stubbed clock moves 5 ms a step and at most 1 s in one wait, well inside
+ *  the 10 s a click lets a window pay for a new handler. */
+async function settle(what: string, done: () => boolean): Promise<void> {
+  await waitUntil(what, done, { fakeStepMs: 5, fakeBudgetMs: 1_000 });
+}
+
+/** Let the host run for a while (1 s on the stubbed clock, 200 turns of the
+ *  event loop) when there is nothing to wait for: a test that checks that
+ *  something does NOT happen gives it this long to happen. */
+async function letHostRun(): Promise<void> {
+  for (let i = 0; i < 200; i++) {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5);
       await new Promise<void>((r) => setImmediate(r));
@@ -103,6 +115,10 @@ function expectHostUntouched(): void {
     hash: window.location.hash,
   }).toEqual({ marker: undefined, savedKeyCopied: undefined, hash: "" });
 }
+
+// A failed wait gives up after WAIT_TIMEOUT_MS; a test must outlast that, or
+// vitest's own timeout fires first and the message about what was awaited is lost.
+vi.setConfig({ testTimeout: 4 * WAIT_TIMEOUT_MS });
 
 beforeEach(() => {
   vi.useFakeTimers({
@@ -130,7 +146,7 @@ describe("iframe mode keeps app code out of the host page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
     const dialog = screen.getByRole("dialog", { name: "Open an app" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Calculator" }));
-    await settle(() => appFrames().length > 0);
+    await settle("an app frame to appear", () => appFrames().length > 0);
 
     expect(appFrames()).toHaveLength(1);
     expectHostUntouched();
@@ -158,7 +174,7 @@ describe("iframe mode keeps app code out of the host page", () => {
     );
 
     renderShell({ settingsStore, registry });
-    await settle(() => appFrames().length > 0);
+    await settle("an app frame to appear", () => appFrames().length > 0);
 
     expect(appFrames()).toHaveLength(1);
     expectHostUntouched();
@@ -187,7 +203,7 @@ describe("iframe mode keeps app code out of the host page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
     const dialog = screen.getByRole("dialog", { name: "Open an app" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Calculator" }));
-    await settle(() => appFrames().length > 0);
+    await settle("an app frame to appear", () => appFrames().length > 0);
 
     expect(appFrames()).toHaveLength(1);
     expectHostUntouched();
@@ -228,7 +244,7 @@ describe("iframe mode keeps data handlers out of the host page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
     const dialog = screen.getByRole("dialog", { name: "Open an app" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Notes" }));
-    await settle(() => appFrames().length > 0);
+    await settle("an app frame to appear", () => appFrames().length > 0);
     expect(appFrames()).toHaveLength(1);
 
     // jsdom frames carry no usable window: give this one a recording stand-in
@@ -257,7 +273,7 @@ describe("iframe mode keeps data handlers out of the host page", () => {
       );
     });
     const reply = () => sent.find((m) => m.type === "RUN_HANDLER_RESULT");
-    await settle(() => reply() !== undefined);
+    await settle("the host's reply to the handler request", () => reply() !== undefined);
 
     expectHostUntouched();
     expect(reply()?.payload).toEqual({ code: HOSTILE_HANDLER_JS });
@@ -275,7 +291,7 @@ async function openNotesFrame(): Promise<{ frameWindow: Window; sent: Sent[] }> 
   fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
   const dialog = screen.getByRole("dialog", { name: "Open an app" });
   fireEvent.click(within(dialog).getByRole("button", { name: "Notes" }));
-  await settle(() => appFrames().length > 0);
+  await settle("an app frame to appear", () => appFrames().length > 0);
   const sent: Sent[] = [];
   const frameWindow = {
     postMessage: (msg: Sent) => {
@@ -319,11 +335,42 @@ describe("a frame cannot act for the user without a click", () => {
       payload: { intent: NEW_INTENT, input: {} },
     });
     const reply = () => sent.find((m) => m.type === "RUN_HANDLER_RESULT");
-    await settle(() => reply() !== undefined);
+    await settle("the host's reply to the handler request", () => reply() !== undefined);
 
     expect({ modelCalls: calls, reply: reply()?.payload }).toEqual({
       modelCalls: 0,
       reply: { error: "This operation could not be completed." },
+    });
+  });
+
+  // A slow machine (a busy CI runner) can take a long time to look a handler
+  // up. The refusal must still be waited for, not given up on: here the lookup
+  // takes 2000 turns of the event loop, far more than a wait that counts its
+  // own steps allows.
+  it("the refusal still comes back when looking the handler up is slow", async () => {
+    const registry = createInMemoryRegistry();
+    const fastGet = registry.get;
+    registry.get = async (store, key) => {
+      if (store === "handlers") {
+        for (let i = 0; i < 2000; i++) {
+          await new Promise<void>((r) => setImmediate(r));
+        }
+      }
+      return fastGet(store, key);
+    };
+    renderShell({ registry, userActivation: () => false });
+    const { frameWindow, sent } = await openNotesFrame();
+
+    fromFrame(frameWindow, {
+      type: "RUN_HANDLER",
+      correlationId: "c1",
+      payload: { intent: NEW_INTENT, input: {} },
+    });
+    const reply = () => sent.find((m) => m.type === "RUN_HANDLER_RESULT");
+    await settle("the host's reply to the handler request", () => reply() !== undefined);
+
+    expect(reply()?.payload).toEqual({
+      error: "This operation could not be completed.",
     });
   });
 
@@ -345,7 +392,7 @@ describe("a frame cannot act for the user without a click", () => {
       payload: { intent: NEW_INTENT, input: {} },
     });
     const reply = () => sent.find((m) => m.type === "RUN_HANDLER_RESULT");
-    await settle(() => reply() !== undefined);
+    await settle("the host's reply to the handler request", () => reply() !== undefined);
 
     expect(calls).toBe(1);
     expect(typeof reply()?.payload?.["code"]).toBe("string");
@@ -378,7 +425,7 @@ describe("a frame cannot act for the user without a click", () => {
       type: "MODIFY_REQUEST",
       payload: { instruction: "make the list blue" },
     });
-    await settle(() => false);
+    await letHostRun();
 
     expect({ frames: appFrames().length, modelCalls: calls }).toEqual({
       frames: 1,
@@ -397,7 +444,7 @@ async function openFrame(name: string): Promise<{ frameWindow: Window; sent: Sen
   fireEvent.click(screen.getByRole("button", { name: "Open launcher" }));
   const dialog = screen.getByRole("dialog", { name: "Open an app" });
   fireEvent.click(within(dialog).getByRole("button", { name }));
-  await settle(() => appFrames().length > before);
+  await settle("a new app frame to appear", () => appFrames().length > before);
   const sent: Sent[] = [];
   const frameWindow = {
     postMessage: (msg: Sent) => {
@@ -428,7 +475,7 @@ async function askHandler(
         m.type === "RUN_HANDLER_RESULT" &&
         (m as { correlationId?: string }).correlationId === id,
     );
-  await settle(() => reply() !== undefined);
+  await settle("the host's reply to the handler request", () => reply() !== undefined);
   return reply()?.payload;
 }
 
@@ -521,7 +568,7 @@ describe("a broken app in a frame shows the host's fallback", () => {
     const { frameWindow } = await openNotesFrame();
 
     fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom", fatal: true } });
-    await settle(() => couldNotLoad() !== null);
+    await settle("the host's \"couldn't load\" fallback", () => couldNotLoad() !== null);
 
     expect({
       hostFallback: couldNotLoad() !== null,
@@ -539,7 +586,9 @@ describe("a broken app in a frame shows the host's fallback", () => {
     const liveFrame = appFrames()[0];
 
     fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom", fatal: false } });
-    await settle(() => screen.queryByText("Something went wrong.") !== null);
+    await settle("the frame's own error notice", () =>
+      screen.queryByText("Something went wrong.") !== null,
+    );
 
     expect({
       sameFrame: appFrames().length === 1 && appFrames()[0] === liveFrame,
@@ -553,11 +602,11 @@ describe("a broken app in a frame shows the host's fallback", () => {
     const { frameWindow } = await openNotesFrame();
     const brokenFrame = appFrames()[0];
     fromFrame(frameWindow, { type: "FRAME_ERROR", payload: { message: "boom", fatal: true } });
-    await settle(() => couldNotLoad() !== null);
+    await settle("the host's \"couldn't load\" fallback", () => couldNotLoad() !== null);
     const fallbackShown = couldNotLoad() !== null;
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await settle(() => appFrames().length > 0);
+    await settle("an app frame to appear", () => appFrames().length > 0);
 
     expect({
       fallbackShown,
