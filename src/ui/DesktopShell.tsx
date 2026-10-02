@@ -48,15 +48,13 @@ import { SearchLauncherPanel } from "./SearchLauncherPanel";
 import { slugFromText } from "./launcherUtils";
 import { resolveHandlerCode } from "../execution/handler";
 import { VibeThemeContext, VIBE_THEMES } from "./VibeThemeProvider";
+import { MENU_BAR_H, DOCK_RESERVE } from "./workArea";
 
 // Work-area geometry (Phase 19, plan 19-02, CHROME-02). Maximize = zoom-to-work-
 // area, NOT the OS Fullscreen API: a maximized window fills the viewport MINUS
 // the menu bar (top) and the dock (bottom), so both stay visible — they ARE the
-// product identity. These constants mirror the CSS layout chrome:
-//   MENU_BAR_H  → .menu-bar { height: 40px } (src/index.css)
-//   DOCK_RESERVE → .dock bottom:16px + padding 9px*2 + icon 52px ≈ 88px reserved
-const MENU_BAR_H = 40;
-const DOCK_RESERVE = 88;
+// product identity. MENU_BAR_H and DOCK_RESERVE mirror the CSS layout chrome
+// (see ./workArea).
 
 // Trailing debounce for IDB layout persistence (Phase 21, PERSIST-01): only
 // the final geometry state in a 300ms quiet period reaches the settings store,
