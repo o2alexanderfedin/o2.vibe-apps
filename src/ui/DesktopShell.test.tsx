@@ -1270,6 +1270,88 @@ describe("Desktop persistence — described apps survive a reload", () => {
     await waitFor(() => expect(requestBodies).toHaveLength(1), { timeout: 4000 });
     expect(requestBodies[0]).toContain(DESCRIPTION);
   });
+
+  // The saved spot (120, 90) is not where a new window would go: the first
+  // window on an empty desktop opens at (80, 80).
+  const SAVED_SPOT = { x: 120, y: 90 };
+
+  /** The window's on-screen position, read from its transform. */
+  function windowSpot(frame: HTMLElement): { x: number; y: number } {
+    const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)/.exec(
+      frame.style.transform,
+    );
+    if (!m) throw new Error("window has no position: " + frame.style.transform);
+    return { x: parseFloat(m[1]!), y: parseFloat(m[2]!) };
+  }
+
+  it("'Try again' on an evicted described app opens it where it was saved, and saves it there", async () => {
+    const settingsStore = createRecordingSettingsStore();
+    await settingsStore.writeRaw(
+      LAYOUT_KEY,
+      JSON.stringify([
+        {
+          appType: DESCRIBED_SLUG,
+          title: "Pomodoro Timer",
+          icon: DESCRIBED_SLUG,
+          ...SAVED_SPOT,
+          z: 201,
+          minimized: false,
+          description: DESCRIPTION,
+        },
+      ]),
+    );
+    const { user } = renderDesktopShell({
+      settingsStore,
+      transport: cannedTransport(EXPORT_DEFAULT_TSX),
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Try again" }));
+
+    // Wait until the retried app is in its window, then check where it is.
+    await waitFor(
+      () => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull(),
+      { timeout: 4000 },
+    );
+    expect(frames()).toHaveLength(1);
+    expect(windowSpot(frames()[0]!)).toEqual(SAVED_SPOT);
+    await waitFor(
+      () => {
+        const saved = lastSavedLayout(settingsStore);
+        expect(saved).toHaveLength(1);
+        expect({ x: saved[0]!["x"], y: saved[0]!["y"] }).toEqual(SAVED_SPOT);
+      },
+      { timeout: 4000 },
+    );
+  });
+
+  it("'Try again' on an evicted catalogue app opens it where it was saved", async () => {
+    const settingsStore = createRecordingSettingsStore();
+    await settingsStore.writeRaw(
+      LAYOUT_KEY,
+      JSON.stringify([
+        {
+          appType: "notes",
+          title: "Notes",
+          icon: "notes",
+          ...SAVED_SPOT,
+          z: 201,
+          minimized: false,
+        },
+      ]),
+    );
+    // Notes is a built-in app, so the retry needs no model call; the registry
+    // is empty, so the restore offers "Try again".
+    const { user } = renderDesktopShell({ settingsStore });
+
+    await user.click(await screen.findByRole("button", { name: "Try again" }));
+
+    await waitFor(
+      () => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull(),
+      { timeout: 4000 },
+    );
+    expect(frames()).toHaveLength(1);
+    expect(windowSpot(frameByTitle("Notes"))).toEqual(SAVED_SPOT);
+  });
 });
 
 // ====================================================================
