@@ -1349,6 +1349,89 @@ describe("Desktop persistence — described apps survive a reload", () => {
     expect(frames()).toHaveLength(1);
     expect(windowSpot(frameByTitle("Notes"))).toEqual(SAVED_SPOT);
   });
+
+  it("'Try again' on a maximized window keeps it maximized, and un-maximizing returns it to its spot", async () => {
+    const settingsStore = createRecordingSettingsStore();
+    await settingsStore.writeRaw(
+      LAYOUT_KEY,
+      JSON.stringify([
+        {
+          appType: DESCRIBED_SLUG,
+          title: "Pomodoro Timer",
+          icon: DESCRIBED_SLUG,
+          ...SAVED_SPOT,
+          z: 201,
+          minimized: false,
+          description: DESCRIPTION,
+        },
+      ]),
+    );
+    const { user } = renderDesktopShell({
+      settingsStore,
+      transport: cannedTransport(EXPORT_DEFAULT_TSX),
+    });
+    const tryAgain = await screen.findByRole("button", { name: "Try again" });
+    const titlebar = (): HTMLElement =>
+      frames()[0]!.querySelector(".window-chrome__titlebar") as HTMLElement;
+
+    fireEvent.doubleClick(titlebar());
+    await waitFor(() =>
+      expect(frames()[0]!.className).toContain("window-chrome--maximized"),
+    );
+    await user.click(tryAgain);
+    await waitFor(
+      () => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull(),
+      { timeout: 4000 },
+    );
+
+    expect(frames()).toHaveLength(1);
+    expect(frames()[0]!.className).toContain("window-chrome--maximized");
+    fireEvent.doubleClick(titlebar());
+    await waitFor(() =>
+      expect(frames()[0]!.className).not.toContain("window-chrome--maximized"),
+    );
+    expect(windowSpot(frames()[0]!)).toEqual(SAVED_SPOT);
+  });
+
+  it("'Try again' on a window snapped to half the screen keeps it snapped", async () => {
+    const settingsStore = createRecordingSettingsStore();
+    await settingsStore.writeRaw(
+      LAYOUT_KEY,
+      JSON.stringify([
+        {
+          appType: "notes",
+          title: "Notes",
+          icon: "notes",
+          ...SAVED_SPOT,
+          z: 201,
+          minimized: false,
+        },
+      ]),
+    );
+    const { user } = renderDesktopShell({ settingsStore });
+    const tryAgain = await screen.findByRole("button", { name: "Try again" });
+
+    fireEvent(
+      window,
+      new KeyboardEvent("keydown", {
+        key: "ArrowLeft",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(frameByTitle("Notes").className).toContain("window-chrome--snap-left"),
+    );
+    await user.click(tryAgain);
+    await waitFor(
+      () => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull(),
+      { timeout: 4000 },
+    );
+
+    expect(frames()).toHaveLength(1);
+    expect(frameByTitle("Notes").className).toContain("window-chrome--snap-left");
+  });
 });
 
 // ====================================================================
