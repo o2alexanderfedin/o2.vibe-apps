@@ -61,6 +61,9 @@ import { MENU_BAR_H, DOCK_RESERVE } from "./workArea";
 // so dragging a window never produces a write-storm.
 const LAYOUT_SAVE_DEBOUNCE_MS = 300;
 
+// Where a window sits: what openAt needs to put a window back in its place.
+type WindowSpot = { x: number; y: number; z: number; minimized: boolean };
+
 // Snap-to-half (Phase 19, plan 19-03, CHROME-03). The SNAP_THRESHOLD that drives
 // both the during-drag drop-zone preview (WindowFrame) and the on-release commit
 // is the SHARED constant (IN-04), so preview and commit can never desynchronize.
@@ -374,7 +377,7 @@ function DesktopShellInner() {
   );
 
   const handleOpen = useCallback(
-    async (appType: string, displayName: string) => {
+    async (appType: string, displayName: string, at?: WindowSpot) => {
       logger.info("Opening " + appType);
 
       // Mint the window FIRST so a frame appears immediately (its body shows the
@@ -382,10 +385,10 @@ function DesktopShellInner() {
       // manager-minted instanceId is the SINGLE source of truth keying resolve,
       // the components map, and the close/isOpen guard.
       const wm = windowManagerRef.current;
-      const instanceId = wm.open(appType, {
-        title: displayName,
-        icon: appType,
-      });
+      const meta = { title: displayName, icon: appType };
+      const instanceId = at
+        ? wm.openAt(appType, meta, at)
+        : wm.open(appType, meta);
 
       // Close the window for a failed/aborted open, keyed by instanceId. The
       // manager owns the instanceId↔id mapping; if the entry is already gone
@@ -448,7 +451,7 @@ function DesktopShellInner() {
   // 7 integration tests keep passing; a later phase may extract a shared
   // free-text helper both paths route through.
   const handleDescribe = useCallback(
-    async (text: string) => {
+    async (text: string, at?: WindowSpot) => {
       setLauncherWorking(true);
       try {
         // Derive the slug, title, and cache key INSIDE the try so a rejection
@@ -467,11 +470,8 @@ function DesktopShellInner() {
         const wm = windowManagerRef.current;
         // The description goes on the window so the saved layout can find this
         // app again after a reload (its cache key folds in the full text).
-        const instanceId = wm.open(slug, {
-          title: displayName,
-          icon: slug,
-          description: text,
-        });
+        const meta = { title: displayName, icon: slug, description: text };
+        const instanceId = at ? wm.openAt(slug, meta, at) : wm.open(slug, meta);
         const closeByInstance = (iid: string) => {
           const wid = windowManagerRef.current.windows.find(
             (x) => x.instanceId === iid,
@@ -619,8 +619,10 @@ function DesktopShellInner() {
   // "Try again" for a window whose app failed: open the same app again the way
   // it was opened. A tweaked app is rebuilt with its tweak, in place; a
   // described app is described again (not opened as a bare catalogue slug);
-  // anything else is closed and opened again. The window's own description and
-  // tweak give the same cache key as before (appIdentity).
+  // anything else is closed and opened again, at the same spot, so the user's
+  // arrangement (often the one restored after a reload) stays as it was. The
+  // window's own description and tweak give the same cache key as before
+  // (appIdentity).
   const reopenWindow = useCallback(
     (instanceId: string): void => {
       const entry = windowManagerRef.current.windows.find(
@@ -631,9 +633,15 @@ function DesktopShellInner() {
         retryTweak(instanceId, entry.tweak);
         return;
       }
+      const at: WindowSpot = {
+        x: entry.x,
+        y: entry.y,
+        z: entry.z,
+        minimized: entry.minimized,
+      };
       handleClose(entry.id, instanceId);
-      if (entry.description) void handleDescribeRef.current(entry.description);
-      else void handleOpenRef.current(entry.appType, entry.title);
+      if (entry.description) void handleDescribeRef.current(entry.description, at);
+      else void handleOpenRef.current(entry.appType, entry.title, at);
     },
     [retryTweak, handleClose],
   );
