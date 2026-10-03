@@ -1477,7 +1477,9 @@ describe("Desktop persistence — described apps survive a reload", () => {
       x: window.innerWidth - 400,
       y: window.innerHeight - 300,
     });
-    expect(windowSpot(frameByTitle("High Notes"))).toEqual({ x: 0, y: 0 });
+    // Not above the menu bar's lower edge: the menu bar covers the top 40 px
+    // of the screen, and a titlebar under it cannot be grabbed.
+    expect(windowSpot(frameByTitle("High Notes"))).toEqual({ x: 0, y: 40 });
     // A window that fits stays exactly where it was saved.
     expect(windowSpot(frameByTitle("Near Notes"))).toEqual(SAVED_SPOT);
   });
