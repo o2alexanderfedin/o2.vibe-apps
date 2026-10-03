@@ -153,6 +153,23 @@ export const WindowManagerContext =
   createContext<WindowManagerValue | null>(null);
 
 /**
+ * Move a window's top-left corner the least distance that puts a whole
+ * new-size window on the current screen. A spot that already fits is
+ * returned unchanged. Used for layouts saved on a larger screen, where a
+ * window opened at its saved spot could have its titlebar out of reach.
+ */
+export function placeOnScreen(x: number, y: number): { x: number; y: number } {
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const maxX = Math.max(0, vw - DEFAULT_W);
+  const maxY = Math.max(0, vh - DEFAULT_H);
+  return {
+    x: Math.max(0, Math.min(x, maxX)),
+    y: Math.max(0, Math.min(y, maxY)),
+  };
+}
+
+/**
  * Compute a cascade-placed (x, y) for a new window.
  *
  * Starts from (80, 80) for the first window, then offsets each subsequent

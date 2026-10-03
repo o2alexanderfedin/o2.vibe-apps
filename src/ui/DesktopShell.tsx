@@ -22,6 +22,7 @@ import { WindowFrame } from "./WindowFrame";
 import {
   WindowManagerProvider,
   useWindowManager,
+  placeOnScreen,
   type WindowManagerValue,
   type WindowPlacement,
 } from "./useWindowManager";
@@ -858,6 +859,9 @@ function DesktopShellInner() {
         instanceId: string;
       }> = [];
       for (const entry of sorted) {
+        // The layout may have been saved on a larger screen; a window opened
+        // where it was saved could then be out of reach, titlebar and all.
+        const spot = placeOnScreen(entry.x, entry.y);
         const instanceId = windowManagerRef.current.openAt(
           entry.appType,
           {
@@ -866,7 +870,7 @@ function DesktopShellInner() {
             description: entry.description,
             tweak: entry.tweak,
           },
-          { x: entry.x, y: entry.y, z: entry.z, minimized: entry.minimized },
+          { x: spot.x, y: spot.y, z: entry.z, minimized: entry.minimized },
         );
         opened.push({
           appType: entry.appType,
