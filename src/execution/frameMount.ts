@@ -110,7 +110,7 @@ export function buildSrcdoc(
 ${rootVars}
 }
 #root { height: max-content; }
-body { overflow: hidden; margin: 0; }
+body { overflow-x: hidden; overflow-y: auto; margin: 0; }
 </style>
 </head>
 <body>
