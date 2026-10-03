@@ -103,7 +103,12 @@ export function SandboxFrame({
 }: SandboxFrameProps) {
   const utils: FrameUtilities = { ...defaultUtils, ..._utils };
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // The height the app last asked for (already checked to be a finite,
+  // non-negative number), and the browser window's height. The frame shows
+  // the smaller of the request and the work-area ceiling, worked out on every
+  // render, so the ceiling follows the browser window as it is resized.
   const [height, setHeight] = useState<number | undefined>(undefined);
+  const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
   const [errored, setErrored] = useState(false);
   const [unresponsive, setUnresponsive] = useState(false);
   const missedPongsRef = useRef(0);
@@ -210,13 +215,13 @@ export function SandboxFrame({
 
       if (type === "FRAME_RESIZE") {
         // The app reports its own height, so it is not trusted: anything that
-        // is not a finite, non-negative number is ignored, and the rest is cut
-        // to the tallest body whose window still fits between the menu bar
-        // and the dock. Without the ceiling a buggy or hostile app could make
-        // its window far taller than the screen.
+        // is not a finite, non-negative number is ignored. The rest is kept,
+        // and the render cuts it to the tallest body whose window still fits
+        // between the menu bar and the dock. Without the ceiling a buggy or
+        // hostile app could make its window far taller than the screen.
         const h = payload?.["height"];
         if (typeof h === "number" && Number.isFinite(h) && h >= 0) {
-          setHeight(Math.min(h, maxAppBodyHeight(window.innerHeight)));
+          setHeight(h);
         }
         return;
       }
@@ -348,6 +353,12 @@ export function SandboxFrame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const onResize = (): void => setViewportHeight(window.innerHeight);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -359,7 +370,12 @@ export function SandboxFrame({
         sandbox="allow-scripts"
         srcDoc={srcdoc}
         title={title}
-        style={{ height: height !== undefined ? height : undefined }}
+        style={{
+          height:
+            height !== undefined
+              ? Math.min(height, maxAppBodyHeight(viewportHeight))
+              : undefined,
+        }}
       />
       {errored && (
         <div className="app-frame__overlay" role="alert">
