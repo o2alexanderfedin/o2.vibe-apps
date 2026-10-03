@@ -17,7 +17,15 @@
 // Test doubles are named "canned"/"stub" (never the banned hygiene tokens).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, screen, within, fireEvent, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  configure,
+  screen,
+  within,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import { STORAGE_KEY_OS_THEME } from "../lib/storage";
 import { VIBE_THEMES } from "./VibeThemeProvider";
 import {
@@ -82,6 +90,11 @@ afterEach(() => {
 // that, or vitest's own timeout fires first and the assertion that was awaited
 // is lost.
 vi.setConfig({ testTimeout: 4 * WAIT_TIMEOUT_MS });
+// Testing-library's waitFor and findBy* give up after 1 s by default, less
+// than a slow machine may need to open a window. In this file they wait as
+// long as settleUntil does. (Each test file has its own copy of
+// testing-library, so this does not change other files.)
+configure({ asyncUtilTimeout: WAIT_TIMEOUT_MS });
 
 describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", () => {
   it("renders the desktop-shell and four blob layers behind the windows", () => {
@@ -1217,9 +1230,8 @@ function lastSavedLayout(
   return JSON.parse(raw) as Array<Record<string, unknown>>;
 }
 
-/** The restored window's "Try again" button. Testing-library's own wait
- *  gives up after 1 s, which a slow machine can miss; this one waits as long
- *  as the other waits in this file. */
+/** The restored window's "Try again" button, waited for as long as the
+ *  other waits in this file. */
 function findTryAgain(): Promise<HTMLElement> {
   return screen.findByRole(
     "button",

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, act, cleanup, waitFor } from "@testing-library/react";
+import { render, act, cleanup, configure, waitFor } from "@testing-library/react";
 import { useContext, type ReactNode } from "react";
 import {
   VibeThemeProvider,
@@ -8,6 +8,7 @@ import {
 } from "./VibeThemeProvider";
 import * as frameMountModule from "../execution/frameMount";
 import { STORAGE_KEY_OS_THEME } from "../lib/storage";
+import { WAIT_TIMEOUT_MS } from "../test/waitUntil";
 import { ServicesProvider } from "../services/ServicesProvider";
 import {
   createTestServices,
@@ -34,6 +35,14 @@ function Probe() {
 // Custom-vars fixture used by tests 3 and 7. Defined at module scope so both
 // the button click handler (inside JSX) and the test assertion reference the
 // same object identity.
+// Testing-library's waitFor gives up after 1 s by default, less than a slow
+// machine may need for the theme store to load. In this file it waits as long
+// as vitest's default test timeout, and the test timeout is above that, so a
+// failing wait reports its own assertion first. (Each test file has its own
+// copy of testing-library, so this does not change other files.)
+configure({ asyncUtilTimeout: WAIT_TIMEOUT_MS });
+vi.setConfig({ testTimeout: 4 * WAIT_TIMEOUT_MS });
+
 const CUSTOM_TEST_VARS = { "--text": "#ctest01" };
 
 // Extended Probe for Phase 22 custom-theme tests. Exposes currentVars,
@@ -195,7 +204,6 @@ describe("VibeThemeProvider — custom themes (Phase 22)", () => {
       () => {
         expect(getByTestId("customThemeCount").textContent).toBe("1");
       },
-      { timeout: 2000 },
     );
     const entry = JSON.parse(
       getByTestId("customThemeEntry-myTheme").textContent ?? "null",
@@ -252,7 +260,6 @@ describe("VibeThemeProvider — custom themes (Phase 22)", () => {
       () => {
         expect(getByTestId("customThemeCount").textContent).toBe("1");
       },
-      { timeout: 2000 },
     );
   });
 
@@ -278,7 +285,6 @@ describe("VibeThemeProvider — custom themes (Phase 22)", () => {
         ) as Record<string, string>;
         expect(vars["--text"]).toBe("#customtext7");
       },
-      { timeout: 2000 },
     );
   });
 
