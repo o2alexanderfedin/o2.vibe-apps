@@ -1443,6 +1443,44 @@ describe("Desktop persistence — described apps survive a reload", () => {
     expect(frames()).toHaveLength(1);
     expect(frameByTitle("Notes").className).toContain("window-chrome--snap-left");
   });
+
+  it("a window saved outside the current screen comes back on it", async () => {
+    // A layout saved on a larger screen: one window far to the right and
+    // below, one above and to the left of this 1024x768 screen. Opened where
+    // they were saved, neither titlebar can be reached to drag it back.
+    const settingsStore = createRecordingSettingsStore();
+    const saved = (title: string, x: number, y: number, z: number) => ({
+      appType: "notes",
+      title,
+      icon: "notes",
+      x,
+      y,
+      z,
+      minimized: false,
+    });
+    await settingsStore.writeRaw(
+      LAYOUT_KEY,
+      JSON.stringify([
+        saved("Far Notes", 5000, 5000, 201),
+        saved("High Notes", -400, -250, 202),
+        saved("Near Notes", SAVED_SPOT.x, SAVED_SPOT.y, 203),
+      ]),
+    );
+    renderDesktopShell({ settingsStore });
+
+    await waitFor(() => expect(frames()).toHaveLength(3), {
+      timeout: WAIT_TIMEOUT_MS,
+    });
+    // A new window is 400x300; these are the furthest spots where all of it
+    // is still on the screen.
+    expect(windowSpot(frameByTitle("Far Notes"))).toEqual({
+      x: window.innerWidth - 400,
+      y: window.innerHeight - 300,
+    });
+    expect(windowSpot(frameByTitle("High Notes"))).toEqual({ x: 0, y: 0 });
+    // A window that fits stays exactly where it was saved.
+    expect(windowSpot(frameByTitle("Near Notes"))).toEqual(SAVED_SPOT);
+  });
 });
 
 // ====================================================================
