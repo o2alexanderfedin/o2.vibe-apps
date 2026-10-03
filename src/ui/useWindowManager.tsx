@@ -21,6 +21,7 @@ import {
 } from "react";
 import { logger } from "../lib/logger";
 import { sanitizeDisplayName } from "./sanitizeDisplayName";
+import { MENU_BAR_H } from "./workArea";
 
 // Default window dimensions used for viewport-clamp arithmetic.
 const DEFAULT_W = 400;
@@ -154,7 +155,8 @@ export const WindowManagerContext =
 
 /**
  * Move a window's top-left corner the least distance that puts a whole
- * new-size window on the current screen. A spot that already fits is
+ * new-size window on the current screen, with its titlebar below the menu
+ * bar (which covers the top of the screen). A spot that already fits is
  * returned unchanged. Used for layouts saved on a larger screen, where a
  * window opened at its saved spot could have its titlebar out of reach.
  */
@@ -162,10 +164,10 @@ export function placeOnScreen(x: number, y: number): { x: number; y: number } {
   const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const maxX = Math.max(0, vw - DEFAULT_W);
-  const maxY = Math.max(0, vh - DEFAULT_H);
+  const maxY = Math.max(MENU_BAR_H, vh - DEFAULT_H);
   return {
     x: Math.max(0, Math.min(x, maxX)),
-    y: Math.max(0, Math.min(y, maxY)),
+    y: Math.max(MENU_BAR_H, Math.min(y, maxY)),
   };
 }
 
