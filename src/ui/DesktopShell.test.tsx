@@ -1131,6 +1131,17 @@ function lastSavedLayout(
   return JSON.parse(raw) as Array<Record<string, unknown>>;
 }
 
+/** The restored window's "Try again" button. Testing-library's own wait
+ *  gives up after 1 s, which a slow machine can miss; this one waits as long
+ *  as the other waits in this file. */
+function findTryAgain(): Promise<HTMLElement> {
+  return screen.findByRole(
+    "button",
+    { name: "Try again" },
+    { timeout: WAIT_TIMEOUT_MS },
+  );
+}
+
 describe("Desktop persistence — described apps survive a reload", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -1262,9 +1273,9 @@ describe("Desktop persistence — described apps survive a reload", () => {
       transport: recordingTransport,
     });
 
-    await user.click(await screen.findByRole("button", { name: "Try again" }));
+    await user.click(await findTryAgain());
 
-    await waitFor(() => expect(requestBodies).toHaveLength(1), { timeout: 4000 });
+    await waitFor(() => expect(requestBodies).toHaveLength(1), { timeout: WAIT_TIMEOUT_MS });
     expect(requestBodies[0]).toContain(DESCRIPTION);
   });
 
@@ -1302,12 +1313,12 @@ describe("Desktop persistence — described apps survive a reload", () => {
       transport: cannedTransport(EXPORT_DEFAULT_TSX),
     });
 
-    await user.click(await screen.findByRole("button", { name: "Try again" }));
+    await user.click(await findTryAgain());
 
     // Wait until the retried app is in its window, then check where it is.
     await waitFor(
       () => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull(),
-      { timeout: 4000 },
+      { timeout: WAIT_TIMEOUT_MS },
     );
     expect(frames()).toHaveLength(1);
     expect(windowSpot(frames()[0]!)).toEqual(SAVED_SPOT);
@@ -1317,7 +1328,7 @@ describe("Desktop persistence — described apps survive a reload", () => {
         expect(saved).toHaveLength(1);
         expect({ x: saved[0]!["x"], y: saved[0]!["y"] }).toEqual(SAVED_SPOT);
       },
-      { timeout: 4000 },
+      { timeout: WAIT_TIMEOUT_MS },
     );
   });
 
@@ -1340,11 +1351,11 @@ describe("Desktop persistence — described apps survive a reload", () => {
     // is empty, so the restore offers "Try again".
     const { user } = renderDesktopShell({ settingsStore });
 
-    await user.click(await screen.findByRole("button", { name: "Try again" }));
+    await user.click(await findTryAgain());
 
     await waitFor(
       () => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull(),
-      { timeout: 4000 },
+      { timeout: WAIT_TIMEOUT_MS },
     );
     expect(frames()).toHaveLength(1);
     expect(windowSpot(frameByTitle("Notes"))).toEqual(SAVED_SPOT);
@@ -1370,7 +1381,7 @@ describe("Desktop persistence — described apps survive a reload", () => {
       settingsStore,
       transport: cannedTransport(EXPORT_DEFAULT_TSX),
     });
-    const tryAgain = await screen.findByRole("button", { name: "Try again" });
+    const tryAgain = await findTryAgain();
     const titlebar = (): HTMLElement =>
       frames()[0]!.querySelector(".window-chrome__titlebar") as HTMLElement;
 
@@ -1381,7 +1392,7 @@ describe("Desktop persistence — described apps survive a reload", () => {
     await user.click(tryAgain);
     await waitFor(
       () => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull(),
-      { timeout: 4000 },
+      { timeout: WAIT_TIMEOUT_MS },
     );
 
     expect(frames()).toHaveLength(1);
@@ -1409,7 +1420,7 @@ describe("Desktop persistence — described apps survive a reload", () => {
       ]),
     );
     const { user } = renderDesktopShell({ settingsStore });
-    const tryAgain = await screen.findByRole("button", { name: "Try again" });
+    const tryAgain = await findTryAgain();
 
     fireEvent(
       window,
@@ -1426,7 +1437,7 @@ describe("Desktop persistence — described apps survive a reload", () => {
     await user.click(tryAgain);
     await waitFor(
       () => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull(),
-      { timeout: 4000 },
+      { timeout: WAIT_TIMEOUT_MS },
     );
 
     expect(frames()).toHaveLength(1);
