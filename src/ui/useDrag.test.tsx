@@ -270,6 +270,33 @@ describe("useDrag", () => {
     expect(y2).toBeGreaterThanOrEqual(0);
   });
 
+  it("stops a window's top at the menu bar, so its titlebar can still be grabbed", () => {
+    const committed: [number, number][] = [];
+    const onCommit = vi.fn((x: number, y: number) => {
+      committed.push([x, y]);
+    });
+    const { container } = render(
+      <Harness initialX={200} initialY={300} onCommit={onCommit} />,
+    );
+    const handle = within(container).getByTestId("handle");
+    const win = within(container).getByTestId("window");
+
+    // Drag the titlebar up past the top of the screen.
+    act(() => {
+      firePointerEvent(handle, "pointerdown", { clientX: 300, clientY: 310 });
+    });
+    act(() => {
+      firePointerEvent(handle, "pointermove", { clientX: 300, clientY: 0 });
+    });
+    // While dragging, the window is drawn just below the 40 px menu bar...
+    expect(win.style.transform).toBe("translate(200px,40px)");
+    act(() => {
+      firePointerEvent(handle, "pointerup", { clientX: 300, clientY: 0 });
+    });
+    // ...and that is where it stays.
+    expect(committed).toEqual([[200, 40]]);
+  });
+
   it("does not preventDefault on the window body", () => {
     vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(() => undefined);
     const { container } = render(<Harness />);

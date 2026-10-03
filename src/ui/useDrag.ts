@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { placeOnScreen } from "./useWindowManager";
 
 export interface UseDragOptions {
   elementRef: React.RefObject<HTMLElement | null>;
@@ -8,7 +9,8 @@ export interface UseDragOptions {
 }
 
 /**
- * Pointer-capture drag hook with viewport clamping.
+ * Pointer-capture drag hook that keeps the window on the screen, below the
+ * menu bar.
  *
  * Writes position to elementRef.current.style.transform inside rAF during drag
  * (no React re-renders on move). Calls onCommit exactly once on pointerup/pointercancel
@@ -36,12 +38,9 @@ export function useDrag({ elementRef, initialX, initialY, onCommit }: UseDragOpt
   const clamp = useCallback((raw: { x: number; y: number }): { x: number; y: number } => {
     const el = elementRef.current;
     const rect = el ? el.getBoundingClientRect() : { width: 0, height: 0 };
-    const maxX = window.innerWidth - rect.width;
-    const maxY = window.innerHeight - rect.height;
-    return {
-      x: Math.max(0, Math.min(raw.x, maxX)),
-      y: Math.max(0, Math.min(raw.y, maxY)),
-    };
+    // The same bounds a restored window gets: on the screen, and with the
+    // titlebar below the menu bar, where it can still be grabbed.
+    return placeOnScreen(raw.x, raw.y, { w: rect.width, h: rect.height });
   }, [elementRef]);
 
   const handlePointerDown = useCallback(

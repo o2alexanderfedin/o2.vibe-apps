@@ -154,17 +154,22 @@ export const WindowManagerContext =
   createContext<WindowManagerValue | null>(null);
 
 /**
- * Move a window's top-left corner the least distance that puts a whole
- * new-size window on the current screen, with its titlebar below the menu
- * bar (which covers the top of the screen). A spot that already fits is
- * returned unchanged. Used for layouts saved on a larger screen, where a
- * window opened at its saved spot could have its titlebar out of reach.
+ * Move a window's top-left corner the least distance that puts the whole
+ * window on the current screen, with its titlebar below the menu bar (which
+ * covers the top of the screen). A spot that already fits is returned
+ * unchanged. `size` defaults to a new window's size. Used for layouts saved on
+ * a larger screen, for windows the browser window shrank away from, and for
+ * drags, so a titlebar never ends up out of reach.
  */
-export function placeOnScreen(x: number, y: number): { x: number; y: number } {
+export function placeOnScreen(
+  x: number,
+  y: number,
+  size: { w: number; h: number } = { w: DEFAULT_W, h: DEFAULT_H },
+): { x: number; y: number } {
   const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-  const maxX = Math.max(0, vw - DEFAULT_W);
-  const maxY = Math.max(MENU_BAR_H, vh - DEFAULT_H);
+  const maxX = Math.max(0, vw - size.w);
+  const maxY = Math.max(MENU_BAR_H, vh - size.h);
   return {
     x: Math.max(0, Math.min(x, maxX)),
     y: Math.max(MENU_BAR_H, Math.min(y, maxY)),
