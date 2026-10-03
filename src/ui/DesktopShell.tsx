@@ -694,12 +694,17 @@ function DesktopShellInner() {
   }, []);
 
   // Mirror the viewport size into state on browser resize (WR-03) so pinned
-  // (maximized/snapped) windows recompute their rect from the fresh size. Guard
+  // (maximized/snapped) windows recompute their rect from the fresh size, and
+  // move free windows back onto a screen that became smaller. Guard
   // for environments without window. Re-syncs once on mount in case the size
   // changed between the lazy initializer and the effect attaching.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onResize = () => setViewport(readViewport());
+    const onResize = () => {
+      setViewport(readViewport());
+      // A free window the smaller screen has left behind moves back onto it.
+      windowManagerRef.current.keepOnScreen();
+    };
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);

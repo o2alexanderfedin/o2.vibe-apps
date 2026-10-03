@@ -750,6 +750,92 @@ describe("DesktopShell — assembled desktop (WIN-08, injected deps, offline)", 
     }
   });
 
+  // A window that fit the browser window must still be reachable after the
+  // browser window is made smaller: its titlebar must not end up off the
+  // screen, where it can no longer be grabbed.
+  describe("a smaller browser window keeps open windows on the screen", () => {
+    const setInner = (w: number, h: number) => {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        writable: true,
+        value: w,
+      });
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        writable: true,
+        value: h,
+      });
+    };
+    const origW = window.innerWidth;
+    const origH = window.innerHeight;
+    afterEach(() => setInner(origW, origH));
+
+    /** The window's on-screen position, read from its transform. */
+    function spot(frame: HTMLElement): { x: number; y: number } {
+      const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px\s*\)/.exec(
+        frame.style.transform,
+      );
+      if (!m) throw new Error("window has no position: " + frame.style.transform);
+      return { x: parseFloat(m[1]!), y: parseFloat(m[2]!) };
+    }
+
+    /** A 1024x768 desktop with one Notes window at (600, 400), near the
+     *  lower right corner. */
+    async function notesNearCorner(): Promise<void> {
+      setInner(1024, 768);
+      const settingsStore = createRecordingSettingsStore();
+      await settingsStore.writeRaw(
+        LAYOUT_KEY,
+        JSON.stringify([
+          {
+            appType: "notes",
+            title: "Notes",
+            icon: "notes",
+            x: 600,
+            y: 400,
+            z: 201,
+            minimized: false,
+          },
+        ]),
+      );
+      renderDesktopShell({ settingsStore });
+      await waitFor(() => expect(spot(frameByTitle("Notes"))).toEqual({ x: 600, y: 400 }), {
+        timeout: WAIT_TIMEOUT_MS,
+      });
+    }
+
+    it("a window near the corner moves back onto the smaller screen", async () => {
+      await notesNearCorner();
+
+      setInner(800, 600);
+      fireEvent(window, new Event("resize"));
+
+      // A 400x300 window fits on an 800x600 screen at (400, 300) at most.
+      await waitFor(() =>
+        expect(spot(frameByTitle("Notes"))).toEqual({ x: 400, y: 300 }),
+      );
+    });
+
+    it("a window maximized while the screen shrank comes back on the screen", async () => {
+      await notesNearCorner();
+      const titlebar = (): HTMLElement =>
+        frameByTitle("Notes").querySelector(".window-chrome__titlebar") as HTMLElement;
+      fireEvent.doubleClick(titlebar());
+      await waitFor(() =>
+        expect(frameByTitle("Notes").className).toContain("window-chrome--maximized"),
+      );
+
+      setInner(800, 600);
+      fireEvent(window, new Event("resize"));
+      fireEvent.doubleClick(titlebar());
+
+      await waitFor(() =>
+        expect(frameByTitle("Notes").className).not.toContain("window-chrome--maximized"),
+      );
+      expect(spot(frameByTitle("Notes"))).toEqual({ x: 400, y: 300 });
+    });
+  });
+
   it("the contextual `⋮` MOD 'remove' still closes a window", async () => {
     const { user } = renderDesktopShell();
 

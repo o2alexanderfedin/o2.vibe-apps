@@ -97,6 +97,11 @@ export interface WindowManagerValue {
    *  Keeping geometry on the entry lets maximize/snap capture the EFFECTIVE
    *  current position into restoreRect (WR-01) rather than a stale value. */
   setGeometry: (id: string, x: number, y: number) => void;
+  /** Move every window that the current screen has left (partly) off it
+   *  back onto it (placeOnScreen). Called when the browser window is resized.
+   *  A maximized or half-screen window already follows the work area; only
+   *  the spot it returns to when un-pinned is moved. */
+  keepOnScreen: () => void;
   /** Maximize: zoom to the work area (NOT OS full-screen). Captures the
    *  EFFECTIVE pre-maximize geometry into restoreRect, clears any snap (a window
    *  cannot be both maximized and snapped — CR-01), and raises the window. */
@@ -393,6 +398,28 @@ export function WindowManagerProvider({
     );
   }, []);
 
+  const keepOnScreen = useCallback(() => {
+    setWindows(prev => {
+      let changed = false;
+      const next = prev.map(w => {
+        if (w.maximized || w.snapSide !== null) {
+          if (!w.restoreRect) return w;
+          const back = placeOnScreen(w.restoreRect.x, w.restoreRect.y);
+          if (back.x === w.restoreRect.x && back.y === w.restoreRect.y) return w;
+          changed = true;
+          return { ...w, restoreRect: { ...w.restoreRect, ...back } };
+        }
+        const spot = placeOnScreen(w.x, w.y);
+        if (spot.x === w.x && spot.y === w.y) return w;
+        changed = true;
+        return { ...w, ...spot };
+      });
+      // Unchanged list when nothing moved, so a resize that leaves every
+      // window in place does not re-render or re-save the layout.
+      return changed ? next : prev;
+    });
+  }, []);
+
   const maximize = useCallback((id: string) => {
     // Mint z OUTSIDE the updater — see open() for the Strict-Mode rationale.
     // Maximizing raises the window to the front (standard desktop behavior).
@@ -555,6 +582,7 @@ export function WindowManagerProvider({
     minimize,
     restore,
     setGeometry,
+    keepOnScreen,
     maximize,
     unmaximize,
     snapLeft,
