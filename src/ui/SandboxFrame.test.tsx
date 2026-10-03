@@ -216,6 +216,38 @@ describe("SandboxFrame", () => {
       expect(iframe.style.height).toBe("636px");
     });
 
+    it("the ceiling follows the browser window when it is resized", async () => {
+      const { utils } = makeUtils();
+      const { container } = render(<SandboxFrame {...defaultProps(utils)} />);
+      const { fakeContentWindow, iframe } = getMockContentWindow(container);
+      const resizeBrowserTo = async (innerHeight: number): Promise<void> => {
+        Object.defineProperty(window, "innerHeight", {
+          value: innerHeight,
+          configurable: true,
+        });
+        await act(async () => {
+          window.dispatchEvent(new Event("resize"));
+        });
+      };
+
+      await act(async () => {
+        fireMessage(fakeContentWindow, {
+          type: "FRAME_RESIZE",
+          payload: { height: 700 },
+        });
+      });
+      expect(iframe.style.height).toBe("636px");
+
+      // A smaller browser window: the app must shrink with it, or its lower
+      // part ends up behind the dock or below the screen.
+      await resizeBrowserTo(600);
+      expect(iframe.style.height).toBe("436px");
+
+      // A larger one again: the app gets back the height it asked for.
+      await resizeBrowserTo(1000);
+      expect(iframe.style.height).toBe("700px");
+    });
+
     it("a height that is not a finite, non-negative number is ignored", async () => {
       const { utils } = makeUtils();
       const { container } = render(<SandboxFrame {...defaultProps(utils)} />);
